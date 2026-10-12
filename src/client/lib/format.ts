@@ -1,0 +1,11 @@
+export const naira = (kobo: number) => `₦${Math.round(kobo / 100).toLocaleString("en-NG")}`;
+export const t12 = (m: number) => { const h = Math.floor(m / 60), mm = m % 60; return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")}${h >= 12 ? "pm" : "am"}`; };
+export const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+export const longDate = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+export const shortDate = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+export const dateTime = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" });
+export const hrs = (min: number) => `${min / 60} ${min === 60 ? "hr" : "hrs"}`;
+export const initials = (n: string) => n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase();
+export const lagosToday = () => new Date(Date.now() + 3600000).toISOString().slice(0, 10);
+export const addDays = (d: string, n: number) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+export const statusTone = (s: string) => ({ confirmed: "success", completed: "", cancelled: "danger", no_show: "danger", success: "success", refunded: "warning", failed: "danger", pending: "", approved: "success", declined: "danger", new: "success", replied: "" } as Record<string, string>)[s] ?? "";
