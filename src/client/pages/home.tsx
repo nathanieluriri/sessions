@@ -1,36 +1,42 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { PublicLayout } from "../components/Layout";
 import { Icon, Mark, Waveform } from "../components/brand";
 import { Barcode, CardFan, Cassette, DynamicButton, ReceiptPrinter, ScrambleText, ScrollFadeList, TactileLink, Tactile, type PrinterStage, type TactileVariant } from "../components/kitchen";
 import { BookingTicket } from "../components/BookingTicket";
-import { HERO_PHOTO, PHOTOS, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
+import { HERO_PHOTO, PHOTOS, depositOf, roomOf, useCatalog, useContent, type Catalog, type Package, type Service, type Site } from "../lib/catalog";
 import { addDays, hrs, lagosToday, longDate, naira, shortDate, t12 } from "../lib/format";
 import { api } from "../lib/api";
-import { loadDraft, saveDraft } from "../lib/draft";
 import { clamp, prefersStill, useInView, useReveal, useScrollFrame } from "../lib/motion";
 import { useStartBooking } from "./public";
+import { WorkCard } from "./portfolio";
 
 interface OpenDay { date: string; slots: { start: number; available: boolean }[] }
 
 const pick = (cat: Catalog, slugs: string[]) => slugs.map((s) => cat.services.find((x) => x.slug === s)).filter(Boolean) as Service[];
-const SHORT: Record<string, string> = { "vocal-recording": "Vocals", "beat-production": "Beats", mixing: "Mixing", mastering: "Mastering", "podcast-recording": "Podcasts", "voice-over": "Voice-over", "vocal-editing": "Editing" };
-const sampleRef = () => `SS-${lagosToday().slice(2, 4)}${lagosToday().slice(5, 7)}-0042`;
+const SHORT: Record<string, string> = {
+  "vocal-recording": "Vocals", "beat-production": "Beats", mixing: "Mixing", mastering: "Mastering", "podcast-recording": "Podcast", "voice-over": "Voice-over",
+  "vocal-editing": "Editing", "music-videos": "Video", "video-podcast": "Podcast", "artist-portraits": "Photo", "social-content": "Content",
+};
+const FAN = ["vocal-recording", "music-videos", "video-podcast", "artist-portraits", "beat-production"];
+const sampleRef = () => `PR-${lagosToday().slice(2, 4)}${lagosToday().slice(5, 7)}-0042`;
 
-function useOpenDay() {
+function useOpenDay(cat: Catalog | null) {
   const [day, setDay] = useState<OpenDay | null>(null);
+  const room = cat ? roomOf(cat, cat.packages.find((p) => p.slug === "2-hour"))?.id ?? "" : null;
   useEffect(() => {
+    if (room === null) return;
     let live = true;
     (async () => {
       for (let i = 1; i <= 14 && live; i++) {
         const date = addDays(lagosToday(), i);
-        const r = await api<{ slots: OpenDay["slots"] }>(`/availability/day?date=${date}&duration=120`).catch(() => null);
+        const r = await api<{ slots: OpenDay["slots"] }>(`/availability/day?date=${date}&duration=120&room=${room}`).catch(() => null);
         const slots = r?.slots ?? [];
         if (slots.some((s) => s.available && s.start >= 720)) { if (live) setDay({ date, slots }); return; }
       }
     })();
     return () => { live = false; };
-  }, []);
+  }, [room]);
   return day;
 }
 
@@ -45,41 +51,38 @@ function useNarrow() {
   return narrow;
 }
 
-function Hero({ title, sub }: { title: string; sub: string }) {
-  const [l1, l2] = title.includes(",") ? [`${title.split(",")[0]},`, title.split(",").slice(1).join(",").trim()] : [title, ""];
+function Hero({ title, accent, sub, photo, ready }: { title: string; accent: string; sub: string; photo: string; ready: boolean }) {
   return (
     <section className="hero">
-      <div className="photo" style={{ backgroundImage: `url(${HERO_PHOTO})` }} />
-      <Waveform className="wave" />
-      <div className="wrap herobody stack gap32">
-        <h1 className="display rise">{l1}<br /><span className="neon">{l2}</span></h1>
-        <p className="rise d1" style={{ fontSize: 20, opacity: .8, maxWidth: 600 }}>{sub}</p>
-        <div className="row gap12 wrapflex rise d2">
-          <TactileLink to="/book" variant="neon" size="lg">Book a session <Icon name="arrow" size={18} /></TactileLink>
-          <TactileLink to="/packages" variant="light" size="lg">See packages</TactileLink>
+      <div className="herocard">
+        <div className="photo" style={{ backgroundImage: `url(${photo})` }} />
+        <div className="shade" />
+        <Waveform className="wave" />
+        <div key={String(ready)} className="wrap herobody stack gap24" style={ready ? undefined : { visibility: "hidden" }}>
+          <h1 className="rise">{title}{accent && <><br /><span className="neon">{accent}</span></>}</h1>
+          <p className="lede rise d1">{sub}</p>
+          <div className="row gap12 wrapflex rise d2" style={{ marginTop: 8 }}>
+            <TactileLink to="/book" variant="neon" size="lg">Book a session <Icon name="arrow" size={18} /></TactileLink>
+            <TactileLink to="/services" variant="light" size="lg">Explore our services</TactileLink>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function Marquee({ words }: { words: string[] }) {
-  const run = [...words, ...words].map((w, i) => <span key={i}>{w}<i>✦</i></span>);
-  return <div className="marquee" aria-hidden><div className="track"><div>{run}</div><div>{run}</div></div></div>;
-}
-
 const FEATURES = [
-  ["user", "Engineer included", "Every session is run by a studio engineer, from setup to bounce."],
-  ["calendar", "Live availability", "Real open times from the studio calendar, updated as people book."],
-  ["lock", "Secure checkout", "Pay by card, bank transfer or USSD through Paystack."],
-  ["music", "Files in 48 hours", "Raw files and rough mixes, shared by download link."],
+  ["users", "Crew included", "Every booking comes with an engineer, producer or technician who knows the room."],
+  ["calendar", "Live availability", "Real open times for every room, updated the moment someone books."],
+  ["card", "Deposit or pay in full", "Secure your slot with a deposit and clear the balance before you arrive."],
+  ["door", "Four rooms", "A recording room, a production suite, a podcast set and a video and photo stage."],
 ];
 
-function Features({ extraHour }: { extraHour: number }) {
+function Features({ rooms }: { rooms: number }) {
   return (
     <section className="lsec">
       <div className="wrap stack center">
-        <span className="eyebrow" data-reveal><Mark tone="neon" size={20} /> Studio A, Lekki</span>
+        <span className="eyebrow" data-reveal><Mark tone="neon" size={20} /> {rooms} rooms, one crew</span>
         <h2 className="ltitle" data-reveal>Everything a session needs</h2>
         <div className="feats">
           {FEATURES.map(([icon, title, body], i) => (
@@ -88,9 +91,9 @@ function Features({ extraHour }: { extraHour: number }) {
         </div>
         <div className="row gap12 wrapflex" style={{ justifyContent: "center" }} data-reveal>
           <TactileLink to="/book" variant="neon" size="lg">Book a session</TactileLink>
-          <TactileLink to="/packages" variant="light" size="lg">View all packages</TactileLink>
+          <TactileLink to="/services" variant="light" size="lg">Explore our services</TactileLink>
         </div>
-        <p className="fine" data-reveal>Extra hours are {naira(extraHour)} each. Your price is locked when you book.</p>
+        <p className="fine" data-reveal>Prices are locked when you book. Some bookings, like full-day lockouts and stage hire, are confirmed by the studio first.</p>
       </div>
     </section>
   );
@@ -118,7 +121,7 @@ function ServicePick({ services, onPick }: { services: Service[]; onPick: (slug:
 const Check = () => <svg viewBox="0 0 24 24" fill="none" stroke="#30a46c" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
 const Clock = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
 
-function SlotPick({ day }: { day: OpenDay | null }) {
+function SlotPick({ day, room }: { day: OpenDay | null; room: string }) {
   const [ref, inView] = useInView<HTMLDivElement>();
   const scroll = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(0);
@@ -139,7 +142,7 @@ function SlotPick({ day }: { day: OpenDay | null }) {
   return (
     <div className="mock mock-slots" ref={ref}>
       <div className="ms-card">
-        <div className="ms-head"><b>{day ? longDate(day.date).replace(/ \d{4}$/, "") : "Checking live times"}</b><span>2 hrs · Studio A</span></div>
+        <div className="ms-head"><b>{day ? longDate(day.date).replace(/ \d{4}$/, "") : "Checking live times"}</b><span>2 hrs · {room}</span></div>
         <ScrollFadeList scrollRef={scroll} height={236} items={day?.slots ?? []} getKey={(s) => String(s.start)} renderItem={(s) => (
           <div data-start={s.start} className={`ms-row ${s.available ? "" : "off"} ${s.start === chosen ? "on" : ""}`}>
             <span>{t12(s.start)} to {t12(s.start + 120)}</span>
@@ -155,7 +158,7 @@ function SlotPick({ day }: { day: OpenDay | null }) {
   );
 }
 
-function PayPrint({ pkg, extra, day }: { pkg?: Package; extra?: { name: string; price_kobo: number }; day: OpenDay | null }) {
+function PayPrint({ pkg, cat, day, site }: { pkg?: Package; cat: Catalog; day: OpenDay | null; site: Site | null }) {
   const [ref, inView] = useInView<HTMLDivElement>(0.4);
   const [stage, setStage] = useState<PrinterStage>("processing");
   const [cycle, setCycle] = useState(0);
@@ -172,33 +175,36 @@ function PayPrint({ pkg, extra, day }: { pkg?: Package; extra?: { name: string; 
     run();
     return () => timers.forEach((t) => window.clearTimeout(t));
   }, [inView]);
-  const price = pkg?.price_kobo ?? 0, add = extra?.price_kobo ?? 0;
+  const price = pkg?.price_kobo ?? 0;
+  const deposit = pkg ? depositOf(cat, pkg, price) : price;
+  const room = roomOf(cat, pkg)?.name ?? "Studio A";
   const start = day?.slots.find((s) => s.available && s.start >= 720)?.start ?? 720;
+  const c = site?.content ?? {};
   return (
     <div className="mock mock-print" ref={ref}>
       <ReceiptPrinter stage={stage} labels={{ processing: "Verifying with Paystack", printing: "Printing your receipt", complete: "Booking confirmed" }}
         header={<><Mark tone="neon" size={30} /><TactileLink to="/book" variant="ink" size="sm" shallow>Book now</TactileLink></>}
-        screen={<div className="pr-row"><div><p>{pkg?.name ?? "Studio session"}</p><p className="dim">Studio A{day ? ` · ${shortDate(day.date)}` : ""}</p></div><div className="right"><p className="dim">Total</p><strong>{naira(price + add)}</strong></div></div>}>
+        screen={<div className="pr-row"><div><p>{pkg?.name ?? "Studio session"}</p><p className="dim">{room}{day ? ` · ${shortDate(day.date)}` : ""}</p></div><div className="right"><p className="dim">Deposit</p><strong>{naira(deposit)}</strong></div></div>}>
         <div className="rc-logo"><Mark tone="ink" size={44} /></div>
-        <p className="rc-head" style={{ textAlign: "center" }}>Sessions Studio</p>
-        <p className="rc-dim" style={{ textAlign: "center" }}>14 Admiralty Way, Lekki</p>
+        <p className="rc-head" style={{ textAlign: "center" }}>{c.business_name ?? "Psych Records Entertainment"}</p>
+        {c.studio_address && <p className="rc-dim" style={{ textAlign: "center" }}>{c.studio_address}</p>}
         <hr className="rc-hr" />
         <div className="rc-row"><span className="rc-head">{pkg?.name}</span><span>{naira(price)}</span></div>
-        <div className="rc-dim">{day ? `${shortDate(day.date)} · ${t12(start)}` : "Studio A"} · {hrs(pkg?.duration_min ?? 120)}</div>
-        {extra && <div className="rc-row" style={{ marginTop: 8 }}><span className="rc-head">{extra.name}</span><span>{naira(add)}</span></div>}
+        <div className="rc-dim">{day ? `${shortDate(day.date)} · ${t12(start)}` : room} · {hrs(pkg?.duration_min ?? 120)} · {room}</div>
         <hr className="rc-hr" />
         <div className="rc-row rc-dim"><span>Paid with</span><span>Paystack · Card</span></div>
-        <div className="rc-row" style={{ marginTop: 8 }}><span className="rc-head">Total paid</span><span className="rc-total">{naira(price + add)}</span></div>
+        <div className="rc-row" style={{ marginTop: 8 }}><span className="rc-head">Deposit paid</span><span className="rc-total">{naira(deposit)}</span></div>
+        {deposit < price && <div className="rc-row rc-dim" style={{ marginTop: 4 }}><span>Balance before the session</span><span>{naira(price - deposit)}</span></div>}
         <hr className="rc-hr" />
         <Barcode />
         <p className="rc-note">Ref <ScrambleText key={cycle}>{sampleRef()}</ScrambleText></p>
-        <p className="rc-note rc-dim">See you in Studio A.</p>
+        <p className="rc-note rc-dim">See you in {room}.</p>
       </ReceiptPrinter>
     </div>
   );
 }
 
-function SessionStill({ day, service }: { day: OpenDay | null; service?: Service }) {
+function SessionStill({ day, service, room }: { day: OpenDay | null; service?: Service; room: string }) {
   const [ref, inView] = useInView<HTMLDivElement>();
   const [p, setP] = useState(0.24);
   useEffect(() => {
@@ -212,13 +218,13 @@ function SessionStill({ day, service }: { day: OpenDay | null; service?: Service
   const kind = SHORT[service?.slug ?? ""] ?? "Vocal";
   return (
     <div className="mock mock-session" ref={ref}>
-      <div className="msx-tape"><Cassette kicker="Studio A · Take 3" title={`${kind} session`} catalogue={sampleRef().slice(0, 7)} progress={p} elapsed={clock(p * length)} total={clock(length)} playing={inView && !prefersStill()} /></div>
-      <div className="msx-ticket"><BookingTicket kind={kind} date={date} start={start} duration={120} reference={sampleRef()} /></div>
+      <div className="msx-tape"><Cassette kicker={`${room} · Take 3`} title={`${kind} session`} catalogue={sampleRef().slice(0, 7)} progress={p} elapsed={clock(p * length)} total={clock(length)} playing={inView && !prefersStill()} /></div>
+      <div className="msx-ticket"><BookingTicket kind={kind} date={date} start={start} duration={120} reference={sampleRef()} room={room} /></div>
     </div>
   );
 }
 
-function HowItWorks({ cat, day }: { cat: Catalog; day: OpenDay | null }) {
+function HowItWorks({ cat, day, site }: { cat: Catalog; day: OpenDay | null; site: Site | null }) {
   const ref = useRef<HTMLUListElement>(null);
   const start = useStartBooking();
   useScrollFrame(() => {
@@ -235,19 +241,19 @@ function HowItWorks({ cat, day }: { cat: Catalog; day: OpenDay | null }) {
     });
   });
   const pkg = cat.packages.find((p) => p.slug === "2-hour") ?? cat.packages[0];
-  const extra = cat.extras.find((e) => e.slug === "vocal-editing");
-  const fan = pick(cat, ["vocal-recording", "beat-production", "podcast-recording", "voice-over", "mixing"]);
+  const room = roomOf(cat, pkg)?.name ?? "Studio A";
+  const fan = pick(cat, FAN);
   const steps: [string, string, string, ReactNode][] = [
-    ["var(--coral)", "Pick what you’re making", "Vocals, beats, mixing, podcasts or voice-over. Every session comes with an engineer.", <ServicePick services={fan} onPick={(slug) => start({ serviceSlug: slug })} />],
-    ["var(--yellow)", "Take a live slot", "Real open times from the studio calendar. We hold your slot while you pay.", <SlotPick day={day} />],
-    ["var(--neon)", "Pay with Paystack", "Card, bank transfer or USSD. Your booking confirms the moment the payment is verified.", <PayPrint pkg={pkg} extra={extra} day={day} />],
-    ["var(--cream)", "Walk in and record", "Your ticket and receipt land in your inbox. The engineer is ready when you arrive.", <SessionStill day={day} service={fan[0]} />],
+    ["var(--coral)", "Pick what you’re making", "Vocals, beats, music videos, podcasts or a photo shoot. Every booking comes with crew.", <ServicePick services={fan} onPick={(slug) => start({ serviceSlug: slug })} />],
+    ["var(--yellow)", "Take a live slot", "Real open times for each room. We hold your slot while you check out.", <SlotPick day={day} room={room} />],
+    ["var(--neon)", "Pay a deposit or in full", "Card, bank transfer or USSD through Paystack. Your booking confirms the moment the payment is verified.", <PayPrint pkg={pkg} cat={cat} day={day} site={site} />],
+    ["var(--cream)", "Walk in and create", "Your ticket and receipt land in your inbox, with a reminder the day before. The crew is ready when you arrive.", <SessionStill day={day} service={fan[0]} room={room} />],
   ];
   return (
     <section className="lsec">
       <div className="wrap stack center">
         <h2 className="ltitle" data-reveal>Booked in two minutes</h2>
-        <p className="lsub" data-reveal>From your phone to the booth in four steps.</p>
+        <p className="lsub" data-reveal>From your phone to the room in four steps.</p>
       </div>
       <div className="wrap">
         <ul className="stackcards" ref={ref}>
@@ -268,7 +274,7 @@ function HowItWorks({ cat, day }: { cat: Catalog; day: OpenDay | null }) {
   );
 }
 
-function Reveal({ quote, name }: { quote: string; name: string }) {
+function Reveal({ quote, name, role }: { quote: string; name: string; role: string }) {
   const section = useRef<HTMLElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const photo = useRef<HTMLDivElement>(null);
@@ -292,7 +298,7 @@ function Reveal({ quote, name }: { quote: string; name: string }) {
           <div className="img" ref={photo} style={{ backgroundImage: `url(${PHOTOS.performer})` }} />
           <div className="quote" ref={text}>
             <p>“{quote}”</p>
-            <span><b>{name}</b> · Singer</span>
+            <span><b>{name}</b>{role ? ` · ${role}` : ""}</span>
           </div>
         </div>
       </div>
@@ -300,8 +306,9 @@ function Reveal({ quote, name }: { quote: string; name: string }) {
   );
 }
 
-function ServicesBand({ cat, start }: { cat: Catalog; start: (p: { serviceSlug: string }) => void }) {
+function ServicesBand({ cat }: { cat: Catalog }) {
   const ref = useRef<HTMLDivElement>(null);
+  const nav = useNavigate();
   const speeds = [-36, 44, -14, 60, 10];
   useScrollFrame(() => {
     const strip = ref.current;
@@ -311,16 +318,16 @@ function ServicesBand({ cat, start }: { cat: Catalog; start: (p: { serviceSlug: 
     const p = clamp((window.innerHeight - r.top) / (window.innerHeight + r.height)) - 0.5;
     Array.from(strip.children).forEach((el, i) => { (el as HTMLElement).style.transform = flat ? "" : `translateY(${p * speeds[i % speeds.length]}px)`; });
   });
-  const services = pick(cat, ["vocal-recording", "beat-production", "podcast-recording", "voice-over", "mixing"]);
+  const services = pick(cat, FAN);
   return (
     <section className="band">
       <div className="wrap stack center">
-        <h2 className="ltitle" data-reveal>Made for every kind of session</h2>
-        <p className="lsub" data-reveal>Vocals, beats, podcasts and voice-over. One room, one engineer, your sound.</p>
+        <h2 className="ltitle" data-reveal>Made for every kind of project</h2>
+        <p className="lsub" data-reveal>Records, music videos, podcasts and shoots. Four rooms, one crew, your vision.</p>
       </div>
       <div className="strip" ref={ref}>
         {services.map((s) => (
-          <button key={s.id} type="button" className="shot" onClick={() => start({ serviceSlug: s.slug })}>
+          <button key={s.id} type="button" className="shot" onClick={() => nav(`/services/${s.slug}`)}>
             <span className="img" style={{ backgroundImage: `url(${s.image_url})` }} />
             <b>{s.name}</b>
             <span className="d">{s.description}</span>
@@ -332,14 +339,54 @@ function ServicesBand({ cat, start }: { cat: Catalog; start: (p: { serviceSlug: 
   );
 }
 
-function PlanCard({ p, variant, onBook }: { p: Package; variant: TactileVariant; onBook: () => void }) {
+function Rooms({ cat }: { cat: Catalog }) {
+  return (
+    <section className="lsec">
+      <div className="wrap stack center">
+        <span className="eyebrow" data-reveal><Mark tone="neon" size={20} /> Studio and facilities</span>
+        <h2 className="ltitle" data-reveal>Rooms built for sound and picture</h2>
+        <p className="lsub" data-reveal>Treated rooms, proper monitoring, cameras and lights, and the people who run them.</p>
+        <div className="roomcards">
+          {cat.rooms.map((r, i) => (
+            <Link key={r.id} to={`/studio#${r.slug}`} className="roomcard" data-reveal style={{ transitionDelay: `${i * 80}ms` }}>
+              <span className="img" style={{ backgroundImage: `url(${r.image_url})` }} />
+              <span className="mono">{r.kind}</span>
+              <b>{r.name}</b>
+              <span className="d">Up to {r.capacity} people · {naira(r.hourly_kobo || cat.rules.extraHourKobo)} per extra hour</span>
+            </Link>
+          ))}
+        </div>
+        <TactileLink to="/studio" variant="light" size="md" data-reveal>See the rooms and equipment</TactileLink>
+      </div>
+    </section>
+  );
+}
+
+function Work({ site }: { site: Site }) {
+  const featured = site.portfolio.filter((w) => w.featured).slice(0, 3);
+  if (!featured.length) return null;
+  return (
+    <section className="lsec worksec">
+      <div className="wrap stack gap32">
+        <div className="row between wrapflex gap16" style={{ alignItems: "flex-end" }}>
+          <div className="stack gap8"><h2 className="ltitle" style={{ marginTop: 0 }} data-reveal>Work made here</h2><p className="lsub" style={{ marginTop: 0 }} data-reveal>Records, videos, podcasts and shoots from our rooms.</p></div>
+          <TactileLink to="/portfolio" variant="light" size="md">Full portfolio</TactileLink>
+        </div>
+        <div className="grid cols-3">{featured.map((w) => <div key={w.id} data-reveal><WorkCard w={w} /></div>)}</div>
+      </div>
+    </section>
+  );
+}
+
+function PlanCard({ p, cat, variant, onBook }: { p: Package; cat: Catalog; variant: TactileVariant; onBook: () => void }) {
+  const deposit = depositOf(cat, p, p.price_kobo);
   return (
     <div className="plan" data-reveal style={{ "--pc": `var(--${variant})` } as CSSProperties}>
       {!!p.featured && <span className="ptab">Most booked</span>}
-      <span className="peb"><Mark tone="white" size={16} /> Studio A</span>
+      <span className="peb"><Mark tone="white" size={16} /> {roomOf(cat, p)?.name}</span>
       <h3>{p.name}</h3>
       <b className="pprice">{naira(p.price_kobo)} per session</b>
-      <span className="pmeta">{p.category === "post" ? `${hrs(p.duration_min)} recording, mixed and mastered` : `${hrs(p.duration_min)}, engineer included`}</span>
+      <span className="pmeta">{deposit < p.price_kobo ? `${naira(deposit)} deposit to book` : "Paid in full when you book"} · {hrs(p.duration_min)}</span>
       <div className="pdiv" />
       <ul>{p.includes.map((x) => <li key={x}>{x}</li>)}</ul>
       <Tactile variant={variant} size="lg" block onClick={onBook}>Book {p.name}</Tactile>
@@ -349,17 +396,17 @@ function PlanCard({ p, variant, onBook }: { p: Package; variant: TactileVariant;
 }
 
 function Plans({ cat }: { cat: Catalog }) {
-  const nav = useNavigate();
-  const featured = ["2-hour", "half-day", "record-mix-master"].map((s) => cat.packages.find((p) => p.slug === s)).filter(Boolean) as Package[];
+  const start = useStartBooking();
+  const featured = ["half-day", "video-podcast-2-hour", "photo-session-2-hour"].map((s) => cat.packages.find((p) => p.slug === s)).filter(Boolean) as Package[];
   const variants: TactileVariant[] = ["neon", "yellow", "coral"];
-  const book = (p: Package) => { saveDraft({ ...loadDraft(), packageId: p.id, holdId: undefined }); nav("/book"); };
+  const book = (p: Package) => start({ serviceSlug: cat.services.find((s) => s.category === p.service_category)?.slug, packageId: p.id });
   return (
     <section className="lsec plans">
       <div className="wrap stack center">
         <div className="glowmark" data-reveal><Mark tone="neon" size={168} /></div>
-        <h2 className="ltitle" data-reveal>Your next record starts here</h2>
-        <p className="lsub" data-reveal>Pick a package. Every session comes with an engineer.</p>
-        <div className="plancards">{featured.map((p, i) => <PlanCard key={p.id} p={p} variant={variants[i]} onBook={() => book(p)} />)}</div>
+        <h2 className="ltitle" data-reveal>Your next project starts here</h2>
+        <p className="lsub" data-reveal>Pick a package. Pay a deposit to hold it and the balance before you arrive.</p>
+        <div className="plancards">{featured.map((p, i) => <PlanCard key={p.id} p={p} cat={cat} variant={variants[i]} onBook={() => book(p)} />)}</div>
         <TactileLink to="/packages" variant="light" size="md" data-reveal>Compare all packages and policies</TactileLink>
       </div>
     </section>
@@ -368,21 +415,23 @@ function Plans({ cat }: { cat: Catalog }) {
 
 export function Home() {
   const cat = useCatalog();
-  const content = useContent();
-  const start = useStartBooking();
-  const day = useOpenDay();
-  const root = useReveal<HTMLDivElement>(!!cat);
-  const c = content?.content ?? {};
+  const site = useContent();
+  const day = useOpenDay(cat);
+  const root = useReveal<HTMLDivElement>(!!cat && !!site);
+  const c = site?.content ?? {};
+  const t = site?.testimonials.find((x) => x.featured) ?? site?.testimonials[0];
   return (
     <PublicLayout dark>
       <div className="landing" ref={root}>
-        <Hero title={c.hero_title ?? "Your sound, recorded right."} sub={c.hero_subtitle ?? "Book real studio time in Lekki, Lagos. See live availability, pay with Paystack, walk in and record."} />
+        <Hero ready={!!site} title={c.hero_title ?? "Record, shoot and create"} accent={c.hero_accent ?? "under one roof."} photo={c.hero_image || HERO_PHOTO}
+          sub={c.hero_subtitle ?? "Music recording, video production, podcasts and photography. Check live availability, book a room, and pay a deposit or the full amount online."} />
         {cat && <>
-          <Marquee words={cat.services.map((s) => s.name)} />
-          <Features extraHour={cat.rules.extraHourKobo} />
-          <HowItWorks cat={cat} day={day} />
-          <Reveal quote={c.testimonial_quote ?? "Booked at midnight, recorded the next afternoon. The engineer was ready when I walked in."} name={c.testimonial_name ?? "Amaka Eze"} />
-          <ServicesBand cat={cat} start={start} />
+          <Features rooms={cat.rooms.length} />
+          <HowItWorks cat={cat} day={day} site={site} />
+          {t && <Reveal quote={t.quote} name={t.name} role={t.role} />}
+          <ServicesBand cat={cat} />
+          <Rooms cat={cat} />
+          {site && <Work site={site} />}
           <Plans cat={cat} />
         </>}
       </div>

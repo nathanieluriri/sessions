@@ -16,7 +16,7 @@ export function DashShell({ items, dark, title, action, children }: { items: Nav
   return (
     <div className="dash">
       <aside className={`side ${dark ? "dark" : ""}`}>
-        <Link to="/" className="brandmark"><Mark tone={dark ? "neon" : "ink"} /> Sessions</Link>
+        <Link to="/" className="brandmark"><Mark tone={dark ? "neon" : "ink"} /> Psych Records</Link>
         <nav className="stack gap4">
           {items.map((i) => (
             <NavLink key={i.to} to={i.to} end={i.end} className={cls(i.locked)} title={i.locked ? "You do not have access" : undefined}>
@@ -61,12 +61,12 @@ export const Stat = ({ label, value, note }: { label: string; value: ReactNode; 
 
 export const Empty = ({ children }: { children: ReactNode }) => <div className="panel muted" style={{ textAlign: "center" }}>{children}</div>;
 
-export function SlotPicker({ duration, value, onChange }: { duration: number; value: { date: string; start: number } | null; onChange: (v: { date: string; start: number }) => void }) {
+export function SlotPicker({ duration, room, value, onChange, days: count = 21, from }: { duration: number; room?: string | null; value: { date: string; start: number } | null; onChange: (v: { date: string; start: number }) => void; days?: number; from?: string }) {
   const today = lagosToday();
-  const days = Array.from({ length: 21 }, (_, i) => addDays(today, i + 1));
+  const days = Array.from({ length: count }, (_, i) => addDays(from ?? today, from ? i : i + 1));
   const [date, setDate] = useState(value?.date ?? days[0]);
   const [slots, setSlots] = useState<{ start: number; available: boolean }[] | null>(null);
-  useEffect(() => { setSlots(null); api(`/availability/day?date=${date}&duration=${duration}`).then((r) => setSlots(r.slots)); }, [date, duration]);
+  useEffect(() => { setSlots(null); api(`/availability/day?date=${date}&duration=${duration}&room=${room ?? ""}`).then((r) => setSlots(r.slots)); }, [date, duration, room]);
   return (
     <div className="stack gap12">
       <div className="daypick">{days.map((d) => <button key={d} type="button" className={d === date ? "on" : ""} onClick={() => setDate(d)}>{shortDate(d)}</button>)}</div>

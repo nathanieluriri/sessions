@@ -1,21 +1,24 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { bookingService } from "../services/bookings";
+import { bookingService, summary } from "../services/bookings";
 import { body, date, minute, required, text, email } from "../lib/validate";
 import { requireUser } from "../middleware/auth";
 import { paymentProvider } from "../services/payments";
 import { paymentsRepo } from "../repositories/bookings";
 import { hmacSha512Hex, safeEqual } from "../lib/crypto";
-import { forbidden, notFound } from "../lib/errors";
+import { notFound } from "../lib/errors";
 
 const r = new Hono<AppEnv>();
 
-export const draftSchema = z.object({
-  serviceSlug: required("Service"), packageId: required("Package"), date, start: minute, extraHours: z.number().int().min(0).max(4),
-  extras: z.array(z.string()).max(5), people: z.number().int().min(1).max(20), artistName: required("Artist or group name"),
-  contactName: required("Full name"), contactEmail: email, contactPhone: required("Phone number", 40), notes: text(2000).default(""),
-});
+export const draftFields = {
+  serviceSlug: required("Service"), packageId: required("Package"), date, start: minute, extraHours: z.number().int().min(0).max(8),
+  extras: z.array(z.string()).max(8), people: z.number().int().min(1).max(200), artistName: required("Artist, brand or project name"),
+  contactName: required("Full name"), contactPhone: required("Phone number", 40),
+  project: text(2000).default(""), notes: text(2000).default(""), links: text(1000).default(""),
+};
+export const draftSchema = z.object({ ...draftFields, contactEmail: email });
+const plan = z.enum(["deposit", "full", "balance"]).default("full");
 
 r.post("/quote", async (c) => c.json(await bookingService.priceDraft(c.env, await body(c, draftSchema))));
 r.post("/holds", async (c) => c.json(await bookingService.createHold(c.env, await body(c, draftSchema), c.get("user"))));
@@ -23,16 +26,27 @@ r.get("/holds/:id", async (c) => c.json(await bookingService.getHold(c.env, c.re
 r.delete("/holds/:id", async (c) => { await bookingService.releaseHold(c.env, c.req.param("id")); return c.json({ ok: true }); });
 
 r.post("/checkout", requireUser, async (c) => {
+  const b = await body(c, z.object({ holdId: required("Hold"), plan }));
+  return c.json(await bookingService.checkout(c.env, c.get("user")!, b.holdId, b.plan, new URL(c.req.url).origin));
+});
+r.post("/requests", requireUser, async (c) => {
   const b = await body(c, z.object({ holdId: required("Hold") }));
-  return c.json(await bookingService.checkout(c.env, c.get("user")!, b.holdId, new URL(c.req.url).origin));
+  return c.json({ booking: summary(await bookingService.submitRequest(c.env, c.get("user")!, b.holdId)) });
 });
 
-r.get("/payments/verify", requireUser, async (c) => {
+// Payment links work for the signed-in owner, staff, or anyone holding the token from the booking email.
+r.get("/pay/:id", async (c) => c.json(await bookingService.payPage(c.env, c.req.param("id"), { token: c.req.query("t"), user: c.get("user") })));
+r.post("/pay/:id", async (c) => {
+  const b = await body(c, z.object({ t: z.string().max(100).optional(), plan }));
+  return c.json(await bookingService.payBooking(c.env, c.req.param("id"), { token: b.t, user: c.get("user") }, b.plan, new URL(c.req.url).origin));
+});
+
+r.get("/payments/verify", async (c) => {
   const ref = c.req.query("reference") ?? "";
-  const p = await paymentsRepo.byReference(c.env.DB, ref);
-  if (!p) throw notFound();
-  if (p.user_id !== c.get("user")!.id) throw forbidden();
-  return c.json(await bookingService.confirmPayment(c.env, ref, "server_verify"));
+  const payment = await paymentsRepo.byReference(c.env.DB, ref);
+  if (!payment) throw notFound();
+  const result = await bookingService.confirmPayment(c.env, ref, "server_verify");
+  return c.json({ status: result.status, booking: result.booking ? summary(result.booking) : null, payment: { kind: payment.kind, amount_kobo: payment.amount_kobo } });
 });
 
 // Paystack calls this; the signature proves the event came from Paystack before anything is trusted.
@@ -41,7 +55,7 @@ r.post("/payments/webhook", async (c) => {
   const key = c.env.PAYSTACK_SECRET_KEY;
   if (!key || !safeEqual(await hmacSha512Hex(key, raw), c.req.header("x-paystack-signature") ?? "")) return c.json({ ok: false }, 401);
   const event = JSON.parse(raw) as { event: string; data: { reference: string } };
-  if (event.event === "charge.success") await bookingService.confirmPayment(c.env, event.data.reference, "webhook");
+  if (event.event === "charge.success" && (await paymentsRepo.byReference(c.env.DB, event.data.reference))) await bookingService.confirmPayment(c.env, event.data.reference, "webhook");
   return c.json({ ok: true });
 });
 

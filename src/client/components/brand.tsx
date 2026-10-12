@@ -6,7 +6,7 @@ const MARK = [
   "M25.8281 111.528C26.7952 110.374 28.5559 110.331 29.5791 111.436L50.7138 134.261C51.4775 135.086 51.5965 136.32 51.0048 137.275L46.5966 144.396C46.1362 145.139 45.3208 145.589 44.4462 145.58L2.98042 145.161C0.869855 145.14 -0.266432 142.674 1.08882 141.056L25.8281 111.528Z",
 ];
 
-/** Official Sessions mark, traced 1:1 from the Figma brand asset. Tone is one of the three sanctioned colours. */
+/** Placeholder mark from the original Figma file, used until the official Psych Records logo is supplied. Replace the paths above to swap it everywhere. */
 export function Mark({ tone = "neon", size = 34 }: { tone?: "neon" | "ink" | "white"; size?: number }) {
   const fill = tone === "neon" ? "#65F87C" : tone === "ink" ? "#171714" : "#FFFFFF";
   return (
@@ -22,13 +22,13 @@ const SOCIAL: Record<string, string> = {
   YouTube: "M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z",
   X: "M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z",
 };
-const SOCIAL_URL: Record<string, string> = { Instagram: "https://instagram.com", TikTok: "https://tiktok.com", YouTube: "https://youtube.com", X: "https://x.com" };
+const SOCIAL_KEY: Record<string, string> = { Instagram: "social_instagram", TikTok: "social_tiktok", YouTube: "social_youtube", X: "social_x" };
 
-export function Socials() {
+export function Socials({ links = {} }: { links?: Record<string, string> }) {
   return (
     <div className="row gap8">
-      {Object.entries(SOCIAL).map(([name, d]) => (
-        <a key={name} className="social" href={SOCIAL_URL[name]} target="_blank" rel="noreferrer" aria-label={name}>
+      {Object.entries(SOCIAL).filter(([name]) => links[SOCIAL_KEY[name]]).map(([name, d]) => (
+        <a key={name} className="social" href={links[SOCIAL_KEY[name]]} target="_blank" rel="noreferrer" aria-label={name}>
           <svg viewBox="0 0 24 24"><path d={d} /></svg>
         </a>
       ))}
@@ -59,6 +59,21 @@ const ICONS: Record<string, string> = {
   logout: "M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11",
   phone: "M5 4h4l2 5-3 2a11 11 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 6a2 2 0 0 1 2-2z",
   pin: "M12 21s7-6 7-12a7 7 0 0 0-14 0c0 6 7 12 7 12zM12 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+  play: "M8 5v14l11-7z",
+  plus: "M12 5v14M5 12h14",
+  upload: "M12 16V4m0 0-4 4m4-4 4 4M4 17v3h16v-3",
+  image: "M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5M15 9.5h.01",
+  link: "M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1",
+  mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
+  video: "M3 7h12v10H3zM15 10l6-3v10l-6-3",
+  camera: "M4 8h3l2-3h6l2 3h3v11H4zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z",
+  door: "M6 21V4h12v17M3 21h18M14 12h.01",
+  megaphone: "M3 11v2l13 5V6zM16 9a3 3 0 0 1 0 6M6 13.5V18h3v-3.5",
+  help: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01",
+  star: "M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z",
+  trash: "M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+  quote: "M7 7h4v4H8v6H4v-6zM16 7h4v4h-3v6h-4v-6z",
+  briefcase: "M4 8h16v11H4zM9 8V5h6v3M4 13h16",
 };
 
 export function Icon({ name, size = 20, className }: { name: keyof typeof ICONS | string; size?: number; className?: string }) {

@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
-import type { AppEnv } from "../env";
+import type { AppEnv, SessionUser } from "../env";
 import { authService } from "../services/auth";
 import { forbidden, unauthorized } from "../lib/errors";
 import type { Permission } from "../../shared/permissions";
@@ -32,10 +32,12 @@ export const requireCeo: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
 };
 
+export const can = (u: SessionUser, p: Permission) => u.role === "ceo" || (u.role === "admin" && u.permissions.includes(p));
+
 /** CEO always passes; admins need the named permission. Enforced on every request, not just in the UI. */
 export const requirePermission = (p: Permission): MiddlewareHandler<AppEnv> => async (c, next) => {
   const u = c.get("user");
   if (!u) throw unauthorized();
-  if (u.role !== "ceo" && !(u.role === "admin" && u.permissions.includes(p))) throw forbidden();
+  if (!can(u, p)) throw forbidden();
   await next();
 };

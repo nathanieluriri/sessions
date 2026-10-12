@@ -3,7 +3,8 @@ import { usersRepo, sessionsRepo, tokensRepo, loginAttemptsRepo, type UserRow } 
 import { hashPassword, verifyPassword, randomToken, sha256, uuid } from "../lib/crypto";
 import { isoIn } from "../lib/time";
 import { badRequest, conflict, unauthorized, AppError } from "../lib/errors";
-import { sendEmail, studioFooter } from "./notifications";
+import { brand, sendEmail } from "./notifications";
+import { bookingsRepo } from "../repositories/bookings";
 import { audit } from "./audit";
 
 export const SESSION_DAYS = 14;
@@ -22,7 +23,7 @@ async function startSession(env: Env, userId: string) {
 async function sendVerification(env: Env, u: { id: string; email: string; name: string }) {
   const token = randomToken();
   await tokensRepo.create(env.DB, await sha256(token), u.id, "verify", isoIn(24 * 60));
-  await sendEmail(env, u.email, "Verify your email", `Hi ${u.name},\n\nConfirm your email address for ${env.STUDIO_NAME}:\n${env.APP_URL}/verify-email?token=${token}\n\nThe link expires in 24 hours.${studioFooter(env)}`);
+  await sendEmail(env, u.email, "Verify your email", `Hi ${u.name},\n\nConfirm your email address for ${(await brand(env)).name}:\n${env.APP_URL}/verify-email?token=${token}\n\nThe link expires in 24 hours.`);
 }
 
 export const authService = {
@@ -64,6 +65,8 @@ export const authService = {
     const r = await tokensRepo.consume(env.DB, await sha256(token), "verify", new Date().toISOString());
     if (!r) throw badRequest("This link has expired or was already used.");
     await usersRepo.markVerified(env.DB, r.user_id);
+    const u = await usersRepo.byId(env.DB, r.user_id);
+    if (u?.role === "client") await bookingsRepo.linkGuestBookings(env.DB, u.id, u.email);
   },
 
   async resendVerification(env: Env, user: SessionUser) {
@@ -75,7 +78,7 @@ export const authService = {
     if (!u) return;
     const token = randomToken();
     await tokensRepo.create(env.DB, await sha256(token), u.id, "reset", isoIn(60));
-    await sendEmail(env, u.email, "Reset your password", `Hi ${u.name},\n\nSet a new password here:\n${env.APP_URL}/reset-password?token=${token}\n\nThe link expires in 1 hour. If you did not ask for this, ignore this email.${studioFooter(env)}`);
+    await sendEmail(env, u.email, "Reset your password", `Hi ${u.name},\n\nSet a new password here:\n${env.APP_URL}/reset-password?token=${token}\n\nThe link expires in 1 hour. If you did not ask for this, ignore this email.`);
   },
 
   async resetPassword(env: Env, token: string, password: string) {
