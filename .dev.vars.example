@@ -1,0 +1,4 @@
+# Optional. Without these the app runs in demo mode (simulated Paystack checkout, emails kept in the outbox).
+PAYSTACK_SECRET_KEY=
+RESEND_API_KEY=
+EMAIL_FROM=Sessions Studio <bookings@sessionsstudio.ng>
