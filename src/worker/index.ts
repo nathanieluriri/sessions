@@ -9,6 +9,7 @@ import bookingRoutes from "./routes/booking";
 import accountRoutes from "./routes/account";
 import adminRoutes from "./routes/admin";
 import { bookingService } from "./services/bookings";
+import { media, page, robots, sitemap } from "./site";
 
 const app = new Hono<AppEnv>().basePath("/api");
 
@@ -28,7 +29,14 @@ app.onError((err, c) => {
 });
 
 export default {
-  fetch: app.fetch,
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/api/")) return app.fetch(request, env, ctx);
+    if (url.pathname.startsWith("/media/")) return media(env, decodeURIComponent(url.pathname.slice(7)));
+    if (url.pathname === "/robots.txt") return robots(env, url.origin);
+    if (url.pathname === "/sitemap.xml") return sitemap(env, url.origin);
+    return page(request, env);
+  },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(bookingService.housekeeping(env));
   },

@@ -4,18 +4,18 @@ import { hrs } from "../lib/format";
 
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
-export function BookingTicket({ kind, date, start, duration, artist, people, reference, paper = "#65f87c", ink = "#102200", className, style }: {
-  kind: string; date: string; start: number; duration: number; artist?: string; people?: number; reference: string; paper?: string; ink?: string; className?: string; style?: CSSProperties;
+export function BookingTicket({ kind, date, start, duration, artist, people, reference, room = "Studio A", paper = "#65f87c", ink = "#0a0a0a", className, style }: {
+  kind: string; date: string; start: number; duration: number; artist?: string; people?: number; reference: string; room?: string; paper?: string; ink?: string; className?: string; style?: CSSProperties;
 }) {
   return (
     <Ticket className={className} style={style} paper={paper} ink={ink} stubHeight="23%" label={`${kind} session ticket, ${reference}`}
       body={
         <div className="tkt-body">
-          <div className="tkt-micro"><span>Sessions · Studio A</span><span>Lagos · NG</span></div>
+          <div className="tkt-micro"><span>Psych Records · {room}</span><span>Lagos · NG</span></div>
           <div className="tkt-art"><TicketPattern /></div>
           <div>
             <h3 className="tkt-title">{kind}<br />Session</h3>
-            <p className="tkt-copy">{artist ? `${artist}. ` : ""}{hrs(duration)} with an engineer at 14 Admiralty Way, Lekki.</p>
+            <p className="tkt-copy">{artist ? `${artist}. ` : ""}{hrs(duration)} in {room}, crew included.</p>
           </div>
           <dl className="tkt-dl">
             <div><dt>Date</dt><dd>{date.slice(8)}.{date.slice(5, 7)}</dd></div>

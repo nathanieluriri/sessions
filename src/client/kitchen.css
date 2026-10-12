@@ -5,7 +5,7 @@
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
 /* Tactile button */
-.tactile { --d: 6px; --r: 12px; --t-face: #102200; --t-hl: #31501a; --t-ink: #fff; --t-base: #030800; --t-base-sh: #000;
+.tactile { --d: 6px; --r: 12px; --t-face: #161616; --t-hl: #3a3a3a; --t-ink: #fff; --t-base: #000; --t-base-sh: #000;
   position: relative; display: inline-grid; width: max-content; flex-shrink: 0; padding: 0 0 var(--d); border: 0; background: transparent;
   color: inherit; font: inherit; line-height: 1; text-decoration: none; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
 .tactile .tb { position: absolute; left: 0; right: 0; top: var(--d); bottom: 0; border-radius: var(--r); background: var(--t-base); box-shadow: inset 0 -1px 0 var(--t-base-sh); }
@@ -22,10 +22,10 @@
 .t-shallow { --d: 4px; }
 .t-block { width: 100%; }
 .t-ink { --t-face: #4a4a46; --t-hl: #64645e; --t-ink: #eeeeec; --t-base: #292926; --t-base-sh: #141412; }
-.t-neon { --t-face: #65f87c; --t-hl: #b6fcc1; --t-ink: #102200; --t-base: #2e9e43; --t-base-sh: #1d6b2c; }
+.t-neon { --t-face: #65f87c; --t-hl: #b6fcc1; --t-ink: #0a0a0a; --t-base: #2e9e43; --t-base-sh: #1d6b2c; }
 .t-light { --t-face: #fff; --t-hl: #fff; --t-ink: #171714; --t-base: #d6d6d1; --t-base-sh: #b5b5af; }
-.t-coral { --t-face: #ff633f; --t-hl: #ffa08a; --t-ink: #102200; --t-base: #bf3f1d; --t-base-sh: #8a2a10; }
-.t-yellow { --t-face: #f8e251; --t-hl: #fdf2a6; --t-ink: #102200; --t-base: #bea51c; --t-base-sh: #857210; }
+.t-coral { --t-face: #ff633f; --t-hl: #ffa08a; --t-ink: #0a0a0a; --t-base: #bf3f1d; --t-base-sh: #8a2a10; }
+.t-yellow { --t-face: #f8e251; --t-hl: #fdf2a6; --t-ink: #0a0a0a; --t-base: #bea51c; --t-base-sh: #857210; }
 .t-danger { --t-face: #e5484d; --t-hl: #f2898c; --t-ink: #fff; --t-base: #a3262a; --t-base-sh: #6e1417; }
 
 /* Ticket */
@@ -201,7 +201,7 @@
 .pc-idx svg { width: 1.3em; height: auto; }
 .pc-idx.flip { top: auto; left: auto; right: .65em; bottom: .6em; rotate: 180deg; }
 .pc-court { position: absolute; inset: 15% 20%; overflow: hidden; border-radius: .4em; border: 1px solid rgb(35 38 45 / 35%); background: #ddd center / cover; }
-.pc-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 2.4em .5em .5em; background: linear-gradient(180deg, transparent, rgba(16,34,0,.88)); color: #fff;
+.pc-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 2.4em .5em .5em; background: linear-gradient(180deg, transparent, rgba(10,10,10,.88)); color: #fff;
   font-size: 1.05em; font-weight: 600; line-height: 1.1; text-align: center; }
 
 /* Hold to confirm */

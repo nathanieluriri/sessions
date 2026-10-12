@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { PublicLayout, PageHero } from "../components/Layout";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { PublicLayout, PageHero, hoursSummary, waLink } from "../components/Layout";
 import { Icon, Socials } from "../components/brand";
 import { Area, Btn, ErrorBox, Field, Loading } from "../components/ui";
-import { PHOTOS, useCatalog, useContent, type Package, type Service } from "../lib/catalog";
+import { TactileAnchor, TactileLink } from "../components/kitchen";
+import { RichText } from "../components/content";
+import { PHOTOS, depositOf, needsApproval, roomOf, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
 import { hrs, naira } from "../lib/format";
 import { api } from "../lib/api";
 import { loadDraft, saveDraft } from "../lib/draft";
@@ -17,126 +19,254 @@ export function ServiceCard({ s, on, onClick }: { s: Service; on?: boolean; onCl
   );
 }
 
-export function PackageCard({ p, onBook }: { p: Package; onBook: () => void }) {
-  const f = !!p.featured;
-  return (
-    <div className={`pkg ${f ? "featured" : ""}`}>
-      <div className="row between"><span className="mono" style={{ color: f ? "var(--neon)" : "var(--fg2)" }}>{hrs(p.duration_min)}{p.category === "post" ? " + post" : ""}</span>{f && <span className="tag" style={{ background: "var(--neon)", color: "var(--brand)" }}>Most booked</span>}</div>
-      <h3 className="h3">{p.name}</h3>
-      <p style={{ opacity: f ? .75 : 1 }} className={f ? "" : "muted"}>{p.description}</p>
-      <div className="row gap8" style={{ alignItems: "baseline" }}><span className="price">{naira(p.price_kobo)}</span><span className="small" style={{ opacity: .6 }}>per session</span></div>
-      <div className="divider" style={{ background: f ? "var(--brand-2)" : undefined }} />
-      <ul>{p.includes.map((i) => <li key={i}>{i}</li>)}</ul>
-      <Btn kind={f ? "neon" : "primary"} arrow block onClick={onBook}>Book this package</Btn>
-    </div>
-  );
-}
-
+/** Starts the booking flow with whatever the visitor already chose. */
 export function useStartBooking() {
   const nav = useNavigate();
-  return (patch: { serviceSlug?: string; packageId?: string }) => { saveDraft({ ...loadDraft(), ...patch, holdId: undefined }); nav(patch.serviceSlug ? "/book/package" : "/book"); };
+  return (patch: { serviceSlug?: string; packageId?: string }) => {
+    saveDraft({ ...loadDraft(), ...patch, holdId: undefined, start: undefined });
+    nav(patch.serviceSlug && patch.packageId ? "/book/time" : patch.serviceSlug ? "/book/package" : "/book");
+  };
 }
 
-export function Services() {
-  const cat = useCatalog();
+export function PackageCard({ p, cat, service }: { p: Package; cat: Catalog; service?: Service }) {
   const start = useStartBooking();
+  const room = roomOf(cat, p);
+  const f = !!p.featured;
+  const quote = p.pricing === "quote";
+  const pct = p.deposit_percent ?? cat.rules.depositPercent;
+  const svc = service ?? cat.services.find((s) => s.category === p.service_category);
   return (
-    <PublicLayout>
-      <PageHero title="Recording and audio, done properly." sub="Every service runs in Studio A with an engineer." />
-      <section className="section" style={{ paddingTop: 48 }}><div className="wrap grid cols-2">
-        {!cat ? <Loading /> : cat.services.map((s) => (
-          <div key={s.id} className="card stack gap16" style={{ padding: 16 }}>
-            <div style={{ height: 300, borderRadius: 16, background: `center/cover url(${s.image_url})` }} />
-            <div className="stack gap12" style={{ padding: "4px 8px 8px" }}>
-              <div className="row between wrapflex gap8"><h3 className="h3">{s.name}</h3><span className="mono muted">{s.price_label}</span></div>
-              <p className="muted">{s.description}</p>
-              <div className="row" style={{ justifyContent: "flex-end" }}><Btn size="sm" arrow onClick={() => start({ serviceSlug: s.slug })}>Book</Btn></div>
-            </div>
-          </div>
-        ))}
-      </div></section>
-    </PublicLayout>
+    <div className={`pkg ${f ? "featured" : ""}`} id={`pkg-${p.slug}`}>
+      <div className="row between gap8">
+        <span className="mono" style={{ color: f ? "var(--neon)" : "var(--fg2)" }}>{quote ? "Quote" : hrs(p.duration_min)}{room ? ` · ${room.name}` : ""}</span>
+        {f ? <span className="tag" style={{ background: "var(--neon)", color: "var(--brand)" }}>Most booked</span> : needsApproval(cat, p) && !quote ? <span className="tag warning">Studio approval</span> : null}
+      </div>
+      <h3 className="h3">{p.name}</h3>
+      <p style={{ opacity: f ? .75 : 1 }} className={f ? "" : "muted"}>{p.description}</p>
+      {quote
+        ? <div className="stack gap4"><span className="price" style={{ fontSize: 30 }}>Price on request</span>{p.price_note && <span className="small" style={{ opacity: .65 }}>{p.price_note}</span>}</div>
+        : <div className="stack gap4"><div className="row gap8" style={{ alignItems: "baseline" }}><span className="price">{naira(p.price_kobo)}</span><span className="small" style={{ opacity: .6 }}>per session</span></div>
+          <span className="small" style={{ opacity: .65 }}>{pct > 0 && pct < 100 ? `${pct}% deposit (${naira(depositOf(cat, p, p.price_kobo))}) to book, or pay in full` : "Paid in full when you book"}</span></div>}
+      <div className="divider" style={{ background: f ? "var(--brand-2)" : undefined }} />
+      <ul>{p.includes.map((i) => <li key={i}>{i}</li>)}</ul>
+      {quote
+        ? <TactileLink to={`/quote?service=${encodeURIComponent(svc?.name ?? p.name)}`} variant={f ? "neon" : "light"} size="lg" block>Request a quote</TactileLink>
+        : <Btn kind={f ? "neon" : ""} arrow block onClick={() => start({ serviceSlug: svc?.slug, packageId: p.id })}>{needsApproval(cat, p) ? "Request this package" : "Book this package"}</Btn>}
+    </div>
   );
 }
 
 export function Packages() {
   const cat = useCatalog();
-  const content = useContent();
-  const nav = useNavigate();
+  const site = useContent();
   const loc = useLocation();
-  const [tab, setTab] = useState<"all" | "session" | "post">("all");
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (loc.hash === "#policies" && content) ref.current?.scrollIntoView(); }, [loc.hash, content]);
+  const [tab, setTab] = useState("all");
+  useEffect(() => {
+    const h = loc.hash.slice(1);
+    if (!cat || !site || !h) return;
+    if (cat.categories.some((c) => c.slug === h)) setTab(h);
+    setTimeout(() => document.getElementById(h)?.scrollIntoView({ block: "start" }), 50);
+  }, [loc.hash, cat, site]);
+  const booking = site?.policies.filter((p) => p.kind === "booking") ?? [];
   return (
-    <PublicLayout>
-      <PageHero title="Clear prices. Fair policies." sub="Every package includes an engineer. Prices are locked to your booking, even if they change later." />
-      <section className="section" style={{ paddingTop: 48 }}><div className="wrap stack gap32">
-        <div className="seg" style={{ alignSelf: "flex-start" }}>
-          {([["all", "All packages"], ["session", "Session time"], ["post", "Recording + post"]] as const).map(([v, l]) => <button key={v} className={tab === v ? "on" : ""} onClick={() => setTab(v)}>{l}</button>)}
-        </div>
-        <div className="grid cols-3">{cat?.packages.filter((p) => tab === "all" || p.category === tab).map((p) => <PackageCard key={p.id} p={p} onBook={() => { saveDraft({ ...loadDraft(), packageId: p.id }); nav("/book"); }} />)}</div>
-        {cat && (
-          <div className="card stack" style={{ padding: 0, overflow: "hidden" }}>
-            <div className="mono muted" style={{ padding: "14px 24px", background: "var(--surface)" }}>Extras you can add at checkout</div>
-            {[...cat.extras.map((e) => [e.name, naira(e.price_kobo)]), ["Extra hour", naira(cat.rules.extraHourKobo)]].map(([n, p]) => (
-              <div key={n} className="row between" style={{ padding: "14px 24px", borderTop: "1px solid var(--line)" }}><span>{n}</span><b>{p}</b></div>
-            ))}
+    <PublicLayout title="Pricing and packages">
+      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub="Every package includes the people who run the room. Prices are locked when you book, and most packages take a deposit." />
+      <section className="section" style={{ paddingTop: 40 }}><div className="wrap stack gap32">
+        {!cat ? <Loading /> : <>
+          <div className="chips" role="tablist">
+            {[{ slug: "all", name: "All packages" }, ...cat.categories].map((c) => <button key={c.slug} className={`chip ${tab === c.slug ? "on" : ""}`} onClick={() => setTab(c.slug)} role="tab" aria-selected={tab === c.slug}>{c.name}</button>)}
           </div>
-        )}
+          {cat.categories.filter((c) => tab === "all" || tab === c.slug).map((c) => {
+            const list = cat.packages.filter((p) => p.service_category === c.slug);
+            if (!list.length) return null;
+            return (
+              <div key={c.slug} id={c.slug} className="stack gap20" style={{ scrollMarginTop: 100 }}>
+                <div className="stack gap4"><h2 className="h2">{c.name}</h2><p className="muted">{c.blurb}</p></div>
+                <div className="grid cols-3">{list.map((p) => <PackageCard key={p.id} p={p} cat={cat} />)}</div>
+              </div>
+            );
+          })}
+          <div className="grid cols-2" style={{ alignItems: "start" }}>
+            <div className="card stack" style={{ padding: 0, overflow: "hidden" }}>
+              <div className="mono muted tablehead">Rooms and extra time</div>
+              {cat.rooms.map((r) => (
+                <div key={r.id} className="row between gap12 tablerow"><span><b>{r.name}</b><span className="small muted"> · {r.kind} · up to {r.capacity} people</span></span><b className="nowrap">{naira(r.hourly_kobo || cat.rules.extraHourKobo)} / extra hr</b></div>
+              ))}
+            </div>
+            <div className="card stack" style={{ padding: 0, overflow: "hidden" }}>
+              <div className="mono muted tablehead">Extras you can add when you book</div>
+              {cat.extras.map((e) => (
+                <div key={e.slug} className="row between gap12 tablerow"><span>{e.name}<span className="small muted">{e.category ? ` · ${cat.categories.find((c) => c.slug === e.category)?.name ?? ""}` : ""}</span></span><b>{naira(e.price_kobo)}</b></div>
+              ))}
+            </div>
+          </div>
+          <div className="panel row between wrapflex gap16">
+            <div className="stack gap4"><b>Need something custom?</b><span className="muted small">Music videos, commercials, content days and long projects are priced to your brief.</span></div>
+            <TactileLink to="/quote" size="lg">Request a quote <Icon name="arrow" size={18} /></TactileLink>
+          </div>
+        </>}
       </div></section>
       <section className="section" style={{ background: "var(--surface)" }} id="policies" ref={ref}><div className="wrap stack gap32">
         <h2 className="h1">Booking policies</h2>
-        <div className="grid cols-2">{content?.policies.map((p) => (
-          <div key={p.slug} className="card stack gap8"><h3 className="h4">{p.title}</h3><p className="muted">{p.body}</p></div>
-        ))}</div>
-        {content && <span className="mono faint">Last updated {new Date(Math.max(...content.policies.map((p) => Date.parse(p.updated_at)))).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>}
+        <div className="grid cols-2">{booking.map((p) => <div key={p.slug} className="card stack gap8"><h3 className="h4">{p.title}</h3><p className="muted">{p.body}</p></div>)}</div>
+        {booking.length > 0 && <span className="mono faint">Last updated {new Date(Math.max(...booking.map((p) => Date.parse(p.updated_at)))).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>}
       </div></section>
     </PublicLayout>
   );
 }
 
-export function Contact() {
-  const [f, setF] = useState({ name: "", email: "", phone: "", topic: "Booking question", message: "", website: "" });
+function ContactCard() {
+  const site = useContent();
+  const cat = useCatalog();
+  const c = site?.content ?? {};
+  return (
+    <div className="contactcard">
+      <h3 className="h3">{c.business_name}</h3>
+      {[["phone", "Phone", c.contact_phone, c.contact_phone ? `tel:${c.contact_phone.replace(/\s/g, "")}` : ""], ["mail", "Email", c.contact_email, c.contact_email ? `mailto:${c.contact_email}` : ""], ["pin", "Studio", c.studio_address, ""]].filter(([, , v]) => v).map(([i, k, v, href]) => (
+        <div key={k} className="row gap12" style={{ alignItems: "flex-start" }}>
+          <span className="cicon"><Icon name={i!} /></span>
+          <div><div className="mono" style={{ opacity: .6 }}>{k}</div>{href ? <a href={href}><b>{v}</b></a> : <b>{v}</b>}</div>
+        </div>
+      ))}
+      {c.whatsapp && <TactileAnchor href={waLink(c.whatsapp)} target="_blank" rel="noreferrer" variant="neon" size="lg" block>Chat on WhatsApp</TactileAnchor>}
+      {cat && <div className="stack gap8 hoursbox">
+        <span className="mono neon">Opening hours</span>
+        {hoursSummary(cat.hours).map((h) => <div key={h.days} className="row between small"><span style={{ opacity: .75 }}>{h.days}</span><b>{h.time}</b></div>)}
+        {c.hours_note && <span className="caption" style={{ color: "rgba(255,255,255,.55)" }}>{c.hours_note}</span>}
+      </div>}
+      <Socials links={c} />
+    </div>
+  );
+}
+
+function ServiceSelect({ value, onChange, cat }: { value: string; onChange: (v: string) => void; cat: Catalog | null }) {
+  return (
+    <div className="field">
+      <label htmlFor="service">Service of interest</label>
+      <select id="service" className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">Not sure yet</option>
+        {cat?.categories.map((c) => (
+          <optgroup key={c.slug} label={c.name}>{cat.services.filter((s) => s.category === c.slug).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}</optgroup>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function useEnquiry<T extends Record<string, string>>(init: T, kind: "general" | "quote") {
+  const [f, setF] = useState(init);
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
   const started = useRef(Date.now());
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const set = (k: keyof T) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(null); setState("sending");
-    try { await api("/enquiries", { body: { ...f, startedAt: started.current } }); setState("sent"); }
+    try { await api("/enquiries", { body: { ...f, kind, startedAt: started.current } }); setState("sent"); }
     catch (err: any) { setError(err.message); setState("idle"); }
   };
+  return { f, setF, set, state, error, submit };
+}
+
+const Honeypot = ({ value, onChange }: { value: string; onChange: (e: { target: { value: string } }) => void }) =>
+  <input tabIndex={-1} autoComplete="off" aria-hidden style={{ position: "absolute", left: -9999 }} name="website" value={value} onChange={onChange} />;
+
+export function Contact() {
+  const cat = useCatalog();
+  const site = useContent();
+  const { f, setF, set, state, error, submit } = useEnquiry({ name: "", email: "", phone: "", service: "", topic: "General enquiry", message: "", website: "" }, "general");
+  const map = site?.content.map_query;
   return (
-    <PublicLayout>
-      <PageHero title="Questions before you book?" sub="Send a message and the studio team will reply within one working day." />
-      <section className="section" style={{ paddingTop: 48 }}><div className="wrap grid contactgrid" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,440px)", gap: 32 }}>
+    <PublicLayout title="Contact">
+      <PageHero kicker="Contact" title="Talk to the studio." sub="Call, send a WhatsApp or use the form. We reply within one working day." />
+      <section className="section" style={{ paddingTop: 40 }}><div className="wrap grid contactgrid" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,440px)", gap: 32, alignItems: "start" }}>
+        <div className="stack gap24">
+          {state === "sent" ? (
+            <div className="card stack gap12" style={{ padding: 40 }}><span className="tag success" style={{ alignSelf: "flex-start" }}>Sent</span><h2 className="h3">Thanks, {f.name.split(" ")[0]}.</h2><p className="muted">Your message is with the studio team and a copy is in your inbox. We reply within one working day.</p></div>
+          ) : (
+            <form className="card stack gap20" onSubmit={submit} style={{ padding: 40 }}>
+              <h2 className="h3">Send an enquiry</h2>
+              <div className="grid cols-2" style={{ gap: 16 }}><Field label="Full name" name="name" required value={f.name} onChange={set("name")} /><Field label="Email" name="email" type="email" required value={f.email} onChange={set("email")} /></div>
+              <div className="grid cols-2" style={{ gap: 16 }}><Field label="Phone number" name="phone" value={f.phone} onChange={set("phone")} placeholder="+234 803 000 0000" /><ServiceSelect cat={cat} value={f.service} onChange={(v) => setF({ ...f, service: v })} /></div>
+              <Area label="Message" name="message" required value={f.message} onChange={set("message")} placeholder="Tell us about your project, the dates you have in mind and how many people are coming." />
+              <Honeypot value={f.website} onChange={set("website")} />
+              <ErrorBox error={error} />
+              <div className="row gap16 wrapflex"><Btn arrow disabled={state === "sending"}>{state === "sending" ? "Sending…" : "Send enquiry"}</Btn><Link to="/quote" className="link small">Need a quote instead?</Link></div>
+            </form>
+          )}
+          {map && <iframe className="map" title="Map to the studio" loading="lazy" referrerPolicy="no-referrer-when-downgrade" src={`https://www.google.com/maps?q=${encodeURIComponent(map)}&output=embed`} />}
+        </div>
+        <ContactCard />
+      </div></section>
+    </PublicLayout>
+  );
+}
+
+const BUDGETS = ["Under ₦250,000", "₦250,000 to ₦750,000", "₦750,000 to ₦2,000,000", "Over ₦2,000,000", "Not sure yet"];
+
+export function Quote() {
+  const cat = useCatalog();
+  const [q] = useSearchParams();
+  const { f, setF, set, state, error, submit } = useEnquiry({ name: "", email: "", phone: "", service: q.get("service") ?? "", budget: "", timeline: "", links: "", message: "", website: "" }, "quote");
+  return (
+    <PublicLayout title="Request a quote">
+      <PageHero kicker="Quotes" title="Tell us what you are making." sub="For music videos, commercials, content days, albums and long projects. We reply with a quote within one working day." />
+      <section className="section" style={{ paddingTop: 40 }}><div className="wrap grid contactgrid" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,400px)", gap: 32, alignItems: "start" }}>
         {state === "sent" ? (
-          <div className="card stack gap12"><h2 className="h3">Thanks, {f.name.split(" ")[0]}.</h2><p className="muted">Your message is with the studio team. We reply within one working day.</p></div>
+          <div className="card stack gap12" style={{ padding: 40 }}><span className="tag success" style={{ alignSelf: "flex-start" }}>Request sent</span><h2 className="h3">Thanks, {f.name.split(" ")[0]}.</h2><p className="muted">We have your brief and a copy is in your inbox. Expect a quote within one working day.</p><div><TactileLink to="/portfolio" variant="light" size="lg">See recent work</TactileLink></div></div>
         ) : (
           <form className="card stack gap20" onSubmit={submit} style={{ padding: 40 }}>
-            <h2 className="h3">Send an enquiry</h2>
             <div className="grid cols-2" style={{ gap: 16 }}><Field label="Full name" name="name" required value={f.name} onChange={set("name")} /><Field label="Email" name="email" type="email" required value={f.email} onChange={set("email")} /></div>
-            <Field label="Phone number" name="phone" value={f.phone} onChange={set("phone")} placeholder="e.g. +234 803 000 0000" />
-            <div className="field"><label>What is it about?</label><div className="row gap8 wrapflex">{["Booking question", "Packages & pricing", "Group or long project", "Something else"].map((t) => <button type="button" key={t} className={`chip ${f.topic === t ? "on" : ""}`} onClick={() => setF({ ...f, topic: t })}>{t}</button>)}</div></div>
-            <Area label="Message" name="message" required value={f.message} onChange={set("message")} placeholder="Tell us about your project, dates you have in mind and how many people are coming." />
-            <input tabIndex={-1} autoComplete="off" aria-hidden style={{ position: "absolute", left: -9999 }} name="website" value={f.website} onChange={set("website")} />
+            <div className="grid cols-2" style={{ gap: 16 }}><Field label="Phone number" name="phone" value={f.phone} onChange={set("phone")} /><ServiceSelect cat={cat} value={f.service} onChange={(v) => setF({ ...f, service: v })} /></div>
+            <Area label="Project details" name="message" required rows={6} value={f.message} onChange={set("message")} placeholder="What are you making, where, and what should the final result look or sound like?" />
+            <div className="field"><label>Budget</label><div className="row gap8 wrapflex">{BUDGETS.map((b) => <button type="button" key={b} className={`chip ${f.budget === b ? "on" : ""}`} onClick={() => setF({ ...f, budget: b })}>{b}</button>)}</div></div>
+            <div className="grid cols-2" style={{ gap: 16 }}>
+              <Field label="Timeline or preferred dates" name="timeline" value={f.timeline} onChange={set("timeline")} placeholder="e.g. Shoot in early December" />
+              <Field label="Reference links" name="links" value={f.links} onChange={set("links")} placeholder="YouTube, Instagram or Drive links" />
+            </div>
+            <Honeypot value={f.website} onChange={set("website")} />
             <ErrorBox error={error} />
-            <div><Btn arrow disabled={state === "sending"}>{state === "sending" ? "Sending…" : "Send enquiry"}</Btn></div>
+            <div><Btn arrow disabled={state === "sending"}>{state === "sending" ? "Sending…" : "Request a quote"}</Btn></div>
           </form>
         )}
-        <div className="stack gap24" style={{ background: "var(--brand)", color: "#fff", borderRadius: 24, padding: 32, alignSelf: "start" }}>
-          <div style={{ height: 200, borderRadius: 16, background: `center/cover url(${PHOTOS.control})` }} />
-          <h3 className="h3">Sessions Studio</h3>
-          {[["phone", "Phone", "+234 812 555 0142"], ["mail", "Email", "hello@sessionsstudio.ng"], ["pin", "Studio", "14 Admiralty Way, Lekki Phase 1, Lagos"]].map(([i, k, v]) => (
-            <div key={k} className="row gap12" style={{ alignItems: "flex-start" }}><span style={{ width: 40, height: 40, borderRadius: 12, background: "var(--brand-2)", display: "grid", placeItems: "center", color: "var(--neon)", flex: "none" }}><Icon name={i} /></span><div><div className="mono" style={{ opacity: .6 }}>{k}</div><b>{v}</b></div></div>
-          ))}
-          <div className="stack gap8" style={{ background: "var(--brand-2)", borderRadius: 14, padding: 16 }}>
-            <span className="mono neon">Opening hours</span>
-            {[["Monday to Saturday", "10:00 to 22:00"], ["Sunday", "14:00 to 20:00"]].map(([d, h]) => <div key={d} className="row between small"><span style={{ opacity: .75 }}>{d}</span><b>{h}</b></div>)}
+        <div className="stack gap16">
+          <div className="card stack gap16">
+            <h3 className="h4">What happens next</h3>
+            {[["1", "We read your brief", "A producer or director looks at what you need and asks anything that is unclear."], ["2", "You get a quote", "An itemised quote with crew, rooms, deliverables and dates."], ["3", "We book it in", "Approve the quote, pay the deposit and the dates are yours."]].map(([n, t, d]) => (
+              <div key={n} className="row gap12" style={{ alignItems: "flex-start" }}><span className="stepnum">{n}</span><div><b>{t}</b><div className="small muted">{d}</div></div></div>
+            ))}
           </div>
-          <Socials />
+          <div className="panel small muted">Booking a room by the hour? You can <Link to="/book" className="link">book online</Link> with live availability.</div>
         </div>
       </div></section>
     </PublicLayout>
   );
 }
+
+export function Faq() {
+  const site = useContent();
+  return (
+    <PublicLayout title="FAQs">
+      <PageHero kicker="FAQs" title="Questions, answered." sub="How booking works, deposits, opening hours, rescheduling, crew and quotes." />
+      <section className="section" style={{ paddingTop: 40 }}><div className="wrap stack gap24" style={{ maxWidth: 900 }}>
+        {!site ? <Loading /> : <div className="faq">{site.faqs.map((q) => (
+          <details key={q.id}><summary>{q.question}<Icon name="plus" size={18} /></summary><p className="muted">{q.answer}</p></details>
+        ))}</div>}
+        <div className="panel row between wrapflex gap16"><div className="stack gap4"><b>Still have a question?</b><span className="small muted">Message the studio and we will get back to you.</span></div><TactileLink to="/contact" size="lg">Contact us</TactileLink></div>
+      </div></section>
+    </PublicLayout>
+  );
+}
+
+export function Legal({ slug }: { slug: "privacy" | "terms" }) {
+  const site = useContent();
+  const p = site?.policies.find((x) => x.slug === slug);
+  return (
+    <PublicLayout title={p?.title ?? (slug === "privacy" ? "Privacy policy" : "Terms of service")}>
+      <PageHero kicker="Legal" title={p?.title ?? ""} sub={p ? `Last updated ${new Date(p.updated_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : ""} />
+      <section className="section" style={{ paddingTop: 40 }}><div className="wrap" style={{ maxWidth: 860 }}>{!p ? <Loading /> : <RichText text={p.body} />}</div></section>
+    </PublicLayout>
+  );
+}
+
+export { PHOTOS };

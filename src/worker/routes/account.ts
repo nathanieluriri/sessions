@@ -22,5 +22,6 @@ r.post("/bookings/:id/requests", async (c) => {
   await bookingService.requestChange(c.env, c.get("user")!, c.req.param("id"), b);
   return c.json({ ok: true });
 });
+r.post("/bookings/:id/withdraw", async (c) => { await bookingService.withdraw(c.env, c.get("user")!, c.req.param("id")); return c.json({ ok: true }); });
 
 export default r;

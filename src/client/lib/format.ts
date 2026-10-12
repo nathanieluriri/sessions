@@ -8,4 +8,8 @@ export const hrs = (min: number) => `${min / 60} ${min === 60 ? "hr" : "hrs"}`;
 export const initials = (n: string) => n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase();
 export const lagosToday = () => new Date(Date.now() + 3600000).toISOString().slice(0, 10);
 export const addDays = (d: string, n: number) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
-export const statusTone = (s: string) => ({ confirmed: "success", completed: "", cancelled: "danger", no_show: "danger", success: "success", refunded: "warning", failed: "danger", pending: "", approved: "success", declined: "danger", new: "success", replied: "" } as Record<string, string>)[s] ?? "";
+export const statusTone = (s: string) => ({ confirmed: "success", completed: "", cancelled: "danger", no_show: "danger", rejected: "danger", success: "success", refunded: "warning", failed: "danger", pending: "warning", approved: "brand", declined: "danger", new: "success", replied: "", closed: "", quote: "brand" } as Record<string, string>)[s] ?? "";
+export const STATUS: Record<string, string> = { pending: "Awaiting approval", approved: "Awaiting payment", confirmed: "Confirmed", completed: "Completed", cancelled: "Cancelled", no_show: "No-show", rejected: "Declined" };
+export const statusLabel = (s: string) => STATUS[s] ?? s.replace(/_/g, " ");
+export const payState = (b: { status: string; total_kobo: number; paid_kobo: number; balance_kobo: number }) =>
+  b.paid_kobo <= 0 ? "Unpaid" : b.balance_kobo <= 0 ? "Paid in full" : "Deposit paid";

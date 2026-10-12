@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  MEDIA?: R2Bucket;
   APP_URL: string;
   STUDIO_NAME: string;
   STUDIO_EMAIL: string;

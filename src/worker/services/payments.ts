@@ -1,8 +1,12 @@
 import type { Env } from "../env";
-import { paymentsRepo } from "../repositories/bookings";
+import { bookingsRepo, paymentsRepo, type BookingRow } from "../repositories/bookings";
 import { AppError } from "../lib/errors";
+import { uuid } from "../lib/crypto";
 
 export interface VerifyResult { status: "success" | "failed" | "pending"; amount: number; channel: string | null }
+
+const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const newReference = (prefix = "PR") => prefix + Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => ALPHABET[b % ALPHABET.length]).join("");
 
 /** Paystack when a secret key is configured; otherwise a simulated provider that keeps the same server-side verification path. */
 export function paymentProvider(env: Env) {
@@ -41,4 +45,27 @@ export function paymentProvider(env: Env) {
     },
     async refund() {},
   };
+}
+
+/**
+ * Refunds up to `amount` across the booking's payments, newest first. Online payments go back through the provider;
+ * cash and transfer payments are recorded so staff can return them by hand. Returns the amount that still needs a manual refund.
+ */
+export async function refundBooking(env: Env, b: BookingRow, amount: number, reason: string) {
+  let left = amount, manual = 0;
+  const provider = paymentProvider(env);
+  const payments = (await paymentsRepo.forBooking(env.DB, b.id)).filter((p) => p.amount_kobo > p.refunded_kobo).reverse();
+  for (const p of payments) {
+    if (left <= 0) break;
+    const take = Math.min(left, p.amount_kobo - p.refunded_kobo);
+    if (p.provider === "manual") manual += take;
+    else if (p.provider === provider.name) await provider.refund(p.reference, take);
+    await env.DB.batch([
+      paymentsRepo.addRefund(env.DB, { id: uuid(), paymentId: p.id, bookingId: b.id, amount: take, reason }),
+      paymentsRepo.addRefunded(env.DB, p.id, take),
+      bookingsRepo.addRefunded(env.DB, b.id, take),
+    ]);
+    left -= take;
+  }
+  return manual;
 }

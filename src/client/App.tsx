@@ -1,14 +1,26 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AuthProvider } from "./lib/auth";
 import { Toaster } from "./components/ui";
-import { Contact, Packages, Services } from "./pages/public";
+
+const account = () => import("./pages/account");
+const AccountHome = lazy(() => account().then((m) => ({ default: m.AccountHome })));
+const AccountBookings = lazy(() => account().then((m) => ({ default: m.AccountBookings })));
+const AccountBooking = lazy(() => account().then((m) => ({ default: m.AccountBooking })));
+const AccountPayments = lazy(() => account().then((m) => ({ default: m.AccountPayments })));
+const AccountProfile = lazy(() => account().then((m) => ({ default: m.AccountProfile })));
+const Admin = lazy(() => import("./pages/admin").then((m) => ({ default: m.Admin })));
+import { Contact, Faq, Legal, Packages, Quote } from "./pages/public";
+import { Services, ServiceDetail } from "./pages/services";
+import { Studio } from "./pages/studio";
+import { Portfolio } from "./pages/portfolio";
+import { About } from "./pages/about";
 import { Home } from "./pages/home";
-import { BookCheckout, BookConfirmed, BookDetails, BookPackage, BookReview, BookService, BookTime, BookVerify, DemoPay } from "./pages/book";
+import { BookCheckout, BookConfirmed, BookDetails, BookPackage, BookRequested, BookReview, BookService, BookTime, BookVerify, DemoPay, PayBooking } from "./pages/book";
 import { ForgotPassword, Login, Register, ResetPassword, StaffLogin, VerifyEmail } from "./pages/auth";
-import { AccountBooking, AccountBookings, AccountHome, AccountPayments, AccountProfile } from "./pages/account";
-import { Admin } from "./pages/admin";
+import { Loading } from "./components/ui";
 import { PageHero, PublicLayout } from "./components/Layout";
+import { TactileLink } from "./components/kitchen";
 
 function ScrollTop() {
   const { pathname, hash } = useLocation();
@@ -20,27 +32,42 @@ function ScrollTop() {
 }
 
 const Confirmed = () => <BookConfirmed id={useParams().id ?? ""} />;
-const NotFound = () => <PublicLayout><PageHero title="Page not found." sub="The page you wanted is not here. Head back home or book a session." /></PublicLayout>;
+const NotFound = () => (
+  <PublicLayout title="Page not found">
+    <PageHero title="Page not found." sub="The page you wanted is not here. Head back home or book a session."><div><TactileLink to="/" size="lg">Back to home</TactileLink></div></PageHero>
+  </PublicLayout>
+);
 
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <ScrollTop />
+        <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/services" element={<Services />} />
+          <Route path="/services/:slug" element={<ServiceDetail />} />
+          <Route path="/studio" element={<Studio />} />
+          <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/about" element={<About />} />
           <Route path="/packages" element={<Packages />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/quote" element={<Quote />} />
+          <Route path="/faq" element={<Faq />} />
+          <Route path="/privacy" element={<Legal slug="privacy" />} />
+          <Route path="/terms" element={<Legal slug="terms" />} />
           <Route path="/book" element={<BookService />} />
           <Route path="/book/package" element={<BookPackage />} />
           <Route path="/book/time" element={<BookTime />} />
           <Route path="/book/details" element={<BookDetails />} />
           <Route path="/book/review" element={<BookReview />} />
           <Route path="/book/checkout" element={<BookCheckout />} />
+          <Route path="/book/requested/:id" element={<BookRequested />} />
           <Route path="/book/verify" element={<BookVerify />} />
           <Route path="/book/confirmed/:id" element={<Confirmed />} />
           <Route path="/pay/demo" element={<DemoPay />} />
+          <Route path="/pay/:id" element={<PayBooking />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -55,6 +82,7 @@ export default function App() {
           <Route path="/admin/:section?" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
         <Toaster />
       </BrowserRouter>
     </AuthProvider>
