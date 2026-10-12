@@ -1,5 +1,6 @@
 import { useEffect, useState, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
-import { Icon } from "./brand";
+import { Icon, LogoLoader } from "./brand";
+import { Tactile } from "./kitchen";
 
 export function Field({ label, hint, ...p }: { label: string; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
   return <div className="field"><label htmlFor={p.name}>{label}</label><input id={p.name} className="input" {...p} />{hint && <span className="hint">{hint}</span>}</div>;
@@ -10,8 +11,10 @@ export function Area({ label, ...p }: { label: string } & TextareaHTMLAttributes
 export const ErrorBox = ({ error }: { error?: string | null }) => (error ? <div className="error" role="alert">{error}</div> : null);
 export const Tag = ({ tone = "", children }: { tone?: string; children: ReactNode }) => <span className={`tag ${tone}`}>{children}</span>;
 
-export function Btn({ kind = "", size = "", arrow, children, ...p }: { kind?: "" | "neon" | "neutral" | "primary" | "danger"; size?: "" | "sm"; arrow?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button className={`btn ${kind} ${size} ${p.className ?? ""}`} {...p}>{children}{arrow && <Icon name="arrow" size={18} />}</button>;
+const VARIANT = { "": "brand", neon: "neon", neutral: "light", primary: "ink", danger: "danger" } as const;
+
+export function Btn({ kind = "", size = "", arrow, block, children, ...p }: { kind?: keyof typeof VARIANT; size?: "" | "sm"; arrow?: boolean; block?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <Tactile variant={VARIANT[kind]} size={size === "sm" ? "md" : "lg"} block={block} {...p}>{children}{arrow && <Icon name="arrow" size={size === "sm" ? 16 : 18} />}</Tactile>;
 }
 
 export function Seg<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
@@ -57,4 +60,4 @@ export function Steps({ step }: { step: number }) {
   );
 }
 
-export const Loading = () => <div className="muted" style={{ padding: 40 }}>Loading…</div>;
+export const Loading = () => <div className="loading"><LogoLoader /></div>;

@@ -4,6 +4,8 @@ import { Nav } from "../components/Layout";
 import { Icon, Mark, Waveform } from "../components/brand";
 import { Area, Btn, ErrorBox, Field, Loading, Steps } from "../components/ui";
 import { ServiceCard } from "./public";
+import { Barcode, ReceiptPrinter, ScrambleText, Tactile, TactileAnchor, TactileLink, type PrinterStage } from "../components/kitchen";
+import { BookingTicket } from "../components/BookingTicket";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { loadDraft, saveDraft, clearDraft, type BookingDraft } from "../lib/draft";
 import { addDays, hrs, lagosToday, longDate, naira, shortDate, t12 } from "../lib/format";
@@ -58,7 +60,7 @@ function Shell({ step, title, sub, cat, d, hold, children, back, next, nextLabel
           {children}
           {next && (
             <div className="row between desk-actions">
-              {back ? <Link to={back} className="btn neutral">Back</Link> : <span />}
+              {back ? <TactileLink to={back} variant="light" size="lg">Back</TactileLink> : <span />}
               <Btn arrow onClick={next} disabled={nextDisabled || busy}>{busy ? "Please wait…" : nextLabel}</Btn>
             </div>
           )}
@@ -139,7 +141,7 @@ export function BookTime() {
         <div className="card stack gap12">
           <div className="row between">
             <h3 className="h3" style={{ fontSize: 20 }}>{new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })}</h3>
-            <div className="row gap8"><button className="btn sm neutral" onClick={() => shift(-1)} disabled={month <= lagosToday().slice(0, 7)} aria-label="Previous month">‹</button><button className="btn sm neutral" onClick={() => shift(1)} aria-label="Next month">›</button></div>
+            <div className="row gap8"><Tactile variant="light" size="sm" onClick={() => shift(-1)} disabled={month <= lagosToday().slice(0, 7)} aria-label="Previous month">‹</Tactile><Tactile variant="light" size="sm" onClick={() => shift(1)} aria-label="Next month">›</Tactile></div>
           </div>
           <div className="cal">
             {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((w) => <div key={w} className="wd">{w}</div>)}
@@ -301,7 +303,7 @@ export function BookCheckout() {
   const { total } = priced(cat, d);
   if (expired) return (
     <Shell step={5} title="This slot is no longer held." sub="Your hold ran out before payment, so the time was released. You have not been charged and your details are saved." cat={cat} d={d}>
-      <div className="row gap12"><Link to="/book/time" className="btn">Pick another time <Icon name="arrow" size={18} /></Link></div>
+      <div className="row gap12"><TactileLink to="/book/time" size="lg">Pick another time <Icon name="arrow" size={18} /></TactileLink></div>
     </Shell>
   );
   const auth = async (e: React.FormEvent) => {
@@ -337,7 +339,7 @@ export function BookCheckout() {
         {tab === "register" && <div className="panel small muted" style={{ padding: 14 }}>We will email you a link to verify your address. Verify any time before your session.</div>}
         {tab === "login" && <Link to="/forgot-password" className="small" style={{ color: "var(--brand)", fontWeight: 500 }}>Forgot password?</Link>}
         <ErrorBox error={error} />
-        <Btn arrow className="block" disabled={busy}>{busy ? "Please wait…" : tab === "register" ? "Create account and continue" : "Log in and continue"}</Btn>
+        <Btn arrow block disabled={busy}>{busy ? "Please wait…" : tab === "register" ? "Create account and continue" : "Log in and continue"}</Btn>
       </form>
     </Shell>
   );
@@ -355,7 +357,7 @@ export function BookCheckout() {
       </div>
       <div className="panel row gap12" style={{ alignItems: "flex-start" }}><Icon name="lock" /><div><b>You finish payment in Paystack’s secure window.</b><div className="small muted">We confirm your booking only after Paystack verifies the payment on our server. Please keep this tab open.</div></div></div>
       <ErrorBox error={error} />
-      <div className="row between desk-actions"><Link to="/book/review" className="btn neutral">Back</Link><Btn arrow onClick={pay} disabled={busy}>{busy ? "Opening Paystack…" : `Pay ${naira(total)} with Paystack`}</Btn></div>
+      <div className="row between desk-actions"><TactileLink to="/book/review" variant="light" size="lg">Back</TactileLink><Btn arrow onClick={pay} disabled={busy}>{busy ? "Opening Paystack…" : `Pay ${naira(total)} with Paystack`}</Btn></div>
       <div className="stickybar"><div><b>{naira(total)}</b><div className="caption">{label} left on your hold</div></div><Btn arrow onClick={pay} disabled={busy}>Pay with Paystack</Btn></div>
     </Shell>
   );
@@ -384,7 +386,7 @@ export function DemoPay() {
           <div className="row between"><span className="muted small">Sessions Studio</span><b style={{ fontSize: 22 }}>{t ? naira(t.amount_kobo) : "…"}</b></div>
           <div className="small muted">Reference {ref}</div>
           <div className="panel small" style={{ padding: 14 }}>This screen stands in for Paystack until live keys are added. The booking is still confirmed only after the server verifies this transaction.</div>
-          <Btn kind="primary" className="block" onClick={() => finish("success")} disabled={busy || t?.status !== "pending"}>Pay {t ? naira(t.amount_kobo) : ""}</Btn>
+          <Btn kind="primary" block onClick={() => finish("success")} disabled={busy || t?.status !== "pending"}>Pay {t ? naira(t.amount_kobo) : ""}</Btn>
           <button className="link small" style={{ color: "var(--danger)" }} onClick={() => finish("failed")} disabled={busy}>Simulate a failed payment</button>
         </div>
       </div>
@@ -392,33 +394,80 @@ export function DemoPay() {
   );
 }
 
+const CHANNEL: Record<string, string> = { card: "Card", bank_transfer: "Transfer", ussd: "USSD" };
+
 export function BookVerify() {
   const [q] = useSearchParams();
   const ref = q.get("reference") ?? q.get("trxref") ?? "";
-  const nav = useNavigate();
+  const cat = useCatalog();
+  const [draft] = useState(loadDraft);
   const [state, setState] = useState<"checking" | "failed" | "refunded">("checking");
+  const [booking, setBooking] = useState<any>(null);
+  const [stage, setStage] = useState<PrinterStage>("processing");
   useEffect(() => {
-    let tries = 0;
+    let tries = 0, live = true;
+    const timers: number[] = [];
     const run = async () => {
       const r = await api(`/payments/verify?reference=${encodeURIComponent(ref)}`).catch(() => ({ status: "failed" }));
-      if (r.status === "confirmed") { clearDraft(); nav(`/book/confirmed/${r.booking.id}`, { replace: true }); }
-      else if (r.status === "pending" && tries++ < 10) setTimeout(run, 2500);
+      if (!live) return;
+      if (r.status === "confirmed") {
+        clearDraft();
+        setBooking(r.booking);
+        setStage("printing");
+        timers.push(window.setTimeout(() => setStage("complete"), 1750));
+      } else if (r.status === "pending" && tries++ < 10) timers.push(window.setTimeout(run, 2500));
       else setState(r.status === "refunded" ? "refunded" : "failed");
     };
-    setTimeout(run, 900);
-  }, [ref, nav]);
+    timers.push(window.setTimeout(run, 900));
+    return () => { live = false; timers.forEach((t) => window.clearTimeout(t)); };
+  }, [ref]);
+  const pkg = cat?.packages.find((p) => p.id === draft.packageId);
+  const total = booking?.total_kobo ?? (cat && pkg ? priced(cat, draft).total : 0);
+  const extras: { name: string; price: number }[] = booking ? JSON.parse(booking.extras || "[]") : [];
+  const channel = CHANNEL[sessionStorage.getItem("sessions.channel") ?? "card"] ?? "Card";
+  const done = stage === "complete" && booking;
+  if (state !== "checking") return (
+    <><Nav />
+      <div className="wrap stack gap24" style={{ maxWidth: 620, paddingTop: 88, paddingBottom: 88, textAlign: "center", alignItems: "center" }}>
+        <Mark size={72} />
+        {state === "failed" && <><h1 className="h2">Payment did not go through</h1><p className="muted">You have not been charged and the slot was released. Your details are saved, so you can pick a time and try again.</p><TactileLink to="/book/time" size="lg">Pick a time <Icon name="arrow" size={18} /></TactileLink></>}
+        {state === "refunded" && <><h1 className="h2">This slot was taken</h1><p className="muted">Your hold expired and another client booked the time before your payment arrived. Your payment is being refunded in full.</p><TactileLink to="/book/time" size="lg">Pick another time</TactileLink></>}
+      </div>
+    </>
+  );
   return (
     <><Nav />
-      <div className="wrap stack gap24" style={{ maxWidth: 620, padding: "88px 20px", textAlign: "center", alignItems: "center" }}>
-        <Mark size={72} />
-        {state === "checking" && <><h1 className="h2">Confirming your payment</h1><p className="muted">Paystack has your payment. We are verifying it on our server before we confirm your booking. This usually takes a few seconds.</p>
-          <div className="card stack" style={{ padding: 0, width: "100%", textAlign: "left" }}>
-            {[["check", "Payment received by Paystack", `Ref ${ref}`], ["clock", "Verifying on our server", "Not the browser"], ["calendar", "Confirming your booking", "One moment"]].map(([i, t, s], k) => (
-              <div key={t} className="row gap12" style={{ padding: "14px 20px", borderTop: k ? "1px solid var(--line)" : 0, background: k === 1 ? "var(--neon-soft)" : undefined }}><Icon name={i} /><div><b>{t}</b><div className="small faint">{s}</div></div></div>
-            ))}
-          </div></>}
-        {state === "failed" && <><h1 className="h2">Payment did not go through</h1><p className="muted">You have not been charged and the slot was released. Your details are saved, so you can pick a time and try again.</p><Link to="/book/time" className="btn">Pick a time <Icon name="arrow" size={18} /></Link></>}
-        {state === "refunded" && <><h1 className="h2">This slot was taken</h1><p className="muted">Your hold expired and another client booked the time before your payment arrived. Your payment is being refunded in full.</p><Link to="/book/time" className="btn">Pick another time</Link></>}
+      <div className="wrap verify">
+        <div className="stack gap12" style={{ alignItems: "center" }}>
+          <h1 className="h2">{done ? "You’re booked." : "Confirming your payment"}</h1>
+          <p className="muted" style={{ maxWidth: 520 }}>{done ? `Booking ${booking.ref} is confirmed. This receipt is also in your inbox and your dashboard.` : "Paystack has your payment. We verify it on our server before we confirm your booking."}</p>
+        </div>
+        {done && (
+          <div className="row gap12 wrapflex" style={{ justifyContent: "center" }}>
+            <TactileLink to={`/book/confirmed/${booking.id}`} variant="neon" size="lg">See your ticket <Icon name="arrow" size={18} /></TactileLink>
+            <TactileLink to={`/account/bookings/${booking.id}`} variant="light" size="lg">Go to my booking</TactileLink>
+          </div>
+        )}
+        <ReceiptPrinter stage={stage} labels={{ processing: "Verifying with Paystack", printing: "Printing your receipt", complete: "Booking confirmed" }}
+          header={<><Mark tone="neon" size={30} /><span className="pr-ref">{ref}</span></>}
+          screen={<div className="pr-row"><div><p>{booking?.package_name ?? pkg?.name ?? "Your session"}</p><p className="dim">{booking ? `${shortDate(booking.date)} · ${t12(booking.start_min)}` : "Studio A"}</p></div><div className="right"><p className="dim">Total</p><strong>{naira(total)}</strong></div></div>}>
+          {booking && <>
+            <div className="rc-logo"><Mark tone="ink" size={44} /></div>
+            <p className="rc-head" style={{ textAlign: "center" }}>Sessions Studio</p>
+            <p className="rc-dim" style={{ textAlign: "center" }}>14 Admiralty Way, Lekki</p>
+            <hr className="rc-hr" />
+            <div className="rc-row"><span className="rc-head">{booking.package_name}</span><span>{naira(booking.package_price_kobo)}</span></div>
+            <div className="rc-dim">{shortDate(booking.date)} · {t12(booking.start_min)} to {t12(booking.end_min)}</div>
+            {extras.map((e) => <div key={e.name} className="rc-row" style={{ marginTop: 8 }}><span className="rc-head">{e.name}</span><span>{naira(e.price)}</span></div>)}
+            <hr className="rc-hr" />
+            <div className="rc-row rc-dim"><span>Paid with</span><span>Paystack · {channel}</span></div>
+            <div className="rc-row" style={{ marginTop: 8 }}><span className="rc-head">Total paid</span><span className="rc-total">{naira(booking.total_kobo)}</span></div>
+            <hr className="rc-hr" />
+            <Barcode />
+            <p className="rc-note">Ref <ScrambleText>{booking.ref}</ScrambleText></p>
+            <p className="rc-note rc-dim">See you in Studio A.</p>
+          </>}
+        </ReceiptPrinter>
       </div>
     </>
   );
@@ -437,7 +486,7 @@ export function BookConfirmed({ id }: { id: string }) {
   return (
     <div style={{ background: "var(--brand)", color: "#fff", minHeight: "100vh" }}>
       <Nav dark />
-      <div className="wrap grid cols-2" style={{ padding: "72px 64px 120px", alignItems: "center", gap: 64 }}>
+      <div className="wrap grid cols-2" style={{ paddingTop: 72, paddingBottom: 120, alignItems: "center", gap: 64 }}>
         <div className="stack gap24">
           <h1 className="display" style={{ fontSize: "clamp(48px,7vw,96px)" }}>You’re <span className="neon">booked.</span></h1>
           <p style={{ fontSize: 18, opacity: .78 }}>Booking {b.ref} is confirmed. Your receipt is on its way to {b.contact_email} and saved in your dashboard.</p>
@@ -446,20 +495,12 @@ export function BookConfirmed({ id }: { id: string }) {
               <div key={k}><div className="mono" style={{ opacity: .55 }}>{k}</div><b style={{ fontWeight: 500 }}>{v}</b></div>
             ))}
           </div>
-          <div className="row gap12 wrapflex"><Link to={`/account/bookings/${b.id}`} className="btn neon">Go to my booking <Icon name="arrow" size={18} /></Link><a href={ics} download={`${b.ref}.ics`} className="btn neutral">Add to calendar</a></div>
+          <div className="row gap12 wrapflex"><TactileLink to={`/account/bookings/${b.id}`} variant="neon" size="lg">Go to my booking <Icon name="arrow" size={18} /></TactileLink><TactileAnchor href={ics} download={`${b.ref}.ics`} variant="light" size="lg">Add to calendar</TactileAnchor></div>
         </div>
-        <div style={{ position: "relative", minHeight: 520 }}>
-          <div style={{ position: "absolute", inset: "20px 80px 0 0", borderRadius: 28, background: `center/cover url(https://images.unsplash.com/photo-1647881602319-f3e5964bae06?w=1000&q=70&auto=format&fit=crop)`, filter: "grayscale(1)" }} />
-          <div className="ticket" style={{ position: "absolute", right: 0, top: 90 }}>
-            <div className="row between mono"><span>{b.ref}</span><span>Lagos · NG</span></div>
-            <div style={{ fontSize: 34, fontWeight: 600, letterSpacing: "-.03em", lineHeight: 1, margin: "120px 0 12px" }}>{b.service_name.split(" ")[0].toUpperCase()}<br />SESSION</div>
-            <div className="small">{hrs(b.end_min - b.start_min)} in Studio A · {b.artist_name}</div>
-            <div className="row gap24" style={{ marginTop: 24, borderTop: "1px dashed rgba(16,34,0,.4)", paddingTop: 16 }}>
-              <div><div className="mono">Date</div><b style={{ fontSize: 22 }}>{b.date.slice(8)}.{b.date.slice(5, 7)}</b></div>
-              <div><div className="mono">Time</div><b style={{ fontSize: 22 }}>{`${String(Math.floor(b.start_min / 60)).padStart(2, "0")}:${String(b.start_min % 60).padStart(2, "0")}`}</b></div>
-            </div>
-          </div>
-          <Waveform className="" bars={40} />
+        <div className="conf-art">
+          <div className="conf-photo" />
+          <div className="conf-ticket"><BookingTicket kind={b.service_name.split(" ")[0]} date={b.date} start={b.start_min} duration={b.end_min - b.start_min} artist={b.artist_name} people={b.people} reference={b.ref} /></div>
+          <Waveform className="confwave" />
         </div>
       </div>
     </div>

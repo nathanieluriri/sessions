@@ -4,6 +4,7 @@ import { Icon, Mark } from "./brand";
 import { useAuth } from "../lib/auth";
 import { addDays, initials, lagosToday, shortDate, t12 } from "../lib/format";
 import { api } from "../lib/api";
+import { Tactile } from "./kitchen";
 
 export interface NavEntry { to: string; label: string; icon: string; locked?: boolean; end?: boolean }
 
@@ -33,7 +34,7 @@ export function DashShell({ items, dark, title, action, children }: { items: Nav
       <div style={{ minWidth: 0 }}>
         <header className="topbar">
           <h1 className="h3" style={{ fontSize: 22 }}>{title}</h1>
-          <div className="row gap12">{action}<button className="btn sm neutral menu-only" onClick={out}>Log out</button></div>
+          <div className="row gap12">{action}<span className="menu-only"><Tactile variant="light" size="sm" onClick={out}>Log out</Tactile></span></div>
         </header>
         <div className="mobtabs">
           {items.map((i) => <NavLink key={i.to} to={i.to} end={i.end} className={({ isActive }) => `${isActive ? "active" : ""} ${i.locked ? "locked" : ""}`}>{i.locked && <Icon name="lock" size={14} />}{i.label}</NavLink>)}

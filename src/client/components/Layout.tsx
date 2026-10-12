@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { Icon, Mark, Socials } from "./brand";
 import { useAuth } from "../lib/auth";
+import { TactileLink } from "./kitchen";
 
 export function Nav({ dark }: { dark?: boolean }) {
   const { user } = useAuth();
@@ -21,8 +22,8 @@ export function Nav({ dark }: { dark?: boolean }) {
           </div>
           <div className="row gap20">
             <Link to={home} className="hide-m" style={{ fontWeight: 500 }}>{user ? "My account" : "Log in"}</Link>
-            <Link to="/book" className={`btn sm ${dark ? "neon" : ""}`}>Book<span className="hide-m"> a session</span></Link>
-            <button className="menu-btn btn sm neutral" onClick={() => setOpen(!open)} aria-label="Menu"><Icon name={open ? "x" : "menu"} /></button>
+            <TactileLink to="/book" variant={dark ? "neon" : "brand"} size="md"><span>Book<span className="hide-m"> a session</span></span></TactileLink>
+            <button className="menu-btn" onClick={() => setOpen(!open)} aria-label="Menu"><Icon name={open ? "x" : "menu"} /></button>
           </div>
         </div>
       </nav>

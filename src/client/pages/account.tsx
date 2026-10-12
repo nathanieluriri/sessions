@@ -3,6 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { DashShell, Empty, SlotPicker, Stat, type NavEntry } from "../components/Dash";
 import { Area, Btn, ErrorBox, Field, Loading, Modal, Tag, toast } from "../components/ui";
 import { Icon } from "../components/brand";
+import { HoldToConfirm, TactileLink } from "../components/kitchen";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { dateTime, hrs, longDate, naira, shortDate, statusTone, t12 } from "../lib/format";
@@ -30,7 +31,7 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
   if (!ready) return <Loading />;
   if (!user) return <Navigate to="/login?next=/account" replace />;
   if (user.role !== "client") return <Navigate to="/admin" replace />;
-  return <DashShell items={ITEMS} title={title} action={<Link to="/book" className="btn sm">Book a session</Link>}>{children}</DashShell>;
+  return <DashShell items={ITEMS} title={title} action={<TactileLink to="/book" size="md">Book a session</TactileLink>}>{children}</DashShell>;
 }
 
 function VerifyBanner() {
@@ -66,7 +67,7 @@ export function AccountHome() {
           {next ? (
             <div className="card row between wrapflex gap24" style={{ background: "var(--brand)", color: "#fff", border: 0, padding: 32 }}>
               <div className="stack gap8"><span className="mono" style={{ color: "var(--neon)" }}>Next session · {next.ref}</span><h2 className="h2">{longDate(next.date)}</h2><span style={{ opacity: .75 }}>{t12(next.start_min)} to {t12(next.end_min)} · {next.package_name} · Studio A</span></div>
-              <Link to={`/account/bookings/${next.id}`} className="btn neon">View booking <Icon name="arrow" size={18} /></Link>
+              <TactileLink to={`/account/bookings/${next.id}`} variant="neon" size="lg">View booking <Icon name="arrow" size={18} /></TactileLink>
             </div>
           ) : <Empty>No upcoming sessions. <Link to="/book" className="link">Book one</Link></Empty>}
           <div className="grid cols-3">
@@ -154,7 +155,9 @@ export function AccountBooking() {
           {modal === "reschedule" ? <SlotPicker duration={b.end_min - b.start_min} value={pick} onChange={setPick} /> : <div className="panel small">Under the policy you accepted, cancelling now refunds {Math.round(policy.refundShare * 100)}%, which is {naira(policy.refundAmount)}.</div>}
           <Area label="Reason (optional)" name="reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
           <ErrorBox error={error} />
-          <Btn arrow onClick={send} disabled={busy || (modal === "reschedule" && !pick)} kind={modal === "cancel" ? "danger" : ""}>Send request</Btn>
+          {modal === "cancel"
+            ? <HoldToConfirm block onConfirm={send} disabled={busy} confirmed="Request sent">Hold to request cancellation</HoldToConfirm>
+            : <Btn arrow onClick={send} disabled={busy || !pick}>Send request</Btn>}
         </Modal>
       )}
     </Shell>

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Mark, Waveform } from "../components/brand";
 import { Btn, ErrorBox, Field } from "../components/ui";
+import { TactileLink } from "../components/kitchen";
 import { PHOTOS } from "../lib/catalog";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -12,7 +13,7 @@ function AuthShell({ photo, quote, by, title, sub, children }: { photo: string; 
       <div className="authphoto" style={{ backgroundImage: `url(${photo})` }}>
         <Link to="/" className="brandmark" style={{ top: 32, left: 32, color: "#fff" }}><Mark tone="neon" /> Sessions</Link>
         <div style={{ left: 32, right: 32, bottom: 40 }} className="stack gap16">
-          <Waveform className="authwave" bars={36} />
+          <Waveform className="authwave" step={10} />
           <p style={{ fontSize: 26, lineHeight: 1.2, letterSpacing: "-.02em", fontWeight: 500, maxWidth: 460 }}>“{quote}”</p>
           <span className="mono" style={{ opacity: .7 }}>{by}</span>
         </div>
@@ -59,7 +60,7 @@ function LoginForm({ staff }: { staff?: boolean }) {
       <Field label="Password" type="password" autoComplete="current-password" required {...bind("password")} />
       <Link to="/forgot-password" className="small" style={{ color: "var(--brand)", fontWeight: 500 }}>Forgot password?</Link>
       <ErrorBox error={error} />
-      <Btn arrow className="block" disabled={busy}>{busy ? "Signing in…" : "Log in"}</Btn>
+      <Btn arrow block disabled={busy}>{busy ? "Signing in…" : "Log in"}</Btn>
     </form>
   );
 }
@@ -99,7 +100,7 @@ export function Register() {
         <Field label="Password" type="password" autoComplete="new-password" hint="At least 8 characters, with a number" required {...bind("password")} />
         <Field label="Confirm password" type="password" autoComplete="new-password" required {...bind("confirmPassword")} />
         <ErrorBox error={error} />
-        <Btn arrow className="block" disabled={busy}>{busy ? "Creating…" : "Create account"}</Btn>
+        <Btn arrow block disabled={busy}>{busy ? "Creating…" : "Create account"}</Btn>
       </form>
       <p className="small muted">Already have an account? <Link to="/login" style={{ color: "var(--brand)", fontWeight: 500 }}>Log in</Link></p>
     </AuthShell>
@@ -116,7 +117,7 @@ export function ForgotPassword() {
         <form className="stack gap16" onSubmit={submit}>
           <Field label="Email" type="email" required {...bind("email")} />
           <ErrorBox error={error} />
-          <Btn arrow className="block" disabled={busy}>Send reset link</Btn>
+          <Btn arrow block disabled={busy}>Send reset link</Btn>
         </form>
       )}
       <Link to="/login" className="small" style={{ color: "var(--brand)", fontWeight: 500 }}>Back to log in</Link>
@@ -131,12 +132,12 @@ export function ResetPassword() {
   const { error, busy, submit } = useSubmit(async () => { await api("/auth/reset-password", { body: { ...f, token: q.get("token") ?? "" } }); setDone(true); });
   return (
     <AuthShell photo={PHOTOS.producer} quote="Fresh start, same sound." by="Sessions Studio" title="Choose a new password.">
-      {done ? <><div className="panel">Your password was changed. Other devices were signed out.</div><Link to="/login" className="btn">Log in</Link></> : (
+      {done ? <><div className="panel">Your password was changed. Other devices were signed out.</div><TactileLink to="/login" size="lg">Log in</TactileLink></> : (
         <form className="stack gap16" onSubmit={submit}>
           <Field label="New password" type="password" hint="At least 8 characters, with a number" required {...bind("password")} />
           <Field label="Confirm password" type="password" required {...bind("confirmPassword")} />
           <ErrorBox error={error} />
-          <Btn arrow className="block" disabled={busy}>Save password</Btn>
+          <Btn arrow block disabled={busy}>Save password</Btn>
         </form>
       )}
     </AuthShell>
@@ -155,8 +156,8 @@ export function VerifyEmail() {
   }, [q, refresh]);
   return (
     <AuthShell photo={PHOTOS.editing} quote="One quick check and you are set." by="Sessions Studio" title={state === "ok" ? "Email verified." : state === "error" ? "That link did not work." : "Verifying your email…"}>
-      {state === "ok" && <Link to="/account" className="btn">Go to my account</Link>}
-      {state === "error" && <><ErrorBox error={msg} /><Link to="/account/profile" className="btn neutral">Send a new link</Link></>}
+      {state === "ok" && <TactileLink to="/account" size="lg">Go to my account</TactileLink>}
+      {state === "error" && <><ErrorBox error={msg} /><TactileLink to="/account/profile" variant="light" size="lg">Send a new link</TactileLink></>}
     </AuthShell>
   );
 }

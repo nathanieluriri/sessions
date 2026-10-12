@@ -3,6 +3,7 @@ import { Navigate, useParams } from "react-router-dom";
 import { DashShell, Empty, Restricted, SlotPicker, Stat, type NavEntry } from "../components/Dash";
 import { Area, Btn, ErrorBox, Field, Loading, Modal, Seg, Tag, toast } from "../components/ui";
 import { api } from "../lib/api";
+import { HoldToConfirm, TactileAnchor } from "../components/kitchen";
 import { can, useAuth, type User } from "../lib/auth";
 import { addDays, dateTime, hm, hrs, lagosToday, naira, shortDate, statusTone, t12 } from "../lib/format";
 
@@ -172,7 +173,7 @@ function BookingDrawer({ id, user, onClose, onChange }: { id: string; user: User
       {mode === "cancel" && <div className="stack gap12">
         <Field label="Reason" name="reason" value={reason} onChange={(e) => setReason(e.target.value)} />
         <label className="row gap8 small"><input type="checkbox" checked={full} onChange={(e) => setFull(e.target.checked)} /> Full refund (studio-initiated)</label>
-        <Btn kind="danger" onClick={() => act(() => api(`/admin/bookings/${id}/cancel`, { body: { reason, fullRefund: full } }), "Booking cancelled", refresh)}>Cancel booking</Btn>
+        <HoldToConfirm block disabled={!reason.trim()} confirmed="Cancelled" onConfirm={() => act(() => api(`/admin/bookings/${id}/cancel`, { body: { reason, fullRefund: full } }), "Booking cancelled", refresh)}>Hold to cancel booking</HoldToConfirm>
       </div>}
     </Modal>
   );
@@ -263,7 +264,7 @@ function Packages() {
         <span className="caption">Price changes apply to new bookings only. Past bookings keep the price they paid.</span>
         <div className="row gap8">
           <Btn onClick={() => act(() => api("/admin/packages", { body: edit }), "Package saved", () => { setEdit(null); load(); })}>Save package</Btn>
-          {edit.id && <Btn kind="danger" onClick={() => act(() => api(`/admin/packages/${edit.id}`, { method: "DELETE" }), "Package removed", () => { setEdit(null); load(); })}>Delete</Btn>}
+          {edit.id && <HoldToConfirm confirmed="Deleted" onConfirm={() => act(() => api(`/admin/packages/${edit.id}`, { method: "DELETE" }), "Package removed", () => { setEdit(null); load(); })}>Hold to delete</HoldToConfirm>}
         </div>
       </Modal>
     )}
@@ -323,7 +324,7 @@ function Reports() {
     <div className="row gap12 wrapflex" style={{ alignItems: "flex-end" }}>
       <Field label="From" name="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
       <Field label="To" name="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-      <a className="btn neutral" href={`/api/admin/reports.csv?from=${from}&to=${to}`}>Export CSV</a>
+      <TactileAnchor variant="light" size="lg" href={`/api/admin/reports.csv?from=${from}&to=${to}`}>Export CSV</TactileAnchor>
     </div>
     {!r ? <Loading /> : <>
       <div className="grid cols-4">
