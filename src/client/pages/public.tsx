@@ -69,7 +69,7 @@ export function Home() {
       <section className="hero">
         <div className="photo" style={{ backgroundImage: `url(${HERO_PHOTO})` }} />
         <Waveform className="wave" bars={180} />
-        <div className="wrap content stack gap32">
+        <div className="wrap herobody stack gap32">
           <h1 className="display">{l1}<br /><span className="neon">{l2}</span></h1>
           <p style={{ fontSize: 20, opacity: .8, maxWidth: 600 }}>{content?.content.hero_subtitle}</p>
           <div className="row gap12 wrapflex">

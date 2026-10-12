@@ -4,6 +4,8 @@ Booking website for a recording studio in Lekki, Lagos. Clients browse services 
 
 Everything runs on Cloudflare: one Worker serves the API and the React app (Workers Static Assets), D1 is the database and a Cron Trigger does housekeeping.
 
+Live: https://sessions.uririnathaniel.workers.dev
+
 Demo video: [`demo/sessions-demo.mp4`](demo/sessions-demo.mp4)
 
 ## Features

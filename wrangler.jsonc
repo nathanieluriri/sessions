@@ -14,13 +14,13 @@
     {
       "binding": "DB",
       "database_name": "sessions-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "a1aade22-ff64-456a-a931-8f4b168899e3",
       "migrations_dir": "migrations"
     }
   ],
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
-    "APP_URL": "http://localhost:8787",
+    "APP_URL": "https://sessions.uririnathaniel.workers.dev",
     "STUDIO_NAME": "Sessions Studio",
     "STUDIO_EMAIL": "hello@sessionsstudio.ng",
     "STUDIO_PHONE": "+234 812 555 0142"
