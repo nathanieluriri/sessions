@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { PublicLayout, PageHero } from "../components/Layout";
-import { Icon, Socials, Waveform } from "../components/brand";
+import { Icon, Socials } from "../components/brand";
 import { Area, Btn, ErrorBox, Field, Loading } from "../components/ui";
-import { HERO_PHOTO, PHOTOS, useCatalog, useContent, type Package, type Service } from "../lib/catalog";
-import { addDays, hrs, lagosToday, naira, shortDate, t12 } from "../lib/format";
+import { PHOTOS, useCatalog, useContent, type Package, type Service } from "../lib/catalog";
+import { hrs, naira } from "../lib/format";
 import { api } from "../lib/api";
 import { loadDraft, saveDraft } from "../lib/draft";
 
@@ -27,117 +27,14 @@ export function PackageCard({ p, onBook }: { p: Package; onBook: () => void }) {
       <div className="row gap8" style={{ alignItems: "baseline" }}><span className="price">{naira(p.price_kobo)}</span><span className="small" style={{ opacity: .6 }}>per session</span></div>
       <div className="divider" style={{ background: f ? "var(--brand-2)" : undefined }} />
       <ul>{p.includes.map((i) => <li key={i}>{i}</li>)}</ul>
-      <Btn kind={f ? "neon" : "primary"} arrow className="block" onClick={onBook}>Book this package</Btn>
+      <Btn kind={f ? "neon" : "primary"} arrow block onClick={onBook}>Book this package</Btn>
     </div>
   );
 }
 
-function useStartBooking() {
+export function useStartBooking() {
   const nav = useNavigate();
   return (patch: { serviceSlug?: string; packageId?: string }) => { saveDraft({ ...loadDraft(), ...patch, holdId: undefined }); nav(patch.serviceSlug ? "/book/package" : "/book"); };
-}
-
-function NextSlots() {
-  const [slots, setSlots] = useState<{ date: string; start: number }[]>([]);
-  useEffect(() => {
-    (async () => {
-      const out: { date: string; start: number }[] = [];
-      for (let i = 1; i <= 10 && out.length < 3; i++) {
-        const d = addDays(lagosToday(), i);
-        const r = await api<{ slots: { start: number; available: boolean }[] }>(`/availability/day?date=${d}&duration=120`).catch(() => null);
-        const s = r?.slots.find((x) => x.available && x.start >= 720);
-        if (s) out.push({ date: d, start: s.start });
-      }
-      setSlots(out);
-    })();
-  }, []);
-  return slots;
-}
-
-export function Home() {
-  const cat = useCatalog();
-  const content = useContent();
-  const start = useStartBooking();
-  const slots = NextSlots();
-  if (!cat) return <PublicLayout dark><Loading /></PublicLayout>;
-  const featured = cat.packages.filter((p) => ["2-hour", "half-day", "record-mix-master"].includes(p.slug));
-  const showcase = ["vocal-recording", "beat-production", "mixing", "podcast-recording"].map((s) => cat.services.find((x) => x.slug === s)!).filter(Boolean);
-  const title = content?.content.hero_title ?? "Your sound, recorded right.";
-  const [l1, l2] = title.includes(",") ? [title.split(",")[0] + ",", title.split(",").slice(1).join(",").trim()] : [title, ""];
-  return (
-    <PublicLayout dark>
-      <section className="hero">
-        <div className="photo" style={{ backgroundImage: `url(${HERO_PHOTO})` }} />
-        <Waveform className="wave" bars={180} />
-        <div className="wrap herobody stack gap32">
-          <h1 className="display">{l1}<br /><span className="neon">{l2}</span></h1>
-          <p style={{ fontSize: 20, opacity: .8, maxWidth: 600 }}>{content?.content.hero_subtitle}</p>
-          <div className="row gap12 wrapflex">
-            <Link to="/book" className="btn neon">Book a session <Icon name="arrow" size={18} /></Link>
-            <Link to="/packages" className="btn neutral">See packages</Link>
-          </div>
-        </div>
-      </section>
-      <div className="marquee"><div>{["Vocal & rap recording", "Beat production", "Mixing", "Mastering", "Vocal editing", "Podcasts", "Voice-over", "Vocal & rap recording", "Beat production"].map((w, i) => <span key={i}>{w.toUpperCase()} ✦</span>)}</div></div>
-
-      <section className="section"><div className="wrap stack gap48">
-        <div className="row between wrapflex gap16" style={{ alignItems: "flex-end" }}>
-          <h2 className="display" style={{ fontSize: "clamp(40px,6vw,84px)" }}>Pick what<br />you’re making.</h2>
-          <Link to="/services" className="linkrow">All services <Icon name="arrow" size={18} /></Link>
-        </div>
-        <div className="grid cols-4">{showcase.map((s) => <ServiceCard key={s.id} s={s} onClick={() => start({ serviceSlug: s.slug })} />)}</div>
-      </div></section>
-
-      <section className="section" style={{ paddingTop: 0 }}><div className="wrap grid cols-2" style={{ gap: 72, alignItems: "center" }}>
-        <div style={{ borderRadius: 28, minHeight: 560, background: `center/cover url(${PHOTOS.control})` }} />
-        <div className="stack">
-          <h2 className="display" style={{ fontSize: "clamp(36px,5vw,72px)", marginBottom: 40 }}>Booked in<br />two minutes.</h2>
-          {[["01", "Pick a service", "Vocals, beats, mixing, podcasts or voice-over."], ["02", "Choose a package", "From one hour to a full day, engineer included."], ["03", "Take a live slot", "Real availability. We hold it while you pay."], ["04", "Pay and record", "Paystack checkout. Your reference lands in your inbox."]].map(([n, t, d]) => (
-            <div key={n} className="row gap24" style={{ alignItems: "flex-start", padding: "24px 0", borderTop: "1px solid var(--line)" }}>
-              <span style={{ fontFamily: "var(--mono)", fontSize: 22, color: "var(--brand)" }}>{n}</span>
-              <div className="stack gap4"><b style={{ fontSize: 28, letterSpacing: "-.02em", fontWeight: 600 }}>{t}</b><span className="muted">{d}</span></div>
-            </div>
-          ))}
-        </div>
-      </div></section>
-
-      <section className="section" style={{ background: "var(--surface)" }}><div className="wrap stack gap48">
-        <div className="row between wrapflex gap16" style={{ alignItems: "flex-end" }}>
-          <h2 className="display" style={{ fontSize: "clamp(36px,5vw,72px)" }}>Clear prices.<br />Engineer included.</h2>
-          <Link to="/packages" className="linkrow">Compare packages <Icon name="arrow" size={18} /></Link>
-        </div>
-        <div className="grid cols-3">{featured.map((p) => <PackageCard key={p.id} p={p} onBook={() => { saveDraft({ ...loadDraft(), packageId: p.id }); window.location.assign("/book"); }} />)}</div>
-      </div></section>
-
-      <section className="section"><div className="wrap grid cols-2" style={{ gap: 72, alignItems: "center" }}>
-        <div style={{ borderRadius: 28, minHeight: 600, background: `center/cover url(${PHOTOS.performer})` }} />
-        <div className="stack gap24">
-          <p style={{ fontSize: "clamp(26px,3.4vw,48px)", lineHeight: 1.12, letterSpacing: "-.03em", fontWeight: 600 }}>“{content?.content.testimonial_quote}”</p>
-          <div><b>{content?.content.testimonial_name}</b><div className="small muted">Singer</div></div>
-        </div>
-      </div></section>
-
-      <section className="section" style={{ paddingTop: 0 }}><div className="wrap">
-        <div className="cta-card">
-          <div className="stack gap32" style={{ padding: "clamp(28px,5vw,64px)", justifyContent: "center" }}>
-            <h2 className="h1" style={{ fontSize: "clamp(32px,4vw,56px)" }}>Studio A has open<br />slots this week.</h2>
-            <p style={{ opacity: .7, fontSize: 18 }}>Live availability. Pick a time and you’re booked in two minutes.</p>
-            <div style={{ borderBottom: "1px solid var(--brand-2)" }}>
-              {slots.map((s) => (
-                <Link key={s.date} to="/book" className="slotrow">
-                  <b style={{ width: 130 }}>{shortDate(s.date)}</b><span className="grow" style={{ opacity: .7 }}>{t12(s.start)} to {t12(s.start + 120)}</span>
-                  <span className="linkrow neon">Book <Icon name="arrow" size={18} /></span>
-                </Link>
-              ))}
-              {!slots.length && <div className="slotrow" style={{ opacity: .7 }}>Checking live availability…</div>}
-            </div>
-            <div><Link to="/book" className="btn neon">See all times <Icon name="arrow" size={18} /></Link></div>
-          </div>
-          <div className="ph" style={{ backgroundImage: `url(${PHOTOS.producer})` }} />
-        </div>
-      </div></section>
-    </PublicLayout>
-  );
 }
 
 export function Services() {
