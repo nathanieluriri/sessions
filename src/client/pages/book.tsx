@@ -42,7 +42,6 @@ function Summary({ cat, d, hold }: { cat: Catalog; d: BookingDraft; hold?: strin
   return (
     <aside className="summary desk">
       {svc && <div className="ph" style={{ backgroundImage: `url(${room?.image_url || svc.image_url})` }} />}
-      <span className="mono muted">Your booking</span>
       <h3 className="h3" style={{ fontSize: 20 }}>{svc?.name ?? "Pick a service"}{pkg ? ` · ${pkg.name}` : ""}</h3>
       {[["door", "Room", room ? `${room.name} · ${room.kind}` : "Set by the package"], ["calendar", "Date", d.date ? longDate(d.date) : "Pick a date"], ["clock", "Time", d.start != null && duration ? `${t12(d.start)} to ${t12(d.start + duration)} · ${hrs(duration)}` : "Pick a start time"], ["users", "People", d.contactName ? `${d.people} ${d.people === 1 ? "person" : "people"}` : "Add in your details"]].map(([i, k, v]) => (
         <div key={k} className="row gap12"><span className="sumicon"><Icon name={i} size={18} /></span><div><div className="mono faint">{k}</div><b style={{ fontWeight: 500 }}>{v}</b></div></div>
@@ -315,7 +314,7 @@ export function BookReview() {
           ))}
         </>}
         <div className="panel stack gap8" style={{ padding: 18 }}>
-          <span className="mono muted">Price details</span>
+          <b>Price details</b>
           <div className="row between small"><span>{pkg?.name}</span><span>{naira(pkg?.price_kobo ?? 0)}</span></div>
           {d.extraHours > 0 && <div className="row between small"><span>Extra time ({d.extraHours} hr at {naira(hourly)})</span><span>{naira(d.extraHours * hourly)}</span></div>}
           {extras.map((e) => <div key={e.slug} className="row between small"><span>{e.name}</span><span>{naira(e.price_kobo)}</span></div>)}

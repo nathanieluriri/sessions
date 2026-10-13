@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { PublicLayout, PageHero, hoursSummary, waLink } from "../components/Layout";
 import { Icon, Socials } from "../components/brand";
+import { Eq } from "../components/art";
 import { Area, Btn, ErrorBox, Field, Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
 import { RichText } from "../components/content";
-import { PHOTOS, depositOf, needsApproval, roomOf, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
-import { hrs, naira } from "../lib/format";
+import { PHOTOS, depositOf, needsApproval, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
+import { naira } from "../lib/format";
 import { api } from "../lib/api";
 import { loadDraft, saveDraft } from "../lib/draft";
 
@@ -30,28 +31,27 @@ export function useStartBooking() {
 
 export function PackageCard({ p, cat, service }: { p: Package; cat: Catalog; service?: Service }) {
   const start = useStartBooking();
-  const room = roomOf(cat, p);
   const f = !!p.featured;
   const quote = p.pricing === "quote";
+  const approval = needsApproval(cat, p);
   const pct = p.deposit_percent ?? cat.rules.depositPercent;
   const svc = service ?? cat.services.find((s) => s.category === p.service_category);
+  const pay = pct > 0 && pct < 100 ? `${pct}% deposit (${naira(depositOf(cat, p, p.price_kobo))})` : "";
+  const terms = approval ? `Needs studio approval, then ${pay ? `a ${pay} or pay in full` : "paid in full"}` : pay ? `${pay} to book, or pay in full` : "Paid in full when you book";
   return (
     <div className={`pkg ${f ? "featured" : ""}`} id={`pkg-${p.slug}`}>
-      <div className="row between gap8">
-        <span className="mono" style={{ color: f ? "var(--neon)" : "var(--fg2)" }}>{quote ? "Quote" : hrs(p.duration_min)}{room ? ` · ${room.name}` : ""}</span>
-        {f ? <span className="tag" style={{ background: "var(--neon)", color: "var(--brand)" }}>Most booked</span> : needsApproval(cat, p) && !quote ? <span className="tag warning">Studio approval</span> : null}
-      </div>
+      {f && <span className="pkgbadge">Most booked</span>}
       <h3 className="h3">{p.name}</h3>
       <p style={{ opacity: f ? .75 : 1 }} className={f ? "" : "muted"}>{p.description}</p>
       {quote
         ? <div className="stack gap4"><span className="price" style={{ fontSize: 30 }}>Price on request</span>{p.price_note && <span className="small" style={{ opacity: .65 }}>{p.price_note}</span>}</div>
         : <div className="stack gap4"><div className="row gap8" style={{ alignItems: "baseline" }}><span className="price">{naira(p.price_kobo)}</span><span className="small" style={{ opacity: .6 }}>per session</span></div>
-          <span className="small" style={{ opacity: .65 }}>{pct > 0 && pct < 100 ? `${pct}% deposit (${naira(depositOf(cat, p, p.price_kobo))}) to book, or pay in full` : "Paid in full when you book"}</span></div>}
+          <span className="small" style={{ opacity: .65 }}>{terms}</span></div>}
       <div className="divider" style={{ background: f ? "var(--brand-2)" : undefined }} />
-      <ul>{p.includes.map((i) => <li key={i}>{i}</li>)}</ul>
+      <ul>{p.includes.map((i) => <li key={i}><Eq />{i}</li>)}</ul>
       {quote
         ? <TactileLink to={`/quote?service=${encodeURIComponent(svc?.name ?? p.name)}`} variant={f ? "neon" : "light"} size="lg" block>Request a quote</TactileLink>
-        : <Btn kind={f ? "neon" : ""} arrow block onClick={() => start({ serviceSlug: svc?.slug, packageId: p.id })}>{needsApproval(cat, p) ? "Request this package" : "Book this package"}</Btn>}
+        : <Btn kind={f ? "neon" : ""} arrow block onClick={() => start({ serviceSlug: svc?.slug, packageId: p.id })}>{approval ? "Request this package" : "Book this package"}</Btn>}
     </div>
   );
 }
@@ -87,20 +87,25 @@ export function Packages() {
               </div>
             );
           })}
-          <div className="grid cols-2" style={{ alignItems: "start" }}>
-            <div className="card stack" style={{ padding: 0, overflow: "hidden" }}>
-              <div className="mono muted tablehead">Rooms and extra time</div>
-              {cat.rooms.map((r) => (
-                <div key={r.id} className="row between gap12 tablerow"><span><b>{r.name}</b><span className="small muted"> · {r.kind} · up to {r.capacity} people</span></span><b className="nowrap">{naira(r.hourly_kobo || cat.rules.extraHourKobo)} / extra hr</b></div>
-              ))}
-            </div>
-            <div className="card stack" style={{ padding: 0, overflow: "hidden" }}>
-              <div className="mono muted tablehead">Extras you can add when you book</div>
-              {cat.extras.map((e) => (
-                <div key={e.slug} className="row between gap12 tablerow"><span>{e.name}<span className="small muted">{e.category ? ` · ${cat.categories.find((c) => c.slug === e.category)?.name ?? ""}` : ""}</span></span><b>{naira(e.price_kobo)}</b></div>
-              ))}
-            </div>
+          <div className="stack gap20 pkgmore" id="rooms">
+            <div className="stack gap4"><h2 className="h2">Rooms and extra time</h2><p className="muted">Every package includes its room and crew. Need longer? Add time at the room’s hourly rate.</p></div>
+            <div className="grid cols-4">{cat.rooms.map((r) => (
+              <Link key={r.id} to={`/studio#${r.slug}`} className="rate">
+                <span className="rate-img" style={{ backgroundImage: `url(${r.image_url})` }} />
+                <span className="stack gap4"><b>{r.name}</b><span className="small muted">{r.kind} · up to {r.capacity} people</span></span>
+                <span className="rate-price">{naira(r.hourly_kobo || cat.rules.extraHourKobo)}<span className="small muted"> per extra hour</span></span>
+              </Link>
+            ))}</div>
           </div>
+          {cat.extras.length > 0 && <div className="stack gap20" id="extras">
+            <div className="stack gap4"><h2 className="h2">Extras</h2><p className="muted">Add any of these when you book.</p></div>
+            <div className="grid cols-3">{cat.extras.map((e) => (
+              <div key={e.slug} className="rate extra">
+                <span className="stack gap4"><b>{e.name}</b><span className="small muted">{cat.categories.find((c) => c.slug === e.category)?.name ?? "Any session"}</span></span>
+                <span className="rate-price">{naira(e.price_kobo)}</span>
+              </div>
+            ))}</div>
+          </div>}
           <div className="panel row between wrapflex gap16">
             <div className="stack gap4"><b>Need something custom?</b><span className="muted small">Music videos, commercials, content days and long projects are priced to your brief.</span></div>
             <TactileLink to="/quote" size="lg">Request a quote <Icon name="arrow" size={18} /></TactileLink>
@@ -109,7 +114,7 @@ export function Packages() {
       </div></section>
       <section className="section" style={{ background: "var(--surface)" }} id="policies" ref={ref}><div className="wrap stack gap32">
         <h2 className="h1">Booking policies</h2>
-        <div className="grid cols-2">{booking.map((p) => <div key={p.slug} className="card stack gap8"><h3 className="h4">{p.title}</h3><p className="muted">{p.body}</p></div>)}</div>
+        <div className="grid cols-3 policies">{booking.map((p) => <div key={p.slug} className="card stack gap8"><h3 className="h4">{p.title}</h3><p className="muted">{p.body}</p></div>)}</div>
         {booking.length > 0 && <span className="mono faint">Last updated {new Date(Math.max(...booking.map((p) => Date.parse(p.updated_at)))).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>}
       </div></section>
     </PublicLayout>

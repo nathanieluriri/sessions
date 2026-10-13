@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { PublicLayout, PageHero, waLink } from "../components/Layout";
 import { Icon } from "../components/brand";
+import { Eq } from "../components/art";
 import { Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
 import { PackageCard, useStartBooking } from "./public";
@@ -86,7 +87,7 @@ export function ServiceDetail() {
       </section>
       <section className="section" style={{ paddingTop: 56 }}><div className="wrap grid" style={{ gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 48, alignItems: "start" }} data-stack>
         <div className="stack gap16"><h2 className="h3">How it works</h2><p style={{ fontSize: 17, lineHeight: 1.65 }}>{s.details || s.description}</p></div>
-        {s.deliverables.length > 0 && <div className="card stack gap12"><span className="mono muted">What you get</span><ul className="ticks">{s.deliverables.map((d) => <li key={d}>{d}</li>)}</ul></div>}
+        {s.deliverables.length > 0 && <div className="card stack gap16"><h3 className="h4">What you get</h3><ul className="ticklist">{s.deliverables.map((d) => <li key={d}><Eq />{d}</li>)}</ul></div>}
       </div></section>
       {s.gallery.length > 0 && <section className="section" style={{ paddingTop: 0 }}><div className="wrap gallery">{s.gallery.map((g) => <img key={g} src={g} alt={`${s.name} at the studio`} loading="lazy" />)}</div></section>}
       {packages.length > 0 && (

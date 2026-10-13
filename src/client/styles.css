@@ -120,6 +120,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .nglide { position: absolute; left: 0; top: 50%; height: 44px; margin-top: -22px; border-radius: 999px; background: #fff; opacity: 0;
   transition: transform .45s cubic-bezier(.3,.7,.1,1), width .45s cubic-bezier(.3,.7,.1,1), opacity .25s ease; }
 .nglide.on { opacity: 1; }
+.nglide.nhover { background: rgba(255,255,255,.07); box-shadow: inset 0 0 0 1px rgba(255,255,255,.32); transition-duration: .3s, .3s, .2s; }
 .nav.enter .navin > * { animation: navdrop .9s cubic-bezier(.2,.75,.1,1) both; animation-delay: calc(var(--nd, 0s) + var(--ni, 0) * 90ms); }
 .nav.enter .navin > :nth-child(2) { --ni: 1; }
 .nav.enter .navin > :nth-child(3) { --ni: 2; }
@@ -192,12 +193,31 @@ body.menu-open { overflow: hidden; }
 .svc .check { position: absolute; z-index: 2; top: 14px; right: 14px; width: 32px; height: 32px; border-radius: 10px; background: var(--neon); color: var(--brand); display: grid; place-items: center; }
 
 /* Package card and option */
-.pkg { display: flex; flex-direction: column; gap: 18px; border: 1px solid var(--line); border-radius: 24px; padding: 28px; background: #fff; }
+.pkg { position: relative; display: flex; flex-direction: column; gap: 18px; border: 1px solid var(--line); border-radius: 24px; padding: 28px; background: #fff; }
 .pkg.featured { background: var(--brand); color: #fff; border-color: var(--brand); }
 .pkg .price { font-size: 40px; font-weight: 600; letter-spacing: -.03em; }
 .pkg ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
-.pkg li::before { content: "✓"; color: var(--success); margin-right: 8px; font-weight: 700; }
-.pkg.featured li::before { color: var(--neon); }
+.pkg > .tactile:last-child { margin-top: auto; }
+.pkgbadge { position: absolute; top: 0; left: 28px; translate: 0 -50%; padding: 6px 12px; border-radius: 999px; background: var(--neon); color: #0a0a0a; font-size: 12.5px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.featured .eq, .pcard .eq { color: var(--neon); }
+
+/* Equaliser bars that stand in for ticks */
+.ticklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ticklist li, .pkg li { display: flex; align-items: flex-start; gap: 12px; }
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; flex: none; height: 13px; margin-top: .22em; color: var(--success); }
+.eq i { width: 3px; height: 100%; border-radius: 2px; background: currentColor; transform-origin: 50% 100%; animation: eq1 1.1s ease-in-out infinite; }
+.eq i:nth-child(2) { animation-name: eq2; animation-duration: .9s; }
+.eq i:nth-child(3) { animation-name: eq3; animation-duration: 1.3s; }
+li:nth-child(3n + 2) > .eq i { animation-delay: -.45s; }
+li:nth-child(3n) > .eq i { animation-delay: -.8s; }
+@keyframes eq1 { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+@keyframes eq2 { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.3); } }
+@keyframes eq3 { 0%, 100% { transform: scaleY(.55); } 35% { transform: scaleY(.2); } 70% { transform: scaleY(.95); } }
+@media (prefers-reduced-motion: reduce) {
+  .eq i { animation: none; }
+  .eq i:nth-child(1) { transform: scaleY(.55); }
+  .eq i:nth-child(3) { transform: scaleY(.75); }
+}
 .opt { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 16px; border: 1px solid var(--line); background: #fff; cursor: pointer; text-align: left; width: 100%; }
 .opt.on { border: 2px solid var(--brand); background: var(--neon-soft); }
 .radio { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--fg3); flex: none; display: grid; place-items: center; }
