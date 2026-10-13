@@ -10,7 +10,7 @@ Guides: [admin guide](docs/ADMIN_GUIDE.md) · [operations, costs and backups](do
 
 ## Features
 
-- Public site: Home, About, Services (by category, with a page per service), Studio and facilities (rooms, equipment, gallery, virtual tour), Portfolio (YouTube, Vimeo, Spotify and SoundCloud embeds), Pricing and packages, FAQs, Contact (WhatsApp, map, service of interest), Request a quote, Privacy and Terms. An announcement bar and a WhatsApp button appear on every public page.
+- Public site: Home, About, Services (by category, with a page per service), Studio and facilities (rooms, equipment, gallery, virtual tour), Portfolio (YouTube, Vimeo, Spotify and SoundCloud embeds), Pricing and packages, FAQs, Contact (WhatsApp, map, service of interest), Request a quote, Privacy and Terms. An announcement bar appears on every public page, and WhatsApp is linked from the footer and the contact page.
 - Booking: service, package and room, live date and time, details (people, project, requirements, reference links), review with a deposit or full payment choice, then checkout. No account is needed until checkout and the draft survives sign up and the payment redirect.
 - Rooms: every room has its own calendar, capacity and hourly rate, so two rooms can run at the same time while the same room can never be double booked. Holds, requests, approvals and blocks are all checked atomically in the database.
 - Automatic or manual confirmation: packages confirm automatically after a verified payment, or are sent as requests that staff approve or decline. Approved requests get a secure payment link and a deadline. Unpaid or unapproved requests are never treated as confirmed unless staff confirm them explicitly.

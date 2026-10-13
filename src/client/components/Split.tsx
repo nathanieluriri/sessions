@@ -1,6 +1,6 @@
 import { Fragment, type CSSProperties } from "react";
 
-/** Splits text into words that rise in one after another once an ancestor gets the "in" class. */
+/** Splits text into words that rise in one after another once an ancestor is shown (data-shown, or the hero's in class). */
 export function Split({ text, from = 0, className }: { text: string; from?: number; className?: string }) {
   let i = from;
   return (

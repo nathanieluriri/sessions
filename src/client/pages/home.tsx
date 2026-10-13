@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "react-router-dom";
 import { PublicLayout } from "../components/Layout";
 import { Icon, Mark } from "../components/brand";
-import { Badge, Pill, Ring } from "../components/pill";
+import { Badge } from "../components/pill";
+import { Tactile, TactileLink, type TactileVariant } from "../components/kitchen";
 import { Split, wordCount } from "../components/Split";
 import { PhoneDemo, type DemoData } from "../components/PhoneDemo";
 import { Swirl } from "../components/Swirl";
@@ -93,7 +94,7 @@ function Hero({ title, accent, sub, badge, demo, play }: { title: string; accent
           {badge.to ? <Link to={badge.to} className="hbadge">{pill}</Link> : <span className="hbadge">{pill}</span>}
           <h1 className="htitle"><Split text={title} /> <br /><Heading lead={lead} accent={last} from={n} /></h1>
           <p className="hsub">{sub}</p>
-          <div className="hcta"><Ring className="lg"><Pill to="/services" kind="dark">Explore our services</Pill><i className="sep" /><Pill to="/book" kind="light" arrow>Book a session</Pill></Ring></div>
+          <div className="hcta"><TactileLink to="/services" variant="light" size="lg">Explore our services</TactileLink><TactileLink to="/book" variant="neon" size="lg">Book a session <Icon name="northeast" size={16} /></TactileLink></div>
         </div>
         <div className="hstage">
           <Swirl className="hswirl" />
@@ -124,10 +125,15 @@ function Values({ rooms }: { rooms: number }) {
   useScrollFrame(() => {
     const row = ref.current;
     if (!row) return;
-    const flat = prefersStill() || window.innerWidth < 900;
-    const r = row.getBoundingClientRect();
-    const p = clamp((window.innerHeight - r.top) / (window.innerHeight * 0.9));
-    Array.from(row.children).forEach((el, i) => { (el as HTMLElement).style.translate = flat ? "" : `0 ${Math.round((1 - p) * i * 120 + i * 30)}px`; });
+    const cards = Array.from(row.children) as HTMLElement[];
+    if (prefersStill()) { cards.forEach((c) => { c.style.translate = ""; c.style.opacity = ""; }); return; }
+    const top = row.getBoundingClientRect().top, vh = window.innerHeight;
+    const cols = Math.max(1, Math.round(row.clientWidth / Math.max(1, cards[0]?.offsetWidth ?? 1)));
+    cards.forEach((c, i) => {
+      const p = clamp((vh - top - c.offsetTop) / (vh * 0.5) - (i % cols) * 0.1);
+      c.style.translate = `0 ${Math.round(Math.pow(1 - p, 3) * 260)}px`;
+      c.style.opacity = String(clamp(p * 3));
+    });
   });
   return (
     <section className="lsec values" data-tone="dark">
@@ -138,7 +144,7 @@ function Values({ rooms }: { rooms: number }) {
       </div>
       <div className="wrap"><div className="vcards" ref={ref}>
         {cards.map((c) => (
-          <article key={c.art} className={`vcard ${c.light ? "light" : ""}`} data-reveal>
+          <article key={c.art} className={`vcard ${c.light ? "light" : ""}`}>
             <CardArt kind={c.art} />
             <div className="vbody"><LineArt kind={c.line} /><h3>{c.title}</h3><p>{c.body}</p></div>
           </article>
@@ -156,47 +162,35 @@ const STEPS: [string, string, string][] = [
 ];
 
 function Steps({ demo, photo }: { demo: DemoData; photo: string }) {
-  const list = useRef<HTMLOListElement>(null);
   const [active, setActive] = useState(0);
-  const [boxRef, inView] = useInView<HTMLDivElement>(0.25);
-  const [narrow, setNarrow] = useState(() => window.innerWidth < 900);
-  useScrollFrame(() => {
-    const ol = list.current;
-    if (!ol) return;
-    setNarrow(window.innerWidth < 900);
-    const mid = window.innerHeight * 0.55, r = ol.getBoundingClientRect();
-    ol.style.setProperty("--p", String(clamp((mid - r.top) / r.height)));
-    if (window.innerWidth < 900) return;
-    let best = 0, dist = Infinity;
-    Array.from(ol.children).forEach((el, i) => {
-      const b = el.getBoundingClientRect(), d = Math.abs(b.top + b.height / 2 - mid);
-      if (d < dist) { dist = d; best = i; }
-    });
-    setActive(best);
-  });
+  const [hold, setHold] = useState(false);
+  const [boxRef, inView] = useInView<HTMLElement>(0.3);
   useEffect(() => {
-    if (!narrow || !inView || prefersStill()) return;
-    const t = window.setInterval(() => setActive((a) => (a + 1) % STEPS.length), 2600);
-    return () => window.clearInterval(t);
-  }, [narrow, inView]);
+    if (!inView || hold || prefersStill()) return;
+    const t = window.setTimeout(() => setActive((a) => (a + 1) % STEPS.length), 3200);
+    return () => window.clearTimeout(t);
+  }, [inView, hold, active]);
+  const pick = (i: number) => { setHold(true); setActive(i); };
   return (
-    <section className="lsec howto" data-tone="dark">
+    <section className="lsec howto" data-tone="dark" ref={boxRef}>
       <div className="wrap sgrid">
         <div className="sleft">
           <Badge>How it works</Badge>
           <h2 className="ltitle" data-split><Heading lead="Booked in" accent="two minutes." /></h2>
           <p className="lsub" data-reveal>From your phone to the room in four steps. No calls, no back and forth.</p>
-          <div data-reveal><Ring><Pill to="/book" kind="dark" arrow>Book a session</Pill></Ring></div>
-          <div className="svis" ref={boxRef}>
+          <div data-reveal><TactileLink to="/book" variant="neon" size="lg">Book a session <Icon name="northeast" size={16} /></TactileLink></div>
+          <div className="svis">
             <Pixels src={photo} />
             <PhoneDemo data={demo} screen={active} className="sphone" />
           </div>
         </div>
-        <ol className="slist" ref={list}>
+        <ol className="slist" style={{ "--p": active / (STEPS.length - 1) } as CSSProperties} onMouseLeave={() => setHold(false)}>
           {STEPS.map(([icon, title, body], i) => (
-            <li key={title} className={i === active ? "on" : ""} data-reveal>
-              <span className="stile"><Icon name={icon} size={30} /></span>
-              <div><span className="snum">Step {i + 1}</span><h3>{title}</h3><p>{body}</p></div>
+            <li key={title} className={i === active ? "on" : ""} data-reveal style={{ "--rd": `${i * 90}ms` } as CSSProperties}>
+              <button type="button" aria-pressed={i === active} onMouseEnter={() => pick(i)} onFocus={() => pick(i)} onClick={() => pick(i)}>
+                <span className="stile"><Icon name={icon} size={30} /></span>
+                <span className="stext"><span className="snum">Step {i + 1}</span><b>{title}</b><span className="sbody">{body}</span></span>
+              </button>
             </li>
           ))}
         </ol>
@@ -207,30 +201,71 @@ function Steps({ demo, photo }: { demo: DemoData; photo: string }) {
 
 function Showcase({ cat }: { cat: Catalog }) {
   const track = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState(0);
-  const [held, setHeld] = useState(false);
+  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const moved = useRef(false);
+  const settle = useRef(0);
   const [boxRef, inView] = useInView<HTMLElement>(0.35);
   const chosen = SHOWCASE.map((s) => cat.services.find((x) => x.slug === s)).filter(Boolean) as Service[];
   const services = chosen.length >= 4 ? chosen : cat.services.slice(0, 8);
-  const go = useCallback((i: number) => {
-    const t = track.current, card = t?.children[i] as HTMLElement | undefined;
-    if (!t || !card) return;
-    t.scrollTo({ left: card.offsetLeft - (t.clientWidth - card.offsetWidth) / 2, behavior: prefersStill() ? "auto" : "smooth" });
-  }, []);
-  const onScroll = () => {
+  const n = services.length;
+  const [active, setActive] = useState(n);
+  const [held, setHeld] = useState(false);
+  const left = (i: number) => {
+    const t = track.current!, c = t.children[i] as HTMLElement;
+    return c.offsetLeft - (t.clientWidth - c.offsetWidth) / 2;
+  };
+  const go = useCallback((i: number, smooth = true) => {
     const t = track.current;
-    if (!t) return;
-    const mid = t.scrollLeft + t.clientWidth / 2;
+    if (t?.children[i]) t.scrollTo({ left: left(i), behavior: smooth && !prefersStill() ? "smooth" : "auto" });
+  }, []);
+  const nearest = () => {
+    const t = track.current!, mid = t.scrollLeft + t.clientWidth / 2;
     let best = 0, dist = Infinity;
     Array.from(t.children).forEach((el, i) => { const c = el as HTMLElement, d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid); if (d < dist) { dist = d; best = i; } });
-    setActive(best);
+    return best;
   };
+  const recenter = () => {
+    const t = track.current;
+    if (!t || drag.current) return;
+    const i = nearest();
+    if (i >= n && i < 2 * n) return;
+    const shift = i < n ? n : -n, stride = (t.children[1] as HTMLElement).offsetLeft - (t.children[0] as HTMLElement).offsetLeft;
+    t.scrollLeft += shift * stride;
+    setActive(i + shift);
+  };
+  useLayoutEffect(() => { go(n, false); }, [n, go]);
   useEffect(() => {
     if (!inView || held || prefersStill()) return;
-    const t = window.setInterval(() => go((active + 1) % services.length), 3400);
-    return () => window.clearInterval(t);
-  }, [inView, held, active, services.length, go]);
-  const step = (d: number) => { setHeld(true); go((active + d + services.length) % services.length); };
+    const t = window.setTimeout(() => go(active + 1), 3400);
+    return () => window.clearTimeout(t);
+  }, [inView, held, active, go]);
+  useEffect(() => () => window.clearTimeout(settle.current), []);
+  const onScroll = () => {
+    setActive(nearest());
+    window.clearTimeout(settle.current);
+    settle.current = window.setTimeout(recenter, 160);
+  };
+  const down = (e: ReactPointerEvent<HTMLDivElement>) => {
+    setHeld(true);
+    if (e.pointerType !== "mouse" || e.button !== 0) return;
+    drag.current = { x: e.clientX, left: track.current!.scrollLeft, moved: false };
+    track.current!.classList.add("dragging");
+  };
+  const move = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    if (!d.moved && Math.abs(e.clientX - d.x) > 5) { d.moved = true; track.current!.setPointerCapture(e.pointerId); }
+    if (d.moved) track.current!.scrollLeft = d.left - (e.clientX - d.x);
+  };
+  const up = () => {
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
+    moved.current = d.moved;
+    track.current!.classList.remove("dragging");
+    if (d.moved) go(nearest());
+  };
+  const step = (d: number) => { setHeld(true); go(active + d); };
   return (
     <section className="lsec showcase" data-tone="dark" ref={boxRef}>
       <div className="wrap lhead center">
@@ -238,15 +273,19 @@ function Showcase({ cat }: { cat: Catalog }) {
         <h2 className="ltitle" data-split><Split text="Made for every kind" /><br /><Heading lead="of" accent="project." from={4} /></h2>
         <p className="lsub" data-reveal>Records, music videos, podcasts and shoots. Four rooms, one crew, your vision.</p>
       </div>
-      <div className="ctrack" ref={track} onScroll={onScroll} onPointerDown={() => setHeld(true)} onMouseEnter={() => setHeld(true)}>
-        {services.map((s, i) => (
-          <article key={s.id} className={`ccard ${i === active ? "on" : ""}`}>
-            <Link to={`/services/${s.slug}`} className="cimg" aria-label={s.name}><span style={{ backgroundImage: `url(${s.image_url})` }} /></Link>
-            <div className="cbody"><h3><Link to={`/services/${s.slug}`}>{s.name}</Link></h3><p>{s.description}</p><span className="ctag">{s.price_label}</span></div>
-          </article>
-        ))}
+      <div className="ctrack" ref={track} onScroll={onScroll} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+        onClickCapture={(e) => { if (moved.current) { e.preventDefault(); e.stopPropagation(); moved.current = false; } }} onDragStart={(e) => e.preventDefault()}>
+        {[0, 1, 2].flatMap((copy) => services.map((s, i) => {
+          const k = copy * n + i, real = copy === 1;
+          return (
+            <article key={`${copy}-${s.id}`} className={`ccard ${k === active ? "on" : ""}`} aria-hidden={!real || undefined}>
+              <Link to={`/services/${s.slug}`} className="cimg" aria-label={s.name} tabIndex={real ? undefined : -1} draggable={false}><span style={{ backgroundImage: `url(${s.image_url})` }} /></Link>
+              <div className="cbody"><h3><Link to={`/services/${s.slug}`} tabIndex={real ? undefined : -1} draggable={false}>{s.name}</Link></h3><p>{s.description}</p><span className="ctag">{s.price_label}</span></div>
+            </article>
+          );
+        }))}
       </div>
-      <div className="cnav"><button type="button" onClick={() => step(-1)}>Prev</button><button type="button" onClick={() => step(1)}>Next</button></div>
+      <div className="cnav"><Tactile variant="ink" size="md" onClick={() => step(-1)} aria-label="Previous service"><Icon name="arrow" size={16} className="flip" />Prev</Tactile><Tactile variant="ink" size="md" onClick={() => step(1)} aria-label="Next service">Next<Icon name="arrow" size={16} /></Tactile></div>
     </section>
   );
 }
@@ -271,7 +310,7 @@ function Rooms({ cat }: { cat: Catalog }) {
             </Link>
           ))}
         </div>
-        <div className="lmore" data-reveal><Ring><Pill to="/studio" kind="dark" arrow>See the rooms and equipment</Pill></Ring></div>
+        <div className="lmore" data-reveal><TactileLink to="/studio" variant="brand" size="lg">See the rooms and equipment <Icon name="northeast" size={16} /></TactileLink></div>
       </div>
     </section>
   );
@@ -309,7 +348,7 @@ function Voices({ items }: { items: Site["testimonials"] }) {
             );
           })}
         </div>
-        {items.length > 1 && <button type="button" className="pill light dshuffle" onClick={shuffle}><Icon name="shuffle" size={18} />Tap to shuffle</button>}
+        {items.length > 1 && <Tactile variant="light" size="lg" className="dshuffle" onClick={shuffle}><Icon name="shuffle" size={18} />Tap to shuffle</Tactile>}
       </div>
     </section>
   );
@@ -323,7 +362,7 @@ function Work({ site }: { site: Site }) {
       <div className="wrap stack gap48">
         <div className="whead">
           <div className="stack gap16"><Badge>Portfolio</Badge><h2 className="ltitle" data-split><Heading lead="Work made" accent="here." /></h2></div>
-          <Ring><Pill to="/portfolio" kind="dark" arrow>Full portfolio</Pill></Ring>
+          <TactileLink to="/portfolio" variant="light" size="lg">Full portfolio <Icon name="northeast" size={16} /></TactileLink>
         </div>
         <div className="grid cols-3">{featured.map((w, i) => <div key={w.id} data-reveal style={{ transitionDelay: `${i * 90}ms` }}><WorkCard w={w} /></div>)}</div>
       </div>
@@ -335,6 +374,7 @@ function Plans({ cat }: { cat: Catalog }) {
   const start = useStartBooking();
   const featured = ["half-day", "video-podcast-2-hour", "photo-session-2-hour"].map((s) => cat.packages.find((p) => p.slug === s)).filter(Boolean) as Package[];
   const book = (p: Package) => start({ serviceSlug: cat.services.find((s) => s.category === p.service_category)?.slug, packageId: p.id });
+  const variants: TactileVariant[] = ["neon", "yellow", "coral"];
   return (
     <section className="lsec plans2" data-tone="dark">
       <div className="wrap lhead center">
@@ -354,7 +394,7 @@ function Plans({ cat }: { cat: Catalog }) {
                 <b className="pprice">{naira(p.price_kobo)}</b>
                 <span className="pmeta">{deposit < p.price_kobo ? `${naira(deposit)} deposit to book` : "Paid in full when you book"} · {hrs(p.duration_min)}</span>
                 <ul>{p.includes.map((x) => <li key={x}><Icon name="check" size={16} />{x}</li>)}</ul>
-                <Pill kind={hot ? "light" : "dark"} onClick={() => book(p)}>Book {p.name}</Pill>
+                <Tactile variant={variants[i % 3]} size="lg" block onClick={() => book(p)}>Book {p.name}</Tactile>
               </article>
             );
           })}
@@ -396,7 +436,7 @@ function Final() {
             <Badge>Ready when you are</Badge>
             <h2 className="ltitle" data-split><Split text="Ready to create?" /><br /><span className="neon"><Split text="Book your session." from={3} /></span></h2>
             <p>Live availability, a deposit to hold your slot and a crew ready when you arrive.</p>
-            <Ring><Pill to="/book" kind="light" arrow>Book a session</Pill><i className="sep" /><Pill to="/quote" kind="dark">Request a quote</Pill></Ring>
+            <div className="fbtns"><TactileLink to="/book" variant="neon" size="lg">Book a session <Icon name="northeast" size={16} /></TactileLink><TactileLink to="/quote" variant="light" size="lg">Request a quote</TactileLink></div>
           </div>
           <Sticker kind="headphones" className="fsticker" />
         </div>

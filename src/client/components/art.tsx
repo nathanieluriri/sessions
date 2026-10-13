@@ -145,7 +145,7 @@ export function Pixels({ src, className }: { src: string; className?: string }) 
           px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2];
         }
         ctx.putImageData(d, 0, 0);
-        canvas.parentElement?.classList.add("mapped");
+        canvas.parentElement?.setAttribute("data-mapped", "");
       } catch { mapped = false; }
     };
     const shimmer = () => {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { Icon, Mark, Socials } from "./brand";
 import { useAuth } from "../lib/auth";
-import { Ring } from "./pill";
+import { TactileAnchor, TactileLink } from "./kitchen";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { hm } from "../lib/format";
 
@@ -64,8 +64,8 @@ export function Nav() {
             {LINKS.map(([to, l]) => <NavLink key={to} to={to} onMouseEnter={(e) => move(e.currentTarget)} onFocus={(e) => move(e.currentTarget)} onBlur={rest} className={({ isActive }) => (isActive ? "active" : "")}>{l}</NavLink>)}
           </div>
           <div className="nright">
-            <Link to={home} className="npill nlogin">{user ? "My account" : "Log in"}</Link>
-            <Ring><Link to="/book" className="pill gray"><span>Book<span className="nlong"> a session</span></span></Link></Ring>
+            <TactileLink to={home} variant="brand" size="md" className="nlogin">{user ? "My account" : "Log in"}</TactileLink>
+            <TactileLink to="/book" variant="neon" size="md"><span>Book<span className="nlong"> a session</span></span></TactileLink>
             <button className="npill nmenu" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}><Icon name={open ? "x" : "menu"} /></button>
           </div>
         </div>
@@ -91,17 +91,6 @@ function Announcement() {
         <button className="link" onClick={close} aria-label="Dismiss announcement"><Icon name="x" size={16} /></button>
       </div>
     </div>
-  );
-}
-
-export function WhatsAppButton() {
-  const site = useContent();
-  const n = site?.content.whatsapp;
-  if (!n) return null;
-  return (
-    <a className="wa-float" href={waLink(n)} target="_blank" rel="noreferrer" aria-label="Chat with the studio on WhatsApp">
-      <svg viewBox="0 0 24 24" aria-hidden><path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.46 1.07 2.88 1.21 3.08.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2.01-1.41.25-.69.25-1.29.17-1.41-.07-.12-.27-.2-.57-.35M12.04 21.8h-.01a9.8 9.8 0 0 1-4.99-1.37l-.36-.21-3.71.97.99-3.62-.23-.37a9.78 9.78 0 0 1-1.5-5.22c0-5.41 4.41-9.81 9.82-9.81 2.62 0 5.08 1.02 6.93 2.88a9.75 9.75 0 0 1 2.87 6.94c0 5.41-4.41 9.81-9.81 9.81m8.35-18.16A11.73 11.73 0 0 0 12.04.2C5.53.2.24 5.49.24 12c0 2.08.54 4.11 1.58 5.9L.14 24l6.25-1.64a11.8 11.8 0 0 0 5.64 1.44h.01c6.5 0 11.8-5.29 11.8-11.8 0-3.15-1.23-6.11-3.45-8.34" /></svg>
-    </a>
   );
 }
 
@@ -134,7 +123,7 @@ export function Footer() {
         </div>
         <div className="fmid">
           <div className="fcol"><h4>Follow us</h4><Socials links={c} /></div>
-          {c.whatsapp && <div className="fcol"><h4>Talk to us</h4><Ring><a className="pill dark" href={waLink(c.whatsapp)} target="_blank" rel="noreferrer">WhatsApp the studio<Icon name="northeast" size={16} /></a></Ring></div>}
+          {c.whatsapp && <div className="fcol"><h4>Talk to us</h4><TactileAnchor variant="neon" size="md" href={waLink(c.whatsapp)} target="_blank" rel="noreferrer">WhatsApp the studio <Icon name="northeast" size={16} /></TactileAnchor></div>}
         </div>
         <div className="fbar">
           <span>© {year} {c.legal_name ?? "Psych Records Entertainment Limited"}</span>
@@ -147,7 +136,7 @@ export function Footer() {
 
 export function PublicLayout({ children, title, bare }: { children: ReactNode; title?: string; bare?: boolean }) {
   usePageTitle(title);
-  return <>{!bare && <Announcement />}<Nav /><main>{children}</main><Footer /><WhatsAppButton /></>;
+  return <>{!bare && <Announcement />}<Nav /><main>{children}</main><Footer /></>;
 }
 
 export function PageHero({ title, sub, kicker, children }: { title: string; sub?: string; kicker?: string; children?: ReactNode }) {
