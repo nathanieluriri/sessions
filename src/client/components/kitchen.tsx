@@ -13,7 +13,7 @@ const px = (v: number | string) => (typeof v === "number" ? `${v}px` : v);
 
 export type TactileVariant = "brand" | "ink" | "neon" | "light" | "coral" | "yellow" | "danger";
 interface TactileLook { variant?: TactileVariant; size?: "sm" | "md" | "lg"; shallow?: boolean; block?: boolean; className?: string }
-const tactileClass = ({ variant = "brand", size = "md", shallow, block, className }: TactileLook) =>
+const tactileClass = ({ variant = "neon", size = "md", shallow, block, className }: TactileLook) =>
   ["tactile", `t-${variant}`, `t-${size}`, shallow && "t-shallow", block && "t-block", className].filter(Boolean).join(" ");
 const Face = ({ children }: { children: ReactNode }) => <><span className="tb" aria-hidden="true" /><span className="tf">{children}</span></>;
 

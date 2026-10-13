@@ -71,7 +71,7 @@ export function AccountHome() {
           {waiting.map((w) => (
             <div key={w.id} className="panel row between wrapflex gap12" style={{ background: w.status === "approved" ? "var(--neon-soft)" : "var(--cream)" }}>
               <span><b>{w.status === "approved" ? `Approved: pay to confirm ${w.ref}` : `Waiting for the studio to approve ${w.ref}`}</b> <span className="muted">{w.package_name} · {shortDate(w.date)} · {t12(w.start_min)}</span></span>
-              <TactileLink to={w.status === "approved" ? `/pay/${w.id}` : `/account/bookings/${w.id}`} size="md" variant={w.status === "approved" ? "brand" : "light"}>{w.status === "approved" ? "Pay now" : "View request"}</TactileLink>
+              <TactileLink to={w.status === "approved" ? `/pay/${w.id}` : `/account/bookings/${w.id}`} size="md" variant={w.status === "approved" ? "neon" : "light"}>{w.status === "approved" ? "Pay now" : "View request"}</TactileLink>
             </div>
           ))}
           {next ? (

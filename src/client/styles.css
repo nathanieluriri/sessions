@@ -157,7 +157,7 @@ body.menu-open { overflow: hidden; }
 .fcol h4 { margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .fcol > a:not(.tactile), .fcol > p { display: inline-flex; align-items: flex-start; gap: 10px; font-size: 15px; color: rgba(255,255,255,.8); overflow-wrap: anywhere; transition: opacity .3s ease, color .3s ease; }
 .fcol > a:not(.tactile):hover { color: #fff; }
-.fcol:has(> a:not(.tactile):hover) > :is(a:not(.tactile), p):not(:hover) { opacity: .4; }
+.footer:has(:is(.fcol > a:not(.tactile), .fbar a):hover) :is(.fcol > a:not(.tactile), .fcol > p, .fbar a):not(:hover) { opacity: .4; }
 .fcol > :is(a, p) > svg { flex: none; margin-top: 3px; color: var(--neon); }
 .farrow { position: relative; flex: none; width: 14px; height: 14px; margin-top: 4px; overflow: hidden; color: var(--neon); }
 .farrow svg { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.6,0,.2,1); }
@@ -170,6 +170,7 @@ body.menu-open { overflow: hidden; }
 .footer .tactile svg { margin: 0; color: inherit; }
 .fbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-top: 64px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,.12); font-size: 13px; color: rgba(255,255,255,.6); }
 .fbar div { display: flex; flex-wrap: wrap; gap: 20px; }
+.fbar a { transition: opacity .3s ease, color .3s ease; }
 .fbar a:hover { color: #fff; }
 @media (max-width: 900px) {
   .footer { padding: 64px 0 28px; }

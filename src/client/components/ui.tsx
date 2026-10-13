@@ -11,7 +11,7 @@ export function Area({ label, ...p }: { label: string } & TextareaHTMLAttributes
 export const ErrorBox = ({ error }: { error?: string | null }) => (error ? <div className="error" role="alert">{error}</div> : null);
 export const Tag = ({ tone = "", children }: { tone?: string; children: ReactNode }) => <span className={`tag ${tone}`}>{children}</span>;
 
-const VARIANT = { "": "brand", neon: "neon", neutral: "light", primary: "ink", danger: "danger" } as const;
+const VARIANT = { "": "neon", neon: "neon", neutral: "light", primary: "ink", danger: "danger" } as const;
 
 export function Btn({ kind = "", size = "", arrow, block, children, ...p }: { kind?: keyof typeof VARIANT; size?: "" | "sm"; arrow?: boolean; block?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return <Tactile variant={VARIANT[kind]} size={size === "sm" ? "md" : "lg"} block={block} {...p}>{children}{arrow && <Icon name="arrow" size={size === "sm" ? 16 : 18} />}</Tactile>;
