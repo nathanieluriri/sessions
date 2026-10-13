@@ -38,6 +38,8 @@ export function Socials({ links = {} }: { links?: Record<string, string> }) {
 
 const ICONS: Record<string, string> = {
   arrow: "M4 12h15m-6-6 6 6-6 6",
+  search: "M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM20 20l-4.6-4.6",
+  chevron: "m6 9 6 6 6-6",
   northeast: "M7 17 17 7M8.5 7H17v8.5",
   shuffle: "M4 7h3.5c3 0 4.5 10 8 10H20M17 14l3 3-3 3M4 17h3.5c1.2 0 2-1.3 2.8-3M14 9.5C14.9 8 15.7 7 17 7h3M17 4l3 3-3 3",
   minus: "M5 12h14",

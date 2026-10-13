@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Nav, usePageTitle } from "../components/Layout";
 import { Icon, Mark, Waveform } from "../components/brand";
-import { Area, Btn, ErrorBox, Field, Loading, Steps } from "../components/ui";
+import { Area, Btn, EmailField, ErrorBox, Field, Loading, NameField, Steps } from "../components/ui";
+import { PhoneField } from "../components/PhoneField";
 import { ServiceCard } from "./public";
 import { Barcode, ReceiptPrinter, ScrambleText, Tactile, TactileAnchor, TactileLink, type PrinterStage } from "../components/kitchen";
 import { BookingTicket } from "../components/BookingTicket";
@@ -105,7 +106,7 @@ export function BookService() {
         if (!list.length || !cat.packages.some((p) => p.service_category === c.slug && p.pricing === "fixed")) return null;
         return (
           <div key={c.slug} className="stack gap12">
-            <span className="mono faint">{c.name}</span>
+            <h2 className="h4">{c.name}</h2>
             <div className="grid cols-4 svcpick">{list.map((s) => <ServiceCard key={s.id} s={s} on={d.serviceSlug === s.slug} onClick={() => pick(s.slug)} />)}</div>
           </div>
         );
@@ -131,7 +132,7 @@ export function BookPackage() {
       <div className="card stack gap20">
         {rooms.map((r) => (
           <div key={r.id} className="stack gap12">
-            <span className="mono faint">{r.name} · {r.kind}</span>
+            <h3 className="h4">{r.name}<span className="muted" style={{ fontWeight: 400 }}> · {r.kind}</span></h3>
             {list.filter((p) => p.room_id === r.id && p.pricing === "fixed").map((p) => {
               const deposit = depositOf(cat, p, p.price_kobo);
               return (
@@ -148,7 +149,7 @@ export function BookPackage() {
         ))}
         {quotes.length > 0 && (
           <div className="stack gap12">
-            <span className="mono faint">Priced by quote</span>
+            <h3 className="h4">Priced by quote</h3>
             {quotes.map((p) => (
               <Link key={p.id} to={`/quote?service=${encodeURIComponent(p.name)}`} className="opt">
                 <span className="grow stack gap4"><b>{p.name}</b><span className="small muted">{p.description}</span></span>
@@ -231,19 +232,20 @@ export function BookDetails() {
   const [d, up] = useDraft();
   const nav = useNavigate();
   const { user } = useAuth();
+  const [phoneOk, setPhoneOk] = useState(true);
   useEffect(() => { if (user && !d.contactName) up({ contactName: user.name, contactEmail: user.email, contactPhone: user.phone }); }, [user]); // eslint-disable-line
   if (!cat) return <><Nav /><Loading /></>;
   const { room } = priced(cat, d);
   const max = room?.capacity || cat.rules.maxPeople;
-  const valid = d.contactName && /\S+@\S+\.\S+/.test(d.contactEmail) && d.contactPhone && d.artistName && d.people >= 1 && d.people <= max;
+  const valid = d.contactName && /\S+@\S+\.\S+/.test(d.contactEmail) && d.contactPhone && phoneOk && d.artistName && d.people >= 1 && d.people <= max;
   return (
     <Shell step={4} title="Tell us about the session." sub="No account needed yet. You log in or sign up at checkout and keep everything you enter here." cat={cat} d={d} back="/book/time" next={() => nav("/book/review")} nextLabel="Review booking" nextDisabled={!valid}>
       <div className="card stack gap16">
         <h3 className="h4">Contact details</h3>
-        <Field label="Full name" name="contactName" value={d.contactName} onChange={(e) => up({ contactName: e.target.value })} />
+        <NameField label="Full name" name="contactName" value={d.contactName} onChange={(e) => up({ contactName: e.target.value })} />
         <div className="grid cols-2" style={{ gap: 16 }}>
-          <Field label="Email" name="contactEmail" type="email" value={d.contactEmail} onChange={(e) => up({ contactEmail: e.target.value })} />
-          <Field label="Phone number" name="contactPhone" value={d.contactPhone} onChange={(e) => up({ contactPhone: e.target.value })} />
+          <EmailField label="Email" name="contactEmail" value={d.contactEmail} onChange={(e) => up({ contactEmail: e.target.value })} />
+          <PhoneField label="Phone number" name="contactPhone" required value={d.contactPhone} onChange={(v, ok) => { up({ contactPhone: v }); setPhoneOk(ok); }} />
         </div>
       </div>
       <div className="card stack gap16">
@@ -421,10 +423,10 @@ export function BookCheckout() {
       <div className="holdmsg">We are holding {d.date ? shortDate(d.date) : ""}, {d.start != null ? t12(d.start) : ""} for you. {label} left to finish.</div>
       <form className="card stack gap16" onSubmit={auth} style={{ padding: 32 }}>
         <div className="seg" style={{ alignSelf: "flex-start" }}><button type="button" className={tab === "register" ? "on" : ""} onClick={() => setTab("register")}>Create account</button><button type="button" className={tab === "login" ? "on" : ""} onClick={() => setTab("login")}>Log in</button></div>
-        {tab === "register" && <Field label="Full name" name="name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required />}
+        {tab === "register" && <NameField label="Full name" name="name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required />}
         <div className="grid cols-2" style={{ gap: 16 }}>
-          <Field label="Email" name="email" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required />
-          {tab === "register" && <Field label="Phone number" name="phone" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} required />}
+          <EmailField label="Email" name="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required />
+          {tab === "register" && <PhoneField label="Phone number" name="phone" required value={f.phone} onChange={(v) => setF({ ...f, phone: v })} />}
         </div>
         <div className="grid cols-2" style={{ gap: 16 }}>
           <Field label="Password" name="password" type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} hint={tab === "register" ? "At least 8 characters, with a number" : undefined} required />

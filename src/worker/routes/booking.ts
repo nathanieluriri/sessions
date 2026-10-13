@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { bookingService, summary } from "../services/bookings";
-import { body, date, minute, required, text, email } from "../lib/validate";
+import { body, date, minute, personName, phone, required, text, email } from "../lib/validate";
 import { requireUser } from "../middleware/auth";
 import { paymentProvider } from "../services/payments";
 import { paymentsRepo } from "../repositories/bookings";
@@ -14,7 +14,7 @@ const r = new Hono<AppEnv>();
 export const draftFields = {
   serviceSlug: required("Service"), packageId: required("Package"), date, start: minute, extraHours: z.number().int().min(0).max(8),
   extras: z.array(z.string()).max(8), people: z.number().int().min(1).max(200), artistName: required("Artist, brand or project name"),
-  contactName: required("Full name"), contactPhone: required("Phone number", 40),
+  contactName: personName(), contactPhone: phone(),
   project: text(2000).default(""), notes: text(2000).default(""), links: text(1000).default(""),
 };
 export const draftSchema = z.object({ ...draftFields, contactEmail: email });

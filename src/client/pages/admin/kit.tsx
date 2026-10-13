@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Area, Btn, Field, Loading, Modal, Tag, toast } from "../../components/ui";
+import { Area, Btn, Field, Loading, Modal, MoneyField, Tag, toast } from "../../components/ui";
 import { HoldToConfirm } from "../../components/kitchen";
 import { Icon } from "../../components/brand";
 import { api } from "../../lib/api";
@@ -68,7 +68,7 @@ export function FormFields({ fields, value, onChange }: { fields: FieldDef[]; va
     switch (f.type) {
       case "textarea": return <Area key={f.key} label={f.label} name={f.key} rows={f.rows ?? 3} value={v ?? ""} onChange={(e) => set(f.key, e.target.value)} />;
       case "number": return <Field key={f.key} label={f.label} name={f.key} type="number" hint={f.hint} value={v ?? 0} onChange={(e) => set(f.key, Number(e.target.value))} />;
-      case "money": return <Field key={f.key} label={f.label} name={f.key} type="number" hint={f.hint} value={(v ?? 0) / 100} onChange={(e) => set(f.key, Math.round(Number(e.target.value) * 100))} />;
+      case "money": return <MoneyField key={f.key} label={f.label} name={f.key} hint={f.hint} kobo={v ?? 0} onKobo={(k) => set(f.key, k)} />;
       case "bool": return <label key={f.key} className="row gap8 small"><input type="checkbox" checked={!!v} onChange={(e) => set(f.key, e.target.checked ? 1 : 0)} /> {f.label}</label>;
       case "image": return <ImageField key={f.key} label={f.label} hint={f.hint} value={v ?? ""} onChange={(x) => set(f.key, x)} />;
       case "list": return <Area key={f.key} label={`${f.label} (one per line)`} name={f.key} rows={f.rows ?? 3} value={(v ?? []).join("\n")} onChange={(e) => set(f.key, e.target.value.split("\n").map((x) => x.trimStart()).filter(Boolean))} />;

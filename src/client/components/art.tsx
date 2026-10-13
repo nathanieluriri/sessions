@@ -243,3 +243,49 @@ export function LineArt({ kind }: { kind: string }) {
 
 /** Bouncing equaliser bars used in place of a tick in "what's included" lists. */
 export const Eq = () => <span className="eq" aria-hidden><i /><i /><i /></span>;
+
+/** 404 illustration: the needle drops, the record plays, skips and the levels fall silent. */
+export function NotFoundArt() {
+  const grooves = Array.from({ length: 15 }, (_, i) => 72 + i * 6);
+  const bars = [0.55, 0.9, 0.7, 1, 0.6, 0.85, 0.5, 0.75];
+  return (
+    <svg className="nfart" viewBox="0 0 560 420" role="img" aria-label="A record player whose needle skips off the record">
+      <defs>
+        <clipPath id="nf-rec"><circle cx="230" cy="210" r="168" /></clipPath>
+        <linearGradient id="nf-sheen" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0.3" stopColor="#fff" stopOpacity="0" /><stop offset="0.5" stopColor="#fff" stopOpacity="0.1" /><stop offset="0.7" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="236" cy="392" rx="170" ry="12" fill="#0a0a0a" opacity=".08" />
+      <g className="nf-scratch">
+        <g className="nf-disc">
+          <circle cx="230" cy="210" r="168" fill="#0d0d0d" />
+          {grooves.map((r) => <circle key={r} cx="230" cy="210" r={r} fill="none" stroke="#fff" strokeOpacity={r % 4 ? 0.05 : 0.09} />)}
+          <circle cx="230" cy="210" r="60" fill="#65f87c" />
+          <circle cx="230" cy="210" r="60" fill="none" stroke="#0a0a0a" strokeOpacity=".15" strokeWidth="8" />
+          <text x="230" y="214" textAnchor="middle" dominantBaseline="middle" fontSize="40" fontWeight="700" fill="#0a0a0a" letterSpacing="-1">404</text>
+          <text x="230" y="244" textAnchor="middle" fontSize="7.5" fontWeight="600" fill="#0a0a0a" opacity=".7" letterSpacing="2.4">SIDE B</text>
+        </g>
+      </g>
+      <rect x="40" y="20" width="380" height="380" fill="url(#nf-sheen)" clipPath="url(#nf-rec)" />
+      <circle cx="230" cy="210" r="5" fill="var(--surface)" />
+      <g className="nf-levels">
+        {bars.map((h, i) => <rect key={i} className="nf-bar" x={420 + i * 16} y={392 - 92 * h} width="10" height={92 * h} rx="3" fill={i % 3 === 1 ? "#65f87c" : "#0a0a0a"} style={{ animationDelay: `${-i * 0.17}s` }} />)}
+      </g>
+      <g className="nf-notes" fill="none" stroke="#0a0a0a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        {[0, 1, 2].map((i) => (
+          <g key={i} className="nf-note" style={{ animationDelay: `${i * 0.8}s` }}>
+            <g transform={`translate(${318 + i * 18} ${262 - i * 6})`}><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" fill="#0a0a0a" /><circle cx="18" cy="16" r="3" fill="#0a0a0a" /></g>
+          </g>
+        ))}
+      </g>
+      <g className="nf-arm">
+        <path d="M500 38 488 62" stroke="#3a3a37" strokeWidth="16" strokeLinecap="round" />
+        <circle cx="470" cy="70" r="26" fill="#1c1c1c" />
+        <circle cx="470" cy="70" r="10" fill="#4a4a46" />
+        <path d="M470 70 446 250 352 300" fill="none" stroke="#d6d6d1" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="m340 290 22-6 8 20-24 8z" fill="#1c1c1c" />
+      </g>
+    </svg>
+  );
+}

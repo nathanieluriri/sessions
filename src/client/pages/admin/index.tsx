@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { DashShell, Empty, Restricted, Stat, type NavEntry } from "../../components/Dash";
-import { Area, Btn, Field, Loading, Modal, Seg, Tag } from "../../components/ui";
+import { Area, Btn, EmailField, Field, Loading, Modal, NameField, Seg, Tag } from "../../components/ui";
 import { TactileAnchor } from "../../components/kitchen";
 import { Icon } from "../../components/brand";
 import { api } from "../../lib/api";
@@ -12,6 +12,7 @@ import { useCatalog } from "../../lib/catalog";
 import { Availability, BookingDrawer, Bookings, Calendar, Clients } from "./bookings";
 import { Catalogue } from "./catalog";
 import { Website } from "./content";
+import { ProfileForms } from "../../components/ProfileForms";
 
 type Access = { perm?: string; ceo?: boolean };
 const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
@@ -27,6 +28,7 @@ const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "reports", to: "/admin/reports", label: "Reports", title: "Reports", icon: "chart", ceo: true },
   { key: "staff", to: "/admin/staff", label: "Staff", title: "Staff and permissions", icon: "shield", ceo: true },
   { key: "audit", to: "/admin/audit", label: "Audit log", title: "Audit log and email outbox", icon: "receipt", ceo: true },
+  { key: "account", to: "/admin/account", label: "Your account", title: "Your account", icon: "user" },
 ];
 const allowed = (u: User | null, s: Access) => (s.ceo ? u?.role === "ceo" : s.perm ? can(u, s.perm) : true);
 
@@ -237,7 +239,7 @@ function Staff() {
     </table></div>
     <div className="panel small"><b>CEO only:</b> {perms.ceoOnly.join(" · ")}</div>
     {edit && <Modal title={edit.id ? `Access for ${edit.name}` : "Add staff"} onClose={() => setEdit(null)}>
-      {!edit.id && <><Field label="Name" name="sname" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /><Field label="Email" name="semail" type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></>}
+      {!edit.id && <><NameField label="Name" name="sname" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /><EmailField label="Email" name="semail" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></>}
       <Field label="Job title" name="stitle" value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
       <div className="stack gap8">{Object.entries(perms.permissions).map(([k, v]) => <label key={k} className="row gap8 small"><input type="checkbox" checked={edit.permissions.includes(k)} onChange={() => toggle(k)} />{v}</label>)}</div>
       {edit.id && <label className="row gap8 small"><input type="checkbox" checked={edit.active} onChange={(e) => setEdit({ ...edit, active: e.target.checked })} /> Account active</label>}
@@ -266,5 +268,5 @@ function Audit() {
 
 const PAGES: Record<string, () => ReactNode> = {
   "": Overview, calendar: Calendar, bookings: Bookings, clients: Clients, availability: Availability, catalogue: Catalogue, enquiries: Enquiries,
-  website: Website, payments: Payments, reports: Reports, staff: Staff, audit: Audit,
+  website: Website, payments: Payments, reports: Reports, staff: Staff, audit: Audit, account: ProfileForms,
 };

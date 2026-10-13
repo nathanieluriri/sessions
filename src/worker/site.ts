@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { contentRepo, settingsRepo } from "./repositories/settings";
 import { catalogRepo } from "./repositories/catalog";
 
-const PUBLIC_PATHS = ["/", "/services", "/studio", "/portfolio", "/packages", "/about", "/contact", "/faq", "/quote", "/book", "/privacy", "/terms"];
+const PUBLIC_PATHS = ["/", "/services", "/studio", "/portfolio", "/packages", "/about", "/contact", "/faq", "/quote", "/book", "/privacy", "/terms", "/cookies"];
 const PRIVATE_PREFIXES = ["/admin", "/account", "/pay", "/book/", "/login", "/register", "/staff", "/forgot-password", "/reset-password", "/verify-email"];
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -72,9 +72,8 @@ export async function page(request: Request, env: Env) {
     content.gsc_verification ? `<meta name="google-site-verification" content="${esc(content.gsc_verification)}">` : "",
     path === "/" || path === "/contact" ? `<script type="application/ld+json">${JSON.stringify(business).replace(/</g, "\\u003c")}</script>` : "",
     content.analytics_cf ? `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${esc(JSON.stringify({ token: content.analytics_cf }))}'></script>` : "",
-    /^G-[A-Z0-9]+$/.test(content.analytics_ga ?? "")
-      ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${content.analytics_ga}"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","${content.analytics_ga}")</script>`
-      : "",
+    // Google Analytics sets cookies, so the page only loads it once the visitor accepts them.
+    /^G-[A-Z0-9]+$/.test(content.analytics_ga ?? "") ? `<script>window.PSYCH_GA="${content.analytics_ga}"</script>` : "",
   ].filter(Boolean).join("");
 
   const out = new HTMLRewriter()

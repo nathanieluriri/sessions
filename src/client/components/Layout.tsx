@@ -7,6 +7,8 @@ import { useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { hm } from "../lib/format";
 import { prefersStill, useScrollFrame } from "../lib/motion";
 import { introPending } from "./Intro";
+import { openCookieSettings } from "../lib/consent";
+import { Badge } from "./pill";
 
 /** Page, label and the landing section the link scrolls to when on the home page. */
 const LINKS: [string, string, string][] = [["/about", "About", "about"], ["/services", "Services", "services"], ["/studio", "Studio", "studio"], ["/portfolio", "Portfolio", "portfolio"], ["/packages", "Pricing", "pricing"], ["/contact", "Contact", "contact"]];
@@ -63,6 +65,8 @@ export function Nav() {
   const spot = useRef<HTMLElement | null>(null);
   const loc = useLocation();
   const landing = loc.pathname === "/";
+  // Pages outside the nav (booking steps, quote, FAQ, legal) drop the link pill so it does not crowd the page.
+  const idle = !landing && !LINKS.some(([to]) => loc.pathname === to || loc.pathname.startsWith(`${to}/`));
   const [enter] = useState(() => { const first = !navEntered; navEntered = true; return first; });
   const [late] = useState(() => landing && introPending());
   const home = user ? (user.role === "client" ? "/account" : "/admin") : "/login";
@@ -97,13 +101,13 @@ export function Nav() {
       <header className={`nav ${enter ? "enter" : ""}`} style={late ? ({ "--nd": "2.2s" } as CSSProperties) : undefined}>
         <div className="navin">
           <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home" onClick={landing ? jumpTo("") : undefined}><Mark tone="neon" size={30} /><span>Psych Records</span></Link>
-          <div className="npill nlinks" ref={links} onMouseLeave={leave}>
+          {!idle && <div className="npill nlinks" ref={links} onMouseLeave={leave}>
             <span className={`nglide nhover ${hov.on ? "on" : ""}`} style={glideStyle(hov)} aria-hidden />
             <span className={`nglide ${act.on ? "on" : ""}`} style={glideStyle(act)} aria-hidden />
             {LINKS.map(([to, l, sec]) => landing
               ? <a key={to} href={`#${sec}`} data-sec={sec} onClick={jumpTo(sec)} {...hoverProps}>{l}</a>
               : <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")} {...hoverProps}>{l}</NavLink>)}
-          </div>
+          </div>}
           <div className="nright">
             <TactileLink to={home} variant="light" size="md" className="nlogin">{user ? "My account" : "Log in"}</TactileLink>
             <TactileLink to="/book" variant="neon" size="md"><span>Book<span className="nlong"> a session</span></span></TactileLink>
@@ -175,7 +179,7 @@ export function Footer() {
         </div>
         <div className="fbar">
           <span>© {year} {c.legal_name ?? "Psych Records Entertainment Limited"}</span>
-          <div><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/login">Client login</Link><Link to="/staff/login">Staff sign in</Link></div>
+          <div><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/cookies">Cookies</Link><button type="button" className="fbarbtn" onClick={openCookieSettings}>Cookie settings</button><Link to="/login">Client login</Link><Link to="/staff/login">Staff sign in</Link></div>
         </div>
       </div>
     </footer>
@@ -184,14 +188,24 @@ export function Footer() {
 
 export function PublicLayout({ children, title, bare }: { children: ReactNode; title?: string; bare?: boolean }) {
   usePageTitle(title);
-  return <>{!bare && <Announcement />}<Nav /><main>{children}</main><Footer /></>;
+  return <><a href="#main" className="skiplink">Skip to content</a>{!bare && <Announcement />}<Nav /><main id="main" tabIndex={-1}>{children}</main><Footer /></>;
+}
+
+/** Heading block shared by every section on the inner pages: title, a short line and an optional action. */
+export function SectionHead({ title, sub, action }: { title: ReactNode; sub?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="shead">
+      <div className="stack gap8"><h2 className="h2">{title}</h2>{sub && <p className="muted">{sub}</p>}</div>
+      {action}
+    </div>
+  );
 }
 
 export function PageHero({ title, sub, kicker, children }: { title: string; sub?: string; kicker?: string; children?: ReactNode }) {
   return (
     <section className="pagehero">
       <div className="wrap stack gap16">
-        {kicker && <span className="mono muted">{kicker}</span>}
+        {kicker && <Badge>{kicker}</Badge>}
         <h1 className="display" style={{ fontSize: "clamp(36px,4.6vw,64px)", maxWidth: 960 }}>{title}</h1>
         {sub && <p className="muted" style={{ fontSize: 18, maxWidth: 660 }}>{sub}</p>}
         {children}

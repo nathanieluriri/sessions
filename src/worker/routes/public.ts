@@ -6,7 +6,7 @@ import { contentRepo, settingsRepo } from "../repositories/settings";
 import { availabilityService, loadRules } from "../services/availability";
 import { enquiryService } from "../services/admin";
 import { collectionsService } from "../services/collections";
-import { body, email, required, text } from "../lib/validate";
+import { body, email, personName, phone, required, text } from "../lib/validate";
 import { studioNow } from "../lib/time";
 
 const r = new Hono<AppEnv>();
@@ -42,7 +42,7 @@ r.get("/availability/day", async (c) => c.json(await availabilityService.slots(c
 
 r.post("/enquiries", async (c) => {
   const b = await body(c, z.object({
-    name: required("Full name"), email, phone: text(40).default(""), topic: text(60).default("General enquiry"), message: required("Message", 4000),
+    name: personName(), email, phone: phone("Phone number", true).default(""), topic: text(60).default("General enquiry"), message: required("Message", 4000),
     kind: z.enum(["general", "quote"]).default("general"), service: text(120).default(""), budget: text(80).default(""), timeline: text(120).default(""), links: text(1000).default(""),
     website: z.string().max(0, "Spam check failed.").optional(), startedAt: z.number(),
   }));

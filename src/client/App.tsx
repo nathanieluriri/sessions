@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { AuthProvider } from "./lib/auth";
 import { Toaster } from "./components/ui";
+import { CookieBanner } from "./components/CookieBanner";
 
 const account = () => import("./pages/account");
 const AccountHome = lazy(() => account().then((m) => ({ default: m.AccountHome })));
@@ -19,8 +20,10 @@ import { Home } from "./pages/home";
 import { BookCheckout, BookConfirmed, BookDetails, BookPackage, BookRequested, BookReview, BookService, BookTime, BookVerify, DemoPay, PayBooking } from "./pages/book";
 import { ForgotPassword, Login, Register, ResetPassword, StaffLogin, VerifyEmail } from "./pages/auth";
 import { Loading } from "./components/ui";
-import { PageHero, PublicLayout } from "./components/Layout";
+import { PublicLayout } from "./components/Layout";
 import { TactileLink } from "./components/kitchen";
+import { Badge } from "./components/pill";
+import { NotFoundArt } from "./components/art";
 
 function ScrollTop() {
   const { pathname, hash } = useLocation();
@@ -42,7 +45,17 @@ function ScrollTop() {
 const Confirmed = () => <BookConfirmed id={useParams().id ?? ""} />;
 const NotFound = () => (
   <PublicLayout title="Page not found">
-    <PageHero title="Page not found." sub="The page you wanted is not here. Head back home or book a session."><div><TactileLink to="/" size="lg">Back to home</TactileLink></div></PageHero>
+    <section className="pagehero">
+      <div className="wrap nfgrid">
+        <div className="stack gap20" style={{ alignItems: "flex-start" }}>
+          <Badge>Error 404</Badge>
+          <h1 className="display" style={{ fontSize: "clamp(40px,5vw,68px)" }}>This page skipped a beat.</h1>
+          <p className="muted" style={{ fontSize: 18, maxWidth: 520 }}>The page you wanted is not on this record. It may have moved, or the link has a typo.</p>
+          <div className="row gap12 wrapflex"><TactileLink to="/" size="lg">Back to home</TactileLink><TactileLink to="/book" variant="light" size="lg">Book a session</TactileLink></div>
+        </div>
+        <NotFoundArt />
+      </div>
+    </section>
   </PublicLayout>
 );
 
@@ -65,6 +78,7 @@ export default function App() {
           <Route path="/faq" element={<Faq />} />
           <Route path="/privacy" element={<Legal slug="privacy" />} />
           <Route path="/terms" element={<Legal slug="terms" />} />
+          <Route path="/cookies" element={<Legal slug="cookies" />} />
           <Route path="/book" element={<BookService />} />
           <Route path="/book/package" element={<BookPackage />} />
           <Route path="/book/time" element={<BookTime />} />
@@ -92,6 +106,7 @@ export default function App() {
         </Routes>
         </Suspense>
         <Toaster />
+        <CookieBanner />
       </BrowserRouter>
     </AuthProvider>
   );

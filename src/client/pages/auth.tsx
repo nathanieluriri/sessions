@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Mark, Waveform } from "../components/brand";
-import { Btn, ErrorBox, Field } from "../components/ui";
+import { Btn, EmailField, ErrorBox, Field, NameField } from "../components/ui";
+import { PhoneField } from "../components/PhoneField";
 import { TactileLink } from "../components/kitchen";
 import { PHOTOS } from "../lib/catalog";
 import { api } from "../lib/api";
@@ -31,7 +32,7 @@ function AuthShell({ photo, quote, by, title, sub, children }: { photo: string; 
 function useForm<T extends Record<string, string>>(init: T) {
   const [f, setF] = useState(init);
   const bind = (k: keyof T) => ({ name: String(k), value: f[k], onChange: (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value }) });
-  return [f, bind] as const;
+  return [f, bind, setF] as const;
 }
 
 function useSubmit(fn: () => Promise<void>) {
@@ -56,7 +57,7 @@ function LoginForm({ staff }: { staff?: boolean }) {
   });
   return (
     <form className="stack gap16" onSubmit={submit}>
-      <Field label="Email" type="email" autoComplete="email" required {...bind("email")} />
+      <EmailField label="Email" required {...bind("email")} />
       <Field label="Password" type="password" autoComplete="current-password" required {...bind("password")} />
       <Link to="/forgot-password" className="small" style={{ color: "var(--brand)", fontWeight: 500 }}>Forgot password?</Link>
       <ErrorBox error={error} />
@@ -83,7 +84,7 @@ export function StaffLogin() {
 }
 
 export function Register() {
-  const [f, bind] = useForm({ name: "", email: "", phone: "", password: "", confirmPassword: "" });
+  const [f, bind, setF] = useForm({ name: "", email: "", phone: "", password: "", confirmPassword: "" });
   const { setUser } = useAuth();
   const nav = useNavigate();
   const { error, busy, submit } = useSubmit(async () => {
@@ -94,9 +95,9 @@ export function Register() {
   return (
     <AuthShell photo={PHOTOS.performer} quote="Walk in ready, walk out with the record, the video or the shoot." by="Psych Records Entertainment" title="Create your account." sub="Manage bookings, payments and receipts in one place.">
       <form className="stack gap16" onSubmit={submit}>
-        <Field label="Full name" autoComplete="name" required {...bind("name")} />
-        <Field label="Email" type="email" autoComplete="email" required {...bind("email")} />
-        <Field label="Phone number" autoComplete="tel" required {...bind("phone")} />
+        <NameField label="Full name" required {...bind("name")} />
+        <EmailField label="Email" required {...bind("email")} />
+        <PhoneField label="Phone number" name="phone" required value={f.phone} onChange={(v) => setF({ ...f, phone: v })} />
         <Field label="Password" type="password" autoComplete="new-password" hint="At least 8 characters, with a number" required {...bind("password")} />
         <Field label="Confirm password" type="password" autoComplete="new-password" required {...bind("confirmPassword")} />
         <ErrorBox error={error} />
@@ -115,7 +116,7 @@ export function ForgotPassword() {
     <AuthShell photo={PHOTOS.voiceover} quote="Locked out? We will get you back in." by="Psych Records Entertainment" title="Reset your password." sub="Enter your email and we will send a reset link that works for one hour.">
       {sent ? <div className="panel">If an account exists for {f.email}, a reset link is on its way.</div> : (
         <form className="stack gap16" onSubmit={submit}>
-          <Field label="Email" type="email" required {...bind("email")} />
+          <EmailField label="Email" required {...bind("email")} />
           <ErrorBox error={error} />
           <Btn arrow block disabled={busy}>Send reset link</Btn>
         </form>
