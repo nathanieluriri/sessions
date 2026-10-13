@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { PublicLayout, PageHero, hoursSummary, waLink } from "../components/Layout";
+import { PublicLayout, PageHero, SectionHead, hoursSummary, waLink } from "../components/Layout";
 import { Icon, Socials } from "../components/brand";
 import { Eq } from "../components/art";
-import { Area, Btn, ErrorBox, Field, Loading } from "../components/ui";
+import { Area, Btn, EmailField, ErrorBox, Field, Loading, NameField } from "../components/ui";
+import { PhoneField } from "../components/PhoneField";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
 import { RichText } from "../components/content";
 import { PHOTOS, depositOf, needsApproval, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
@@ -82,13 +83,13 @@ export function Packages() {
             if (!list.length) return null;
             return (
               <div key={c.slug} id={c.slug} className="stack gap20" style={{ scrollMarginTop: 100 }}>
-                <div className="stack gap4"><h2 className="h2">{c.name}</h2><p className="muted">{c.blurb}</p></div>
+                <SectionHead title={c.name} sub={c.blurb} />
                 <div className="grid cols-3">{list.map((p) => <PackageCard key={p.id} p={p} cat={cat} />)}</div>
               </div>
             );
           })}
           <div className="stack gap20 pkgmore" id="rooms">
-            <div className="stack gap4"><h2 className="h2">Rooms and extra time</h2><p className="muted">Every package includes its room and crew. Need longer? Add time at the room’s hourly rate.</p></div>
+            <SectionHead title="Rooms and extra time" sub="Every package includes its room and crew. Need longer? Add time at the room’s hourly rate." />
             <div className="grid cols-4">{cat.rooms.map((r) => (
               <Link key={r.id} to={`/studio#${r.slug}`} className="rate">
                 <span className="rate-img" style={{ backgroundImage: `url(${r.image_url})` }} />
@@ -98,7 +99,7 @@ export function Packages() {
             ))}</div>
           </div>
           {cat.extras.length > 0 && <div className="stack gap20" id="extras">
-            <div className="stack gap4"><h2 className="h2">Extras</h2><p className="muted">Add any of these when you book.</p></div>
+            <SectionHead title="Extras" sub="Add any of these when you book." />
             <div className="grid cols-3">{cat.extras.map((e) => (
               <div key={e.slug} className="rate extra">
                 <span className="stack gap4"><b>{e.name}</b><span className="small muted">{cat.categories.find((c) => c.slug === e.category)?.name ?? "Any session"}</span></span>
@@ -113,7 +114,7 @@ export function Packages() {
         </>}
       </div></section>
       <section className="section" style={{ background: "var(--surface)" }} id="policies" ref={ref}><div className="wrap stack gap32">
-        <h2 className="h1">Booking policies</h2>
+        <SectionHead title="Booking policies" sub="The short version of how payments, changes and sessions work." />
         <div className="grid cols-3 policies">{booking.map((p) => <div key={p.slug} className="card stack gap8"><h3 className="h4">{p.title}</h3><p className="muted">{p.body}</p></div>)}</div>
         {booking.length > 0 && <span className="mono faint">Last updated {new Date(Math.max(...booking.map((p) => Date.parse(p.updated_at)))).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>}
       </div></section>
@@ -191,8 +192,8 @@ export function Contact() {
           ) : (
             <form className="card stack gap20" onSubmit={submit} style={{ padding: 40 }}>
               <h2 className="h3">Send an enquiry</h2>
-              <div className="grid cols-2" style={{ gap: 16 }}><Field label="Full name" name="name" required value={f.name} onChange={set("name")} /><Field label="Email" name="email" type="email" required value={f.email} onChange={set("email")} /></div>
-              <div className="grid cols-2" style={{ gap: 16 }}><Field label="Phone number" name="phone" value={f.phone} onChange={set("phone")} placeholder="+234 803 000 0000" /><ServiceSelect cat={cat} value={f.service} onChange={(v) => setF({ ...f, service: v })} /></div>
+              <div className="grid cols-2" style={{ gap: 16 }}><NameField label="Full name" name="name" required value={f.name} onChange={set("name")} /><EmailField label="Email" name="email" required value={f.email} onChange={set("email")} /></div>
+              <div className="grid cols-2" style={{ gap: 16 }}><PhoneField label="Phone number" name="phone" hint="Optional" value={f.phone} onChange={(v) => setF({ ...f, phone: v })} /><ServiceSelect cat={cat} value={f.service} onChange={(v) => setF({ ...f, service: v })} /></div>
               <Area label="Message" name="message" required value={f.message} onChange={set("message")} placeholder="Tell us about your project, the dates you have in mind and how many people are coming." />
               <Honeypot value={f.website} onChange={set("website")} />
               <ErrorBox error={error} />
@@ -221,8 +222,8 @@ export function Quote() {
           <div className="card stack gap12" style={{ padding: 40 }}><span className="tag success" style={{ alignSelf: "flex-start" }}>Request sent</span><h2 className="h3">Thanks, {f.name.split(" ")[0]}.</h2><p className="muted">We have your brief and a copy is in your inbox. Expect a quote within one working day.</p><div><TactileLink to="/portfolio" variant="light" size="lg">See recent work</TactileLink></div></div>
         ) : (
           <form className="card stack gap20" onSubmit={submit} style={{ padding: 40 }}>
-            <div className="grid cols-2" style={{ gap: 16 }}><Field label="Full name" name="name" required value={f.name} onChange={set("name")} /><Field label="Email" name="email" type="email" required value={f.email} onChange={set("email")} /></div>
-            <div className="grid cols-2" style={{ gap: 16 }}><Field label="Phone number" name="phone" value={f.phone} onChange={set("phone")} /><ServiceSelect cat={cat} value={f.service} onChange={(v) => setF({ ...f, service: v })} /></div>
+            <div className="grid cols-2" style={{ gap: 16 }}><NameField label="Full name" name="name" required value={f.name} onChange={set("name")} /><EmailField label="Email" name="email" required value={f.email} onChange={set("email")} /></div>
+            <div className="grid cols-2" style={{ gap: 16 }}><PhoneField label="Phone number" name="phone" hint="Optional" value={f.phone} onChange={(v) => setF({ ...f, phone: v })} /><ServiceSelect cat={cat} value={f.service} onChange={(v) => setF({ ...f, service: v })} /></div>
             <Area label="Project details" name="message" required rows={6} value={f.message} onChange={set("message")} placeholder="What are you making, where, and what should the final result look or sound like?" />
             <div className="field"><label>Budget</label><div className="row gap8 wrapflex">{BUDGETS.map((b) => <button type="button" key={b} className={`chip ${f.budget === b ? "on" : ""}`} onClick={() => setF({ ...f, budget: b })}>{b}</button>)}</div></div>
             <div className="grid cols-2" style={{ gap: 16 }}>
@@ -263,11 +264,37 @@ export function Faq() {
   );
 }
 
-export function Legal({ slug }: { slug: "privacy" | "terms" }) {
+const COOKIE_POLICY = `Cookies are small files a website keeps in your browser. This is how this site uses them, and the choices you have.
+
+## Essential
+One cookie, sessions_sid, keeps you signed in after you log in. It holds a random session ID, is only sent to this site and lasts up to 14 days or until you log out. The site cannot work without it, so it does not need your consent.
+
+We also keep a few settings in your browser storage. They never leave your device:
+- Your cookie choice.
+- A booking you have started but not finished, so you can pick it up again.
+- Whether you have seen the intro and closed an announcement.
+
+## Analytics
+If the studio turns on Google Analytics and you choose Accept all, it sets cookies to count visits and show which pages are useful. We do not use them for advertising. If you choose Essential only, Google Analytics does not load.
+
+Cloudflare Web Analytics, if used, counts visits without cookies.
+
+## Payments
+When you pay, Paystack's checkout may set its own cookies to process the payment safely. Paystack's cookie policy applies there.
+
+## Changing your mind
+Use Cookie settings at the bottom of any page to change your choice, or clear cookies in your browser settings. Questions can go to the email address on our Contact page.`;
+
+const BUILT_IN: Record<string, { title: string; body: string; updated_at: string }> = {
+  cookies: { title: "Cookie policy", body: COOKIE_POLICY, updated_at: "2026-10-13T00:00:00Z" },
+};
+const LEGAL_TITLE = { privacy: "Privacy policy", terms: "Terms of service", cookies: "Cookie policy" };
+
+export function Legal({ slug }: { slug: "privacy" | "terms" | "cookies" }) {
   const site = useContent();
-  const p = site?.policies.find((x) => x.slug === slug);
+  const p = site?.policies.find((x) => x.slug === slug) ?? (site ? BUILT_IN[slug] : undefined);
   return (
-    <PublicLayout title={p?.title ?? (slug === "privacy" ? "Privacy policy" : "Terms of service")}>
+    <PublicLayout title={p?.title ?? LEGAL_TITLE[slug]}>
       <PageHero kicker="Legal" title={p?.title ?? ""} sub={p ? `Last updated ${new Date(p.updated_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : ""} />
       <section className="section" style={{ paddingTop: 40 }}><div className="wrap" style={{ maxWidth: 860 }}>{!p ? <Loading /> : <RichText text={p.body} />}</div></section>
     </PublicLayout>

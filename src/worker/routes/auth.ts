@@ -4,7 +4,7 @@ import { setCookie, deleteCookie, getCookie } from "hono/cookie";
 import type { AppEnv } from "../env";
 import { authService, SESSION_DAYS } from "../services/auth";
 import { usersRepo } from "../repositories/users";
-import { body, email, password, required, text } from "../lib/validate";
+import { body, email, password, personName, phone, required, text } from "../lib/validate";
 import { COOKIE, requireUser } from "../middleware/auth";
 import { badRequest } from "../lib/errors";
 
@@ -16,7 +16,7 @@ const setSession = (c: any, token: string) =>
 r.get("/me", (c) => c.json({ user: c.get("user") }));
 
 r.post("/register", async (c) => {
-  const b = await body(c, z.object({ name: required("Full name"), email, phone: required("Phone number", 40), password, confirmPassword: z.string() }));
+  const b = await body(c, z.object({ name: personName(), email, phone: phone(), password, confirmPassword: z.string() }));
   if (b.password !== b.confirmPassword) throw badRequest("Passwords do not match.");
   const { user, token } = await authService.register(c.env, b);
   setSession(c, token);
@@ -62,8 +62,9 @@ r.post("/reset-password", async (c) => {
 });
 
 r.put("/profile", requireUser, async (c) => {
-  const b = await body(c, z.object({ name: required("Full name"), phone: required("Phone number", 40) }));
-  await usersRepo.updateProfile(c.env.DB, c.get("user")!.id, b);
+  const u = c.get("user")!;
+  const b = await body(c, z.object({ name: personName(), phone: phone("Phone number", u.role !== "client") }));
+  await usersRepo.updateProfile(c.env.DB, u.id, b);
   return c.json({ ok: true });
 });
 

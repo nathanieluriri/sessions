@@ -54,7 +54,7 @@ npm run dev            # builds the app and starts wrangler dev on http://localh
 
 Checks: `npm run typecheck` and `npm test`.
 
-Seeded accounts (password `password`, change it after the first deploy):
+Seeded accounts (password `password`, change it after the first deploy in the dashboard under **Your account**):
 
 | Role | Email |
 | --- | --- |
@@ -89,3 +89,9 @@ npm run demo
 ```
 
 This records `demo/psych-records-demo.mp4` with Playwright and ffmpeg. Set `CHROME_PATH` to use a specific Chromium build.
+
+## Third-party assets
+
+- Reddit Sans and Reddit Mono, under the SIL Open Font License (`src/client/fonts/OFL.txt`).
+- Country flags on Windows come from the Twemoji Country Flags font in `country-flag-emoji-polyfill`. The flag artwork is Twemoji by Twitter, used under CC BY 4.0.
+- Phone numbers are checked and formatted with `libphonenumber-js` (MIT).

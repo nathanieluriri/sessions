@@ -1,9 +1,9 @@
 import { Link, useParams } from "react-router-dom";
-import { PublicLayout, PageHero, waLink } from "../components/Layout";
+import { PublicLayout, PageHero, SectionHead, waLink } from "../components/Layout";
 import { Icon } from "../components/brand";
 import { Eq } from "../components/art";
 import { Loading } from "../components/ui";
-import { TactileAnchor, TactileLink } from "../components/kitchen";
+import { Tactile, TactileAnchor, TactileLink } from "../components/kitchen";
 import { PackageCard, useStartBooking } from "./public";
 import { WorkCard } from "./portfolio";
 import { packagesFor, useCatalog, useContent, type Service } from "../lib/catalog";
@@ -15,7 +15,7 @@ export function ServiceTile({ s }: { s: Service }) {
       <span className="body">
         <b>{s.name}</b>
         <span className="d">{s.description}</span>
-        <span className="row between gap8"><span className="mono">{s.price_label}</span><span className="go">Details <Icon name="arrow" size={16} /></span></span>
+        <span className="svfoot"><span className="svprice">{s.price_label}</span><span className="go">Details <Icon name="arrow" size={16} /></span></span>
       </span>
     </Link>
   );
@@ -34,10 +34,7 @@ export function Services() {
         return (
           <section key={c.slug} id={c.slug} className="section catsec" style={{ background: i % 2 ? "var(--surface)" : undefined }}>
             <div className="wrap stack gap32">
-              <div className="row between wrapflex gap16" style={{ alignItems: "flex-end" }}>
-                <div className="stack gap8" style={{ maxWidth: 640 }}><span className="mono muted">{String(i + 1).padStart(2, "0")} · {list.length} services</span><h2 className="h1">{c.name}</h2><p className="muted" style={{ fontSize: 17 }}>{c.blurb}</p></div>
-                <TactileLink to={`/packages#${c.slug}`} variant="light" size="lg">{c.name.split(" ")[0]} pricing</TactileLink>
-              </div>
+              <SectionHead title={c.name} sub={c.blurb} action={<TactileLink to={`/packages#${c.slug}`} variant="light" size="lg">{c.name.split(" ")[0]} pricing <Icon name="arrow" size={16} /></TactileLink>} />
               <div className="grid cols-4 svgrid">{list.map((s) => <ServiceTile key={s.id} s={s} />)}</div>
             </div>
           </section>
@@ -86,20 +83,20 @@ export function ServiceDetail() {
         </div>
       </section>
       <section className="section" style={{ paddingTop: 56 }}><div className="wrap grid" style={{ gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 48, alignItems: "start" }} data-stack>
-        <div className="stack gap16"><h2 className="h3">How it works</h2><p style={{ fontSize: 17, lineHeight: 1.65 }}>{s.details || s.description}</p></div>
+        <div className="stack gap16"><h2 className="h2">How it works</h2><p style={{ fontSize: 17, lineHeight: 1.65 }}>{s.details || s.description}</p></div>
         {s.deliverables.length > 0 && <div className="card stack gap16"><h3 className="h4">What you get</h3><ul className="ticklist">{s.deliverables.map((d) => <li key={d}><Eq />{d}</li>)}</ul></div>}
       </div></section>
       {s.gallery.length > 0 && <section className="section" style={{ paddingTop: 0 }}><div className="wrap gallery">{s.gallery.map((g) => <img key={g} src={g} alt={`${s.name} at the studio`} loading="lazy" />)}</div></section>}
       {packages.length > 0 && (
-        <section className="section" id="packages" style={{ background: "var(--surface)", scrollMarginTop: 80 }}><div className="wrap stack gap24">
-          <div className="stack gap8"><h2 className="h2">Packages for {category?.name.toLowerCase()}</h2><p className="muted">Pick a package to see live availability. Deposits and approvals are shown on each card.</p></div>
+        <section className="section" id="packages" style={{ background: "var(--surface)", scrollMarginTop: 80 }}><div className="wrap stack gap32">
+          <SectionHead title={`Packages for ${category?.name.toLowerCase()}`} sub="Pick a package to see live availability. Deposits and approvals are shown on each card."
+            action={bookable ? <Tactile variant="light" size="lg" onClick={() => start({ serviceSlug: s.slug })}>Compare in the booking flow <Icon name="arrow" size={16} /></Tactile> : undefined} />
           <div className="grid cols-3">{packages.map((p) => <PackageCard key={p.id} p={p} cat={cat} service={s} />)}</div>
-          {bookable && <div><button className="link" onClick={() => start({ serviceSlug: s.slug })}>Compare all packages in the booking flow →</button></div>}
         </div></section>
       )}
       {work.length > 0 && (
-        <section className="section"><div className="wrap stack gap24">
-          <div className="row between wrapflex gap12"><h2 className="h2">Recent work</h2><TactileLink to="/portfolio" variant="light" size="md">Full portfolio</TactileLink></div>
+        <section className="section"><div className="wrap stack gap32">
+          <SectionHead title="Recent work" sub={`${category?.name} made in our rooms.`} action={<TactileLink to="/portfolio" variant="light" size="lg">Full portfolio <Icon name="arrow" size={16} /></TactileLink>} />
           <div className="grid cols-3">{work.map((w) => <WorkCard key={w.id} w={w} />)}</div>
         </div></section>
       )}

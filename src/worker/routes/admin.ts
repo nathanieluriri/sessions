@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { requireCeo, requirePermission, requireStaff } from "../middleware/auth";
-import { body, date, minute, required, text, email } from "../lib/validate";
+import { body, date, minute, personName, phone, required, text, email } from "../lib/validate";
 import { bookingService } from "../services/bookings";
 import { availabilitySettingsService, catalogService, clientService, contentService, dashboardService, enquiryService, reportService, staffService } from "../services/admin";
 import { collectionFor, collectionsService } from "../services/collections";
@@ -56,7 +56,7 @@ r.post("/bookings", requirePermission("manage_bookings"), async (c) => {
   return c.json({ id: booking.id, ref: booking.ref });
 });
 r.put("/bookings/:id/details", requirePermission("update_booking_details"), async (c) => {
-  const b = await body(c, z.object({ people: z.number().int().min(1).max(200), artist_name: required("Artist name"), contact_phone: required("Phone", 40), notes: text(2000), project: text(2000).default(""), reference_links: text(1000).default("") }));
+  const b = await body(c, z.object({ people: z.number().int().min(1).max(200), artist_name: required("Artist name"), contact_phone: phone("Phone"), notes: text(2000), project: text(2000).default(""), reference_links: text(1000).default("") }));
   const bk = await bookingsRepo.byId(c.env.DB, c.req.param("id"));
   if (!bk) throw badRequest("Booking not found.");
   await bookingsRepo.updateDetails(c.env.DB, bk.id, b);
@@ -218,7 +218,7 @@ ceo.get("/reports.csv", async (c) => {
 });
 ceo.get("/staff", async (c) => c.json(await staffService.list(c.env)));
 ceo.post("/staff", async (c) => {
-  const b = await body(c, z.object({ name: required("Name"), email, title: text(60).default(""), permissions: z.array(z.string()) }));
+  const b = await body(c, z.object({ name: personName("Name"), email, title: text(60).default(""), permissions: z.array(z.string()) }));
   await staffService.create(c.env, actor(c), b);
   return c.json(ok);
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Area, Btn, Field, Loading, Modal, Seg, Tag } from "../../components/ui";
+import { Area, Btn, Field, Loading, Modal, MoneyField, Seg, Tag } from "../../components/ui";
 import { HoldToConfirm } from "../../components/kitchen";
 import { api } from "../../lib/api";
 import { loadCatalog } from "../../lib/catalog";
@@ -31,7 +31,7 @@ export function Catalogue() {
       blank={{ name: "", kind: "", description: "", image_url: "", capacity: 6, hourly_kobo: 2000000, features: [], active: 1 }}
       fields={[
         { key: "name", label: "Name" }, { key: "kind", label: "Type", hint: "For example: Recording room and control room" }, { key: "description", label: "Description", type: "textarea" },
-        { key: "image_url", label: "Photo", type: "image" }, { key: "capacity", label: "Maximum people", type: "number" }, { key: "hourly_kobo", label: "Extra hour rate (₦)", type: "money" },
+        { key: "image_url", label: "Photo", type: "image" }, { key: "capacity", label: "Maximum people", type: "number" }, { key: "hourly_kobo", label: "Extra hour rate", type: "money" },
         { key: "features", label: "Features", type: "list" }, { key: "active", label: "Open for bookings", type: "bool" },
       ]}
       row={(r) => <div className="row gap12"><span className="rowthumb" style={{ backgroundImage: `url(${r.image_url})` }} /><div><b>{r.name}</b><div className="caption">{r.kind} · up to {r.capacity} · {naira(r.hourly_kobo)} per extra hour</div></div></div>} />}
@@ -40,7 +40,7 @@ export function Catalogue() {
       row={(c) => <div><b>{c.name}</b><div className="caption">{c.blurb}</div></div>} />}
     {tab === "extras" && <CollectionEditor name="extras" noun="extra" sortable={false} intro={<span className="small muted">Add-ons clients can tick at checkout. Leave the category empty to offer it everywhere.</span>}
       blank={{ name: "", price_kobo: 0, category: "", active: 1 }}
-      fields={[{ key: "name", label: "Name" }, { key: "price_kobo", label: "Price (₦)", type: "money" }, { key: "category", label: "Category", type: "select", options: [["", "Every category"], ...catOptions] }, { key: "active", label: "Offered at checkout", type: "bool" }]}
+      fields={[{ key: "name", label: "Name" }, { key: "price_kobo", label: "Price", type: "money" }, { key: "category", label: "Category", type: "select", options: [["", "Every category"], ...catOptions] }, { key: "active", label: "Offered at checkout", type: "bool" }]}
       row={(e) => <div><b>{e.name}</b><div className="caption">{naira(e.price_kobo)} · {d.categories.find((c: any) => c.slug === e.category)?.name ?? "Every category"}</div></div>} />}
     {tab === "rules" && <Rules rules={d.rules} reload={reload} />}
   </>;
@@ -90,7 +90,7 @@ function PackagesTab({ d, reload }: { d: any; reload: () => void }) {
         <div className="field"><label>Pricing</label><Seg value={edit.pricing} onChange={(v) => setEdit({ ...edit, pricing: v })} options={[["fixed", "Fixed price, bookable online"], ["quote", "Priced by quote"]]} /></div>
         {edit.pricing === "fixed" ? <>
           <div className="grid cols-2" style={{ gap: 12 }}>
-            <Field label="Price (₦)" name="price" type="number" value={edit.priceKobo / 100} onChange={(e) => setEdit({ ...edit, priceKobo: Math.round(Number(e.target.value) * 100) })} />
+            <MoneyField label="Price" name="price" kobo={edit.priceKobo} onKobo={(k) => setEdit({ ...edit, priceKobo: k })} />
             <Field label="Duration (minutes)" name="dur" type="number" value={edit.durationMin} onChange={(e) => setEdit({ ...edit, durationMin: Number(e.target.value) })} />
           </div>
           <div className="field"><label>Deposit</label>

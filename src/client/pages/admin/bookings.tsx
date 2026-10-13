@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Empty, SlotPicker } from "../../components/Dash";
-import { Area, Btn, ErrorBox, Field, Loading, Modal, Seg, Tag, toast } from "../../components/ui";
+import { Area, Btn, EmailField, ErrorBox, Field, Loading, Modal, NameField, Seg, Tag, toast } from "../../components/ui";
+import { PhoneField } from "../../components/PhoneField";
 import { HoldToConfirm, TactileAnchor } from "../../components/kitchen";
 import { api } from "../../lib/api";
 import { can, useAuth, type User } from "../../lib/auth";
@@ -179,7 +180,7 @@ export function BookingDrawer({ id, user, onClose, onChange }: { id: string; use
       </div>}
       {mode === "edit" && <div className="stack gap12">
         <Field label="Artist or project" name="artist_name" value={f.artist_name} onChange={(e) => setF({ ...f, artist_name: e.target.value })} />
-        <div className="grid cols-2" style={{ gap: 12 }}><Field label="People" name="people" type="number" value={f.people} onChange={(e) => setF({ ...f, people: Number(e.target.value) })} /><Field label="Phone" name="contact_phone" value={f.contact_phone} onChange={(e) => setF({ ...f, contact_phone: e.target.value })} /></div>
+        <div className="grid cols-2" style={{ gap: 12 }}><Field label="People" name="people" type="number" value={f.people} onChange={(e) => setF({ ...f, people: Number(e.target.value) })} /><PhoneField label="Phone" name="contact_phone" required value={f.contact_phone} onChange={(v) => setF({ ...f, contact_phone: v })} /></div>
         <Area label="Project" name="project" rows={2} value={f.project} onChange={(e) => setF({ ...f, project: e.target.value })} />
         <Area label="Requirements" name="notes" rows={2} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} />
         <Field label="Reference links" name="reference_links" value={f.reference_links} onChange={(e) => setF({ ...f, reference_links: e.target.value })} />
@@ -256,9 +257,9 @@ function NewBooking({ onClose, onDone }: { onClose: () => void; onDone: (id: str
           ? <div className="grid cols-2" style={{ gap: 12 }}><Field label="Date" name="mdate" type="date" value={mt.date} onChange={(e) => setMt({ ...mt, date: e.target.value })} /><Field label="Start time" name="mtime" type="time" value={mt.time} onChange={(e) => setMt({ ...mt, time: e.target.value })} /></div>
           : <SlotPicker duration={duration} room={pkg.room_id} value={slot} onChange={setSlot} days={30} from={lagosToday()} />}
         <div className="grid cols-2" style={{ gap: 12 }}>
-          <Field label="Client name" name="cname" value={f.contactName} onChange={(e) => setF({ ...f, contactName: e.target.value })} />
-          <Field label="Phone" name="cphone" value={f.contactPhone} onChange={(e) => setF({ ...f, contactPhone: e.target.value })} />
-          <Field label="Email (optional)" name="cemail" type="email" value={f.contactEmail} onChange={(e) => setF({ ...f, contactEmail: e.target.value })} hint="Needed for emails and online payment links." />
+          <NameField label="Client name" name="cname" value={f.contactName} onChange={(e) => setF({ ...f, contactName: e.target.value })} />
+          <PhoneField label="Phone" name="cphone" required value={f.contactPhone} onChange={(v) => setF({ ...f, contactPhone: v })} />
+          <EmailField label="Email (optional)" name="cemail" value={f.contactEmail} onChange={(e) => setF({ ...f, contactEmail: e.target.value })} hint="Needed for emails and online payment links." />
           <Field label="Artist or project" name="artist" value={f.artistName} onChange={(e) => setF({ ...f, artistName: e.target.value })} />
           <Field label="People" name="people" type="number" value={f.people} onChange={(e) => setF({ ...f, people: Number(e.target.value) })} />
           <div className="field"><label>Booked via</label><select className="select" value={f.source} onChange={(e) => setF({ ...f, source: e.target.value })}>{Object.entries(SOURCE).filter(([k]) => k !== "online").map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
