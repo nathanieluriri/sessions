@@ -48,7 +48,7 @@ export function About() {
         </div></section>
       )}
       {site.testimonials.length > 0 && (
-        <section className="section" style={{ background: "var(--surface)" }}><div className="wrap stack gap32">
+        <section className="section" id="reviews" style={{ background: "var(--surface)", scrollMarginTop: 80 }}><div className="wrap stack gap32">
           <h2 className="h1">What clients say</h2>
           <div className="grid cols-3">{site.testimonials.map((t) => (
             <figure key={t.id} className="card stack gap16 quotecard"><Icon name="quote" size={26} /><blockquote>{t.quote}</blockquote><figcaption><b>{t.name}</b>{t.role ? <span className="muted"> · {t.role}</span> : null}</figcaption></figure>

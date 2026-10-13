@@ -8,7 +8,7 @@ import { Split, wordCount } from "../components/Split";
 import { PhoneDemo, type DemoData } from "../components/PhoneDemo";
 import { Swirl } from "../components/Swirl";
 import { Intro, introPending } from "../components/Intro";
-import { CardArt, LineArt, Pixels, Sticker } from "../components/art";
+import { CardArt, Eq, LineArt, Pixels, Sticker } from "../components/art";
 import { HERO_PHOTO, depositOf, roomOf, useCatalog, useContent, type Catalog, type Package, type Service, type Site } from "../lib/catalog";
 import { addDays, hrs, initials, lagosToday, naira, shortDate, t12 } from "../lib/format";
 import { api } from "../lib/api";
@@ -157,7 +157,7 @@ function Values({ rooms }: { rooms: number }) {
     return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", kick); window.removeEventListener("resize", kick); };
   }, []);
   return (
-    <section className="lsec values" data-tone="dark" data-nav="/services">
+    <section className="lsec values" id="about" data-tone="dark" data-nav="about">
       <div className="wrap lhead">
         <Badge>Why Psych Records</Badge>
         <h2 className="ltitle" data-split><Heading lead="Less admin, more" accent="music." /></h2>
@@ -170,7 +170,8 @@ function Values({ rooms }: { rooms: number }) {
             <div className="vbody"><LineArt kind={c.line} /><h3>{c.title}</h3><p>{c.body}</p></div>
           </article>
         ))}
-      </div></div>
+      </div>
+      <div className="lmore" data-reveal><TactileLink to="/about" variant="light" size="lg">Learn more <Icon name="northeast" size={16} /></TactileLink></div></div>
     </section>
   );
 }
@@ -193,13 +194,13 @@ function Steps({ demo, photo }: { demo: DemoData; photo: string }) {
   }, [inView, hold, active]);
   const pick = (i: number) => { setHold(true); setActive(i); };
   return (
-    <section className="lsec howto" data-tone="dark" data-nav="/services" ref={boxRef}>
+    <section className="lsec howto" data-tone="dark" data-nav="about" ref={boxRef}>
       <div className="wrap sgrid">
         <div className="sleft">
           <Badge>How it works</Badge>
           <h2 className="ltitle" data-split><Heading lead="Booked in" accent="two minutes." /></h2>
           <p className="lsub" data-reveal>From your phone to the room in four steps. No calls, no back and forth.</p>
-          <div data-reveal><TactileLink to="/book" variant="neon" size="lg">Book a session <Icon name="northeast" size={16} /></TactileLink></div>
+          <div className="lbtns" data-reveal><TactileLink to="/book" variant="neon" size="lg">Book a session <Icon name="northeast" size={16} /></TactileLink><TactileLink to="/faq" variant="light" size="lg">Learn more <Icon name="northeast" size={16} /></TactileLink></div>
           <div className="svis">
             <Pixels src={photo} />
             <PhoneDemo data={demo} screen={active} className="sphone" />
@@ -210,7 +211,7 @@ function Steps({ demo, photo }: { demo: DemoData; photo: string }) {
             <li key={title} className={i === active ? "on" : ""} data-reveal style={{ "--rd": `${i * 90}ms` } as CSSProperties}>
               <button type="button" aria-pressed={i === active} onMouseEnter={() => pick(i)} onFocus={() => pick(i)} onClick={() => pick(i)}>
                 <span className="stile"><Icon name={icon} size={30} /></span>
-                <span className="stext"><span className="snum">Step {i + 1}</span><b>{title}</b><span className="sbody">{body}</span></span>
+                <span className="stext"><b>{title}</b><span className="sbody">{body}</span></span>
               </button>
             </li>
           ))}
@@ -288,7 +289,7 @@ function Showcase({ cat }: { cat: Catalog }) {
   };
   const step = (d: number) => { setHeld(true); go(active + d); };
   return (
-    <section className="lsec showcase" data-tone="dark" data-nav="/services" ref={boxRef}>
+    <section className="lsec showcase" id="services" data-tone="dark" data-nav="services" ref={boxRef}>
       <div className="wrap lhead center">
         <Badge>What we do</Badge>
         <h2 className="ltitle" data-split><Split text="Made for every kind" /><br /><Heading lead="of" accent="project." from={4} /></h2>
@@ -306,7 +307,7 @@ function Showcase({ cat }: { cat: Catalog }) {
           );
         }))}
       </div>
-      <div className="cnav"><Tactile variant="ink" size="md" onClick={() => step(-1)} aria-label="Previous service"><Icon name="arrow" size={16} className="flip" />Prev</Tactile><Tactile variant="ink" size="md" onClick={() => step(1)} aria-label="Next service">Next<Icon name="arrow" size={16} /></Tactile></div>
+      <div className="cnav"><Tactile variant="ink" size="md" onClick={() => step(-1)} aria-label="Previous service"><Icon name="arrow" size={16} className="flip" />Prev</Tactile><TactileLink to="/services" variant="light" size="md">Learn more <Icon name="northeast" size={16} /></TactileLink><Tactile variant="ink" size="md" onClick={() => step(1)} aria-label="Next service">Next<Icon name="arrow" size={16} /></Tactile></div>
     </section>
   );
 }
@@ -314,7 +315,7 @@ function Showcase({ cat }: { cat: Catalog }) {
 function Rooms({ cat }: { cat: Catalog }) {
   const rooms = cat.rooms.slice(0, 4);
   return (
-    <section className="lsec rooms2" data-tone="light" data-nav="/studio">
+    <section className="lsec rooms2" id="studio" data-tone="light" data-nav="studio">
       <div className="wrap lhead center">
         <Badge>Studio and facilities</Badge>
         <h2 className="ltitle" data-split><Split text="Rooms built for" /><br /><Heading lead="sound and" accent="picture." from={3} /></h2>
@@ -325,13 +326,12 @@ function Rooms({ cat }: { cat: Catalog }) {
           {rooms.map((r, i) => (
             <Link key={r.id} to={`/studio#${r.slug}`} className={`bcard b${i}`} data-reveal style={{ transitionDelay: `${i * 90}ms` }}>
               <span className="bimg" style={{ backgroundImage: `url(${r.image_url})` }} />
-              <span className="bkind">{r.kind}</span>
               <b>{r.name}</b>
-              <span className="bmeta">Up to {r.capacity} people · {naira(r.hourly_kobo || cat.rules.extraHourKobo)} per extra hour</span>
+              <span className="bmeta">{r.kind} · up to {r.capacity} people</span>
             </Link>
           ))}
         </div>
-        <div className="lmore" data-reveal><TactileLink to="/studio" variant="neon" size="lg">See the rooms and equipment <Icon name="northeast" size={16} /></TactileLink></div>
+        <div className="lmore" data-reveal><TactileLink to="/studio" variant="light" size="lg">Learn more <Icon name="northeast" size={16} /></TactileLink></div>
       </div>
     </section>
   );
@@ -363,7 +363,7 @@ function Voices({ items }: { items: Site["testimonials"] }) {
   };
   if (!items.length) return null;
   return (
-    <section className="lsec voices" data-tone="dark" data-nav="/portfolio">
+    <section className="lsec voices" data-tone="dark" data-nav="portfolio">
       <div className="wrap lhead center">
         <Badge>What clients say</Badge>
         <h2 className="ltitle" data-split><Heading lead="Trusted by artists and" accent="creators." /></h2>
@@ -386,7 +386,10 @@ function Voices({ items }: { items: Site["testimonials"] }) {
             );
           })}
         </div>
-        {items.length > 1 && <Tactile variant="light" size="lg" className="dshuffle" onClick={() => next(1)}><Icon name="shuffle" size={18} />Drag or tap to shuffle</Tactile>}
+        <div className="lbtns dbtns">
+          {items.length > 1 && <Tactile variant="ink" size="lg" onClick={() => next(1)}><Icon name="shuffle" size={18} />Drag or tap to shuffle</Tactile>}
+          <TactileLink to="/about#reviews" variant="light" size="lg">Learn more <Icon name="northeast" size={16} /></TactileLink>
+        </div>
       </div>
     </section>
   );
@@ -396,11 +399,11 @@ function Work({ site }: { site: Site }) {
   const featured = site.portfolio.filter((w) => w.featured).slice(0, 3);
   if (!featured.length) return null;
   return (
-    <section className="lsec work2" data-tone="dark" data-nav="/portfolio">
+    <section className="lsec work2" id="portfolio" data-tone="dark" data-nav="portfolio">
       <div className="wrap stack gap48">
         <div className="whead">
           <div className="stack gap16"><Badge>Portfolio</Badge><h2 className="ltitle" data-split><Heading lead="Work made" accent="here." /></h2></div>
-          <TactileLink to="/portfolio" variant="light" size="lg">Full portfolio <Icon name="northeast" size={16} /></TactileLink>
+          <TactileLink to="/portfolio" variant="light" size="lg">Learn more <Icon name="northeast" size={16} /></TactileLink>
         </div>
         <div className="grid cols-3">{featured.map((w, i) => <div key={w.id} data-reveal style={{ transitionDelay: `${i * 90}ms` }}><WorkCard w={w} /></div>)}</div>
       </div>
@@ -414,7 +417,7 @@ function Plans({ cat }: { cat: Catalog }) {
   const book = (p: Package) => start({ serviceSlug: cat.services.find((s) => s.category === p.service_category)?.slug, packageId: p.id });
   const variants: TactileVariant[] = ["neon", "yellow", "coral"];
   return (
-    <section className="lsec plans2" data-tone="dark" data-nav="/packages">
+    <section className="lsec plans2" id="pricing" data-tone="dark" data-nav="pricing">
       <div className="wrap lhead center">
         <Badge>Packages</Badge>
         <h2 className="ltitle" data-split><Heading lead="Your next project starts" accent="here." /></h2>
@@ -427,27 +430,26 @@ function Plans({ cat }: { cat: Catalog }) {
             return (
               <article key={p.id} className={`pcard ${hot ? "hot" : ""}`} data-reveal style={{ transitionDelay: `${i * 90}ms` }}>
                 {hot && <span className="ptag">Most booked</span>}
-                <span className="proom"><Mark tone="neon" size={18} />{roomOf(cat, p)?.name}</span>
                 <h3>{p.name}</h3>
                 <b className="pprice">{naira(p.price_kobo)}</b>
                 <span className="pmeta">{deposit < p.price_kobo ? `${naira(deposit)} deposit to book` : "Paid in full when you book"} · {hrs(p.duration_min)}</span>
-                <ul>{p.includes.map((x) => <li key={x}><Icon name="check" size={16} />{x}</li>)}</ul>
+                <ul>{p.includes.map((x) => <li key={x}><Eq />{x}</li>)}</ul>
                 <Tactile variant={variants[i % 3]} size="lg" block onClick={() => book(p)}>Book {p.name}</Tactile>
               </article>
             );
           })}
         </div>
-        <div className="lmore" data-reveal><Link to="/packages" className="lmorelink">Compare all packages and policies <Icon name="arrow" size={16} /></Link></div>
+        <div className="lmore" data-reveal><TactileLink to="/packages" variant="light" size="lg">Learn more <Icon name="northeast" size={16} /></TactileLink></div>
       </div>
     </section>
   );
 }
 
-function Faqs({ items, whatsapp }: { items: Site["faqs"]; whatsapp?: string }) {
+function Faqs({ items }: { items: Site["faqs"] }) {
   const [open, setOpen] = useState<string | null>(items[0]?.id ?? null);
   if (!items.length) return null;
   return (
-    <section className="lsec faqs2" data-tone="dark" data-nav="/contact">
+    <section className="lsec faqs2" id="faqs" data-tone="dark" data-nav="contact">
       <div className="wrap lhead center">
         <Badge>Frequently asked questions</Badge>
         <h2 className="ltitle" data-split><Split text="Got questions?" /><br /><Heading lead="We’ve got" accent="answers." from={2} /></h2>
@@ -459,19 +461,19 @@ function Faqs({ items, whatsapp }: { items: Site["faqs"]; whatsapp?: string }) {
             <div className="qa"><div><p>{q.answer}</p></div></div>
           </div>
         ))}
-        <p className="qmore" data-reveal>Can’t find what you need? <Link to="/faq">Read all FAQs</Link>{whatsapp && <> or <Link to="/contact">message the studio</Link></>}.</p>
-      </div></div>
+        <p className="qmore" data-reveal>Can’t find what you need? <Link to="/contact">Message the studio</Link>.</p>
+      </div>
+      <div className="lmore" data-reveal><TactileLink to="/faq" variant="light" size="lg">Learn more <Icon name="northeast" size={16} /></TactileLink></div></div>
     </section>
   );
 }
 
 function Final() {
   return (
-    <section className="lsec final" data-nav="/contact">
+    <section className="lsec final" id="contact" data-nav="contact">
       <div className="wrap">
         <div className="fcard" data-reveal>
           <div className="fcopy">
-            <Badge>Ready when you are</Badge>
             <h2 className="ltitle" data-split><Split text="Ready to create?" /><br /><span className="neon"><Split text="Book your session." from={3} /></span></h2>
             <p>Live availability, a deposit to hold your slot and a crew ready when you arrive.</p>
             <div className="fbtns"><TactileLink to="/book" variant="neon" size="lg">Book a session <Icon name="northeast" size={16} /></TactileLink><TactileLink to="/quote" variant="light" size="lg">Request a quote</TactileLink></div>
@@ -507,10 +509,10 @@ export function Home() {
           <Steps demo={demo} photo={c.hero_image || HERO_PHOTO} />
           <Showcase cat={cat} />
           <Rooms cat={cat} />
-          <Voices items={site.testimonials} />
           <Work site={site} />
+          <Voices items={site.testimonials} />
           <Plans cat={cat} />
-          <Faqs items={site.faqs} whatsapp={c.whatsapp} />
+          <Faqs items={site.faqs} />
           <Final />
         </>}
       </div>

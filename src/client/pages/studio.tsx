@@ -24,11 +24,11 @@ export function Studio() {
           <article key={r.id} className={`room ${i % 2 ? "flip" : ""}`} id={r.slug}>
             <div className="room-img" style={{ backgroundImage: `url(${r.image_url})` }} role="img" aria-label={r.name} />
             <div className="stack gap16 room-body">
-              <span className="mono muted">{String(i + 1).padStart(2, "0")} · {r.kind}</span>
               <h2 className="h1">{r.name}</h2>
               <p className="muted" style={{ fontSize: 17 }}>{r.description}</p>
               <div className="row gap8 wrapflex">{r.features.map((f) => <span key={f} className="metachip">{f}</span>)}</div>
               <div className="row gap24 wrapflex small">
+                <span><span className="mono faint">Room type</span><br /><b>{r.kind}</b></span>
                 <span><span className="mono faint">Capacity</span><br /><b>Up to {r.capacity} people</b></span>
                 <span><span className="mono faint">Extra time</span><br /><b>{naira(r.hourly_kobo || cat.rules.extraHourKobo)} per hour</b></span>
               </div>

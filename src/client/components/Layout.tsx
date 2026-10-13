@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { Icon, Mark, Socials } from "./brand";
 import { useAuth } from "../lib/auth";
 import { TactileAnchor, TactileLink } from "./kitchen";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { hm } from "../lib/format";
-import { useScrollFrame } from "../lib/motion";
+import { prefersStill, useScrollFrame } from "../lib/motion";
 import { introPending } from "./Intro";
 
-const LINKS: [string, string][] = [["/services", "Services"], ["/studio", "Studio"], ["/portfolio", "Portfolio"], ["/packages", "Pricing"], ["/about", "About"], ["/contact", "Contact"]];
+/** Page, label and the landing section the link scrolls to when on the home page. */
+const LINKS: [string, string, string][] = [["/about", "About", "about"], ["/services", "Services", "services"], ["/studio", "Studio", "studio"], ["/portfolio", "Portfolio", "portfolio"], ["/packages", "Pricing", "pricing"], ["/contact", "Contact", "contact"]];
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Groups days with the same hours, e.g. "Mon to Sat · 10:00 to 22:00". */
@@ -37,52 +38,71 @@ export const waLink = (number: string, text = "Hi, I would like to ask about boo
 
 let navEntered = false;
 
+type Glide = { x: number; w: number; on: boolean; snap?: boolean };
+const OFF: Glide = { x: 0, w: 0, on: false };
+const glideTo = (g: Glide, el?: HTMLElement | null): Glide => (el ? { x: el.offsetLeft, w: el.offsetWidth, on: true, snap: !g.on } : { ...g, on: false });
+const glideStyle = (g: Glide): CSSProperties => ({ transform: `translateX(${g.x}px)`, width: g.w, ...(g.snap ? { transition: "opacity .25s ease" } : {}) });
+
+/** Scrolls to a landing section, or to the top for an empty id. Modified clicks keep the browser default. */
+const jumpTo = (id: string, after?: () => void) => (e: MouseEvent) => {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  after?.();
+  document.body.classList.remove("menu-open");
+  const behavior = prefersStill() ? "auto" : "smooth";
+  if (!id) window.scrollTo({ top: 0, behavior });
+  else document.getElementById(id)?.scrollIntoView({ behavior });
+};
+
 export function Nav() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [glide, setGlide] = useState({ x: 0, w: 0, on: false });
+  const [act, setAct] = useState(OFF);
+  const [hov, setHov] = useState(OFF);
   const links = useRef<HTMLDivElement>(null);
   const spot = useRef<HTMLElement | null>(null);
-  const hovering = useRef(false);
   const loc = useLocation();
   const landing = loc.pathname === "/";
   const [enter] = useState(() => { const first = !navEntered; navEntered = true; return first; });
   const [late] = useState(() => landing && introPending());
   const home = user ? (user.role === "client" ? "/account" : "/admin") : "/login";
-  const move = (el?: HTMLElement | null) => setGlide((g) => (el ? { x: el.offsetLeft, w: el.offsetWidth, on: true } : { ...g, on: false }));
-  const rest = () => { hovering.current = false; move(landing ? spot.current : links.current?.querySelector<HTMLElement>("a.active")); };
-  const hover = (el: HTMLElement) => { hovering.current = true; move(el); };
+  const settle = () => setAct((g) => glideTo(g, landing ? spot.current : links.current?.querySelector<HTMLElement>("a.active")));
+  const hover = (el: HTMLElement) => setHov((g) => glideTo(g, el));
+  const leave = () => setHov((g) => glideTo(g));
   useScrollFrame(() => {
     if (!landing || !links.current) return;
     const mid = window.innerHeight * 0.45;
-    let path = "";
-    for (const sec of document.querySelectorAll<HTMLElement>("[data-nav]")) {
-      const r = sec.getBoundingClientRect();
-      if (r.top <= mid && r.bottom > mid) { path = sec.dataset.nav ?? ""; break; }
-    }
-    const el = path ? links.current.querySelector<HTMLElement>(`a[href="${path}"]`) : null;
-    if (el !== spot.current) { spot.current = el; if (!hovering.current) move(el); }
+    let key = "";
+    for (const sec of document.querySelectorAll<HTMLElement>("[data-nav]")) if (sec.getBoundingClientRect().top <= mid) key = sec.dataset.nav ?? "";
+    const el = key ? links.current.querySelector<HTMLElement>(`a[data-sec="${key}"]`) : null;
+    if (el !== spot.current) { spot.current = el; settle(); }
   });
   useEffect(() => setOpen(false), [loc.pathname]);
   useEffect(() => {
-    rest();
-    document.fonts?.ready.then(rest);
-    window.addEventListener("resize", rest);
-    return () => window.removeEventListener("resize", rest);
+    spot.current = null;
+    settle();
+    document.fonts?.ready.then(settle);
+    window.addEventListener("resize", settle);
+    return () => window.removeEventListener("resize", settle);
   }, [loc.pathname]);
   useEffect(() => {
     document.body.classList.toggle("menu-open", open);
     return () => document.body.classList.remove("menu-open");
   }, [open]);
-  const menu: [string, string][] = [["/", "Home"], ...LINKS, ["/faq", "FAQs"], ["/quote", "Request a quote"], [home, user ? "My account" : "Log in"]];
+  const close = () => setOpen(false);
+  const menu: [string, string, string][] = [["/", "Home", ""], ...LINKS, ["/faq", "FAQs", "faqs"], ["/quote", "Request a quote", ""], [home, user ? "My account" : "Log in", ""]];
+  const hoverProps = { onMouseEnter: (e: MouseEvent<HTMLElement>) => hover(e.currentTarget), onFocus: (e: { currentTarget: HTMLElement }) => hover(e.currentTarget), onBlur: leave };
   return (
     <>
       <header className={`nav ${enter ? "enter" : ""}`} style={late ? ({ "--nd": "2.2s" } as CSSProperties) : undefined}>
         <div className="navin">
-          <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home"><Mark tone="neon" size={30} /><span>Psych Records</span></Link>
-          <div className="npill nlinks" ref={links} onMouseLeave={rest}>
-            <span className={`nglide ${glide.on ? "on" : ""}`} style={{ transform: `translateX(${glide.x}px)`, width: glide.w }} aria-hidden />
-            {LINKS.map(([to, l]) => <NavLink key={to} to={to} onMouseEnter={(e) => hover(e.currentTarget)} onFocus={(e) => hover(e.currentTarget)} onBlur={rest} className={({ isActive }) => (isActive ? "active" : "")}>{l}</NavLink>)}
+          <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home" onClick={landing ? jumpTo("") : undefined}><Mark tone="neon" size={30} /><span>Psych Records</span></Link>
+          <div className="npill nlinks" ref={links} onMouseLeave={leave}>
+            <span className={`nglide nhover ${hov.on ? "on" : ""}`} style={glideStyle(hov)} aria-hidden />
+            <span className={`nglide ${act.on ? "on" : ""}`} style={glideStyle(act)} aria-hidden />
+            {LINKS.map(([to, l, sec]) => landing
+              ? <a key={to} href={`#${sec}`} data-sec={sec} onClick={jumpTo(sec)} {...hoverProps}>{l}</a>
+              : <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")} {...hoverProps}>{l}</NavLink>)}
           </div>
           <div className="nright">
             <TactileLink to={home} variant="light" size="md" className="nlogin">{user ? "My account" : "Log in"}</TactileLink>
@@ -92,7 +112,12 @@ export function Nav() {
         </div>
       </header>
       <div className={`mmenu ${open ? "on" : ""}`} aria-hidden={!open}>
-        {menu.map(([to, l], i) => <Link key={l} to={to} tabIndex={open ? 0 : -1} style={{ "--i": i } as CSSProperties}>{l}</Link>)}
+        {menu.map(([to, l, sec], i) => {
+          const style = { "--i": i } as CSSProperties, tab = open ? 0 : -1;
+          return landing && (sec || to === "/")
+            ? <a key={l} href={`#${sec}`} tabIndex={tab} style={style} onClick={jumpTo(sec, close)}>{l}</a>
+            : <Link key={l} to={to} tabIndex={tab} style={style}>{l}</Link>;
+        })}
       </div>
     </>
   );

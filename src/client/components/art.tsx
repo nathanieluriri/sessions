@@ -240,3 +240,6 @@ export function LineArt({ kind }: { kind: string }) {
     </svg>
   );
 }
+
+/** Bouncing equaliser bars used in place of a tick in "what's included" lists. */
+export const Eq = () => <span className="eq" aria-hidden><i /><i /><i /></span>;

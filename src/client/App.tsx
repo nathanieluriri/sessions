@@ -25,8 +25,16 @@ import { TactileLink } from "./components/kitchen";
 function ScrollTop() {
   const { pathname, hash } = useLocation();
   useEffect(() => {
-    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
-    else window.scrollTo(0, 0);
+    if (!hash) { window.scrollTo(0, 0); return; }
+    // Targets often render only after the page's data arrives, so keep looking for a few seconds.
+    let tries = 0, t = 0;
+    const find = () => {
+      const el = document.getElementById(decodeURIComponent(hash.slice(1)));
+      if (el) el.scrollIntoView();
+      else if (tries++ < 30) t = window.setTimeout(find, 100);
+    };
+    find();
+    return () => window.clearTimeout(t);
   }, [pathname, hash]);
   return null;
 }
