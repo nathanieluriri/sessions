@@ -5,6 +5,8 @@ import { useAuth } from "../lib/auth";
 import { TactileAnchor, TactileLink } from "./kitchen";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { hm } from "../lib/format";
+import { useScrollFrame } from "../lib/motion";
+import { introPending } from "./Intro";
 
 const LINKS: [string, string][] = [["/services", "Services"], ["/studio", "Studio"], ["/portfolio", "Portfolio"], ["/packages", "Pricing"], ["/about", "About"], ["/contact", "Contact"]];
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -33,15 +35,34 @@ export function usePageTitle(title?: string) {
 
 export const waLink = (number: string, text = "Hi, I would like to ask about booking a session.") => `https://wa.me/${number.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
 
+let navEntered = false;
+
 export function Nav() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [glide, setGlide] = useState({ x: 0, w: 0, on: false });
   const links = useRef<HTMLDivElement>(null);
+  const spot = useRef<HTMLElement | null>(null);
+  const hovering = useRef(false);
   const loc = useLocation();
+  const landing = loc.pathname === "/";
+  const [enter] = useState(() => { const first = !navEntered; navEntered = true; return first; });
+  const [late] = useState(() => landing && introPending());
   const home = user ? (user.role === "client" ? "/account" : "/admin") : "/login";
   const move = (el?: HTMLElement | null) => setGlide((g) => (el ? { x: el.offsetLeft, w: el.offsetWidth, on: true } : { ...g, on: false }));
-  const rest = () => move(links.current?.querySelector<HTMLElement>("a.active"));
+  const rest = () => { hovering.current = false; move(landing ? spot.current : links.current?.querySelector<HTMLElement>("a.active")); };
+  const hover = (el: HTMLElement) => { hovering.current = true; move(el); };
+  useScrollFrame(() => {
+    if (!landing || !links.current) return;
+    const mid = window.innerHeight * 0.45;
+    let path = "";
+    for (const sec of document.querySelectorAll<HTMLElement>("[data-nav]")) {
+      const r = sec.getBoundingClientRect();
+      if (r.top <= mid && r.bottom > mid) { path = sec.dataset.nav ?? ""; break; }
+    }
+    const el = path ? links.current.querySelector<HTMLElement>(`a[href="${path}"]`) : null;
+    if (el !== spot.current) { spot.current = el; if (!hovering.current) move(el); }
+  });
   useEffect(() => setOpen(false), [loc.pathname]);
   useEffect(() => {
     rest();
@@ -56,15 +77,15 @@ export function Nav() {
   const menu: [string, string][] = [["/", "Home"], ...LINKS, ["/faq", "FAQs"], ["/quote", "Request a quote"], [home, user ? "My account" : "Log in"]];
   return (
     <>
-      <header className="nav">
+      <header className={`nav ${enter ? "enter" : ""}`} style={late ? ({ "--nd": "2.2s" } as CSSProperties) : undefined}>
         <div className="navin">
           <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home"><Mark tone="neon" size={30} /><span>Psych Records</span></Link>
           <div className="npill nlinks" ref={links} onMouseLeave={rest}>
             <span className={`nglide ${glide.on ? "on" : ""}`} style={{ transform: `translateX(${glide.x}px)`, width: glide.w }} aria-hidden />
-            {LINKS.map(([to, l]) => <NavLink key={to} to={to} onMouseEnter={(e) => move(e.currentTarget)} onFocus={(e) => move(e.currentTarget)} onBlur={rest} className={({ isActive }) => (isActive ? "active" : "")}>{l}</NavLink>)}
+            {LINKS.map(([to, l]) => <NavLink key={to} to={to} onMouseEnter={(e) => hover(e.currentTarget)} onFocus={(e) => hover(e.currentTarget)} onBlur={rest} className={({ isActive }) => (isActive ? "active" : "")}>{l}</NavLink>)}
           </div>
           <div className="nright">
-            <TactileLink to={home} variant="brand" size="md" className="nlogin">{user ? "My account" : "Log in"}</TactileLink>
+            <TactileLink to={home} variant="light" size="md" className="nlogin">{user ? "My account" : "Log in"}</TactileLink>
             <TactileLink to="/book" variant="neon" size="md"><span>Book<span className="nlong"> a session</span></span></TactileLink>
             <button className="npill nmenu" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}><Icon name={open ? "x" : "menu"} /></button>
           </div>
@@ -94,8 +115,10 @@ function Announcement() {
   );
 }
 
+const Arrow = () => <span className="farrow" aria-hidden><Icon name="northeast" size={14} /><Icon name="northeast" size={14} /></span>;
+
 function FootLinks({ title, links }: { title: string; links: [string, string][] }) {
-  return <div className="fcol"><h4>{title}</h4>{links.map(([to, l]) => <Link key={to} to={to}><Icon name="northeast" size={14} />{l}</Link>)}</div>;
+  return <div className="fcol"><h4>{title}</h4>{links.map(([to, l]) => <Link key={to} to={to}><Arrow />{l}</Link>)}</div>;
 }
 
 export function Footer() {

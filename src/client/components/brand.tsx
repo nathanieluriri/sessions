@@ -26,10 +26,10 @@ const SOCIAL_KEY: Record<string, string> = { Instagram: "social_instagram", TikT
 
 export function Socials({ links = {} }: { links?: Record<string, string> }) {
   return (
-    <div className="row gap8">
+    <div className="row gap12 wrapflex">
       {Object.entries(SOCIAL).filter(([name]) => links[SOCIAL_KEY[name]]).map(([name, d]) => (
-        <a key={name} className="social" href={links[SOCIAL_KEY[name]]} target="_blank" rel="noreferrer" aria-label={name}>
-          <svg viewBox="0 0 24 24"><path d={d} /></svg>
+        <a key={name} className="tactile t-neon t-md ticon" href={links[SOCIAL_KEY[name]]} target="_blank" rel="noreferrer" aria-label={name}>
+          <span className="tb" aria-hidden="true" /><span className="tf"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={d} /></svg></span>
         </a>
       ))}
     </div>

@@ -120,6 +120,11 @@ h1, h2, h3, h4, p { margin: 0; }
 .nglide { position: absolute; left: 0; top: 50%; height: 44px; margin-top: -22px; border-radius: 999px; background: #fff; opacity: 0;
   transition: transform .45s cubic-bezier(.3,.7,.1,1), width .45s cubic-bezier(.3,.7,.1,1), opacity .25s ease; }
 .nglide.on { opacity: 1; }
+.nav.enter .navin > * { animation: navdrop .9s cubic-bezier(.2,.75,.1,1) both; animation-delay: calc(var(--nd, 0s) + var(--ni, 0) * 90ms); }
+.nav.enter .navin > :nth-child(2) { --ni: 1; }
+.nav.enter .navin > :nth-child(3) { --ni: 2; }
+@keyframes navdrop { from { opacity: 0; transform: translateY(-28px) scale(.96); } }
+@media (prefers-reduced-motion: reduce) { .nav.enter .navin > * { animation: none; } }
 .nright { display: flex; align-items: center; gap: 10px; }
 .nright > * { pointer-events: auto; }
 .nmenu { display: none; width: 52px; padding: 0; justify-content: center; cursor: pointer; }
@@ -150,12 +155,18 @@ body.menu-open { overflow: hidden; }
 .fbrand p { margin-top: 22px; max-width: 340px; font-size: 15px; color: rgba(255,255,255,.72); }
 .fcol { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .fcol h4 { margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.fcol a, .fcol p { display: inline-flex; align-items: flex-start; gap: 10px; font-size: 15px; color: rgba(255,255,255,.8); overflow-wrap: anywhere; }
-.fcol a:hover { color: #fff; }
-.fcol svg { flex: none; margin-top: 3px; color: var(--neon); }
+.fcol > a:not(.tactile), .fcol > p { display: inline-flex; align-items: flex-start; gap: 10px; font-size: 15px; color: rgba(255,255,255,.8); overflow-wrap: anywhere; transition: opacity .3s ease, color .3s ease; }
+.fcol > a:not(.tactile):hover { color: #fff; }
+.fcol:has(> a:not(.tactile):hover) > :is(a:not(.tactile), p):not(:hover) { opacity: .4; }
+.fcol > :is(a, p) > svg { flex: none; margin-top: 3px; color: var(--neon); }
+.farrow { position: relative; flex: none; width: 14px; height: 14px; margin-top: 4px; overflow: hidden; color: var(--neon); }
+.farrow svg { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.6,0,.2,1); }
+.farrow svg + svg { transform: translate(-120%, 120%); }
+.fcol > a:hover .farrow svg:first-child { transform: translate(120%, -120%); }
+.fcol > a:hover .farrow svg + svg { transform: none; }
 .fmid { display: flex; flex-wrap: wrap; gap: 32px 80px; margin-top: 64px; }
-.social, .footer a.social { display: inline-flex; width: 44px; height: 44px; margin: 0; align-items: center; justify-content: center; border-radius: 10px; background: var(--neon); }
-.social svg, .footer .social svg { width: 20px; height: 20px; margin: 0; fill: #000; color: #000; }
+.tactile.ticon .tf { width: 44px; height: 44px; padding: 0; }
+.ticon svg { flex: none; width: 20px; height: 20px; fill: currentColor; }
 .footer .tactile svg { margin: 0; color: inherit; }
 .fbar { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-top: 64px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,.12); font-size: 13px; color: rgba(255,255,255,.6); }
 .fbar div { display: flex; flex-wrap: wrap; gap: 20px; }

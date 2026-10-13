@@ -122,21 +122,42 @@ function Values({ rooms }: { rooms: number }) {
     { art: "spectrum", line: "deposit", title: "Deposit or pay in full", body: "Hold your slot with a deposit and clear the balance before you arrive." },
     { art: "chrome", line: "rooms", title: `${rooms} rooms, one crew`, body: "A recording room, a production suite, a podcast set and a video and photo stage." },
   ];
-  useScrollFrame(() => {
+  useEffect(() => {
     const row = ref.current;
-    if (!row) return;
+    if (!row || prefersStill()) return;
     const cards = Array.from(row.children) as HTMLElement[];
-    if (prefersStill()) { cards.forEach((c) => { c.style.translate = ""; c.style.opacity = ""; }); return; }
-    const top = row.getBoundingClientRect().top, vh = window.innerHeight;
-    const cols = Math.max(1, Math.round(row.clientWidth / Math.max(1, cards[0]?.offsetWidth ?? 1)));
-    cards.forEach((c, i) => {
-      const p = clamp((vh - top - c.offsetTop) / (vh * 0.5) - (i % cols) * 0.1);
-      c.style.translate = `0 ${Math.round(Math.pow(1 - p, 3) * 260)}px`;
-      c.style.opacity = String(clamp(p * 3));
+    const now = cards.map(() => 0);
+    let raf = 0, last = 0;
+    const goal = () => {
+      const top = row.getBoundingClientRect().top, vh = window.innerHeight;
+      const cols = Math.max(1, Math.round(row.clientWidth / Math.max(1, cards[0].offsetWidth)));
+      return cards.map((c, i) => clamp((vh - top - c.offsetTop) / (vh * 0.55) - (i % cols) * 0.14));
+    };
+    const paint = () => cards.forEach((c, i) => {
+      const p = now[i], e = Math.pow(1 - p, 3);
+      c.style.translate = `0 ${(e * 300).toFixed(1)}px`;
+      c.style.rotate = `${(e * (i % 2 ? -4 : 4)).toFixed(2)}deg`;
+      c.style.opacity = String(clamp(p * 2.5));
     });
-  });
+    const tick = (t: number) => {
+      const k = 1 - Math.pow(0.93, Math.min(64, t - (last || t)) / 16.7);
+      last = t;
+      const g = goal();
+      let moving = false;
+      now.forEach((v, i) => { const d = g[i] - v; if (Math.abs(d) < 0.0005) now[i] = g[i]; else { now[i] = v + d * k; moving = true; } });
+      paint();
+      raf = moving ? requestAnimationFrame(tick) : 0;
+      if (!moving) last = 0;
+    };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(tick); };
+    paint();
+    kick();
+    window.addEventListener("scroll", kick, { passive: true });
+    window.addEventListener("resize", kick);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", kick); window.removeEventListener("resize", kick); };
+  }, []);
   return (
-    <section className="lsec values" data-tone="dark">
+    <section className="lsec values" data-tone="dark" data-nav="/services">
       <div className="wrap lhead">
         <Badge>Why Psych Records</Badge>
         <h2 className="ltitle" data-split><Heading lead="Less admin, more" accent="music." /></h2>
@@ -172,7 +193,7 @@ function Steps({ demo, photo }: { demo: DemoData; photo: string }) {
   }, [inView, hold, active]);
   const pick = (i: number) => { setHold(true); setActive(i); };
   return (
-    <section className="lsec howto" data-tone="dark" ref={boxRef}>
+    <section className="lsec howto" data-tone="dark" data-nav="/services" ref={boxRef}>
       <div className="wrap sgrid">
         <div className="sleft">
           <Badge>How it works</Badge>
@@ -267,7 +288,7 @@ function Showcase({ cat }: { cat: Catalog }) {
   };
   const step = (d: number) => { setHeld(true); go(active + d); };
   return (
-    <section className="lsec showcase" data-tone="dark" ref={boxRef}>
+    <section className="lsec showcase" data-tone="dark" data-nav="/services" ref={boxRef}>
       <div className="wrap lhead center">
         <Badge>What we do</Badge>
         <h2 className="ltitle" data-split><Split text="Made for every kind" /><br /><Heading lead="of" accent="project." from={4} /></h2>
@@ -293,7 +314,7 @@ function Showcase({ cat }: { cat: Catalog }) {
 function Rooms({ cat }: { cat: Catalog }) {
   const rooms = cat.rooms.slice(0, 4);
   return (
-    <section className="lsec rooms2" data-tone="light">
+    <section className="lsec rooms2" data-tone="light" data-nav="/studio">
       <div className="wrap lhead center">
         <Badge>Studio and facilities</Badge>
         <h2 className="ltitle" data-split><Split text="Rooms built for" /><br /><Heading lead="sound and" accent="picture." from={3} /></h2>
@@ -310,7 +331,7 @@ function Rooms({ cat }: { cat: Catalog }) {
             </Link>
           ))}
         </div>
-        <div className="lmore" data-reveal><TactileLink to="/studio" variant="brand" size="lg">See the rooms and equipment <Icon name="northeast" size={16} /></TactileLink></div>
+        <div className="lmore" data-reveal><TactileLink to="/studio" variant="neon" size="lg">See the rooms and equipment <Icon name="northeast" size={16} /></TactileLink></div>
       </div>
     </section>
   );
@@ -318,28 +339,45 @@ function Rooms({ cat }: { cat: Catalog }) {
 
 function Voices({ items }: { items: Site["testimonials"] }) {
   const [order, setOrder] = useState(() => items.map((_, i) => i));
-  const [leaving, setLeaving] = useState(false);
-  const shuffle = () => {
-    if (leaving) return;
-    if (prefersStill()) { setOrder((o) => [...o.slice(1), o[0]]); return; }
-    setLeaving(true);
-    window.setTimeout(() => { setOrder((o) => [...o.slice(1), o[0]]); setLeaving(false); }, 420);
+  const [fly, setFly] = useState(0);
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const start = useRef(0);
+  const next = (dir: number) => {
+    if (fly) return;
+    if (prefersStill()) { setOrder((o) => [...o.slice(1), o[0]]); setDx(0); return; }
+    setFly(dir || 1);
+    window.setTimeout(() => { setOrder((o) => [...o.slice(1), o[0]]); setFly(0); setDx(0); }, 420);
+  };
+  const down = (e: ReactPointerEvent<HTMLElement>) => {
+    if (fly || items.length < 2 || e.button !== 0) return;
+    start.current = e.clientX;
+    setDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const move = (e: ReactPointerEvent<HTMLElement>) => { if (dragging) setDx(e.clientX - start.current); };
+  const up = () => {
+    if (!dragging) return;
+    setDragging(false);
+    if (Math.abs(dx) > 90) next(Math.sign(dx)); else setDx(0);
   };
   if (!items.length) return null;
   return (
-    <section className="lsec voices" data-tone="dark">
+    <section className="lsec voices" data-tone="dark" data-nav="/portfolio">
       <div className="wrap lhead center">
         <Badge>What clients say</Badge>
         <h2 className="ltitle" data-split><Heading lead="Trusted by artists and" accent="creators." /></h2>
         <p className="lsub" data-reveal>Singers, producers, podcasters and brands who booked a room and came back.</p>
       </div>
       <div className="deckwrap">
-        <Sticker kind="mic" className="vsticker" />
         <div className="deck" data-reveal>
+          <Sticker kind="mic" className="vsticker" />
           {order.slice(0, Math.min(4, order.length)).map((idx, k) => {
-            const t = items[idx];
+            const t = items[idx], top = k === 0;
+            const style = { "--k": k, ...(top ? { "--dx": `${dx}px`, "--dxn": dx, "--dir": fly } : {}) } as CSSProperties;
             return (
-              <figure key={t.id} className={`dcard ${k === 0 && leaving ? "out" : ""}`} style={{ "--k": k } as CSSProperties} aria-hidden={k > 0}>
+              <figure key={t.id} className={`dcard ${top && fly ? "out" : ""} ${top && dragging ? "held" : ""}`} style={style} aria-hidden={!top}
+                onPointerDown={top ? down : undefined} onPointerMove={top ? move : undefined} onPointerUp={top ? up : undefined} onPointerCancel={top ? up : undefined}>
                 <span className="dav">{initials(t.name)}</span>
                 <span className="dstars">{[0, 1, 2, 3, 4].map((s) => <Icon key={s} name="star" size={20} />)}</span>
                 <blockquote>“{t.quote}”</blockquote>
@@ -348,7 +386,7 @@ function Voices({ items }: { items: Site["testimonials"] }) {
             );
           })}
         </div>
-        {items.length > 1 && <Tactile variant="light" size="lg" className="dshuffle" onClick={shuffle}><Icon name="shuffle" size={18} />Tap to shuffle</Tactile>}
+        {items.length > 1 && <Tactile variant="light" size="lg" className="dshuffle" onClick={() => next(1)}><Icon name="shuffle" size={18} />Drag or tap to shuffle</Tactile>}
       </div>
     </section>
   );
@@ -358,7 +396,7 @@ function Work({ site }: { site: Site }) {
   const featured = site.portfolio.filter((w) => w.featured).slice(0, 3);
   if (!featured.length) return null;
   return (
-    <section className="lsec work2" data-tone="dark">
+    <section className="lsec work2" data-tone="dark" data-nav="/portfolio">
       <div className="wrap stack gap48">
         <div className="whead">
           <div className="stack gap16"><Badge>Portfolio</Badge><h2 className="ltitle" data-split><Heading lead="Work made" accent="here." /></h2></div>
@@ -376,7 +414,7 @@ function Plans({ cat }: { cat: Catalog }) {
   const book = (p: Package) => start({ serviceSlug: cat.services.find((s) => s.category === p.service_category)?.slug, packageId: p.id });
   const variants: TactileVariant[] = ["neon", "yellow", "coral"];
   return (
-    <section className="lsec plans2" data-tone="dark">
+    <section className="lsec plans2" data-tone="dark" data-nav="/packages">
       <div className="wrap lhead center">
         <Badge>Packages</Badge>
         <h2 className="ltitle" data-split><Heading lead="Your next project starts" accent="here." /></h2>
@@ -409,7 +447,7 @@ function Faqs({ items, whatsapp }: { items: Site["faqs"]; whatsapp?: string }) {
   const [open, setOpen] = useState<string | null>(items[0]?.id ?? null);
   if (!items.length) return null;
   return (
-    <section className="lsec faqs2" data-tone="dark">
+    <section className="lsec faqs2" data-tone="dark" data-nav="/contact">
       <div className="wrap lhead center">
         <Badge>Frequently asked questions</Badge>
         <h2 className="ltitle" data-split><Split text="Got questions?" /><br /><Heading lead="We’ve got" accent="answers." from={2} /></h2>
@@ -429,7 +467,7 @@ function Faqs({ items, whatsapp }: { items: Site["faqs"]; whatsapp?: string }) {
 
 function Final() {
   return (
-    <section className="lsec final">
+    <section className="lsec final" data-nav="/contact">
       <div className="wrap">
         <div className="fcard" data-reveal>
           <div className="fcopy">
