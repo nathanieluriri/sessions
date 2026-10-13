@@ -50,7 +50,7 @@ Bookings, **New booking**: choose the service and package, pick an open slot (or
 
 Website (needs the edit content permission):
 
-- **Pages**: home hero text and photo, About us (background, vision, mission, philosophy, why work with us, photo), Studio intro and the virtual tour link.
+- **Pages**: home hero badge, headline and intro text (the last word of the second line shows in green), the How it works photo (shown as a pixel mosaic behind the app preview), About us (background, vision, mission, philosophy, why work with us, photo), Studio intro and the virtual tour link. A live announcement replaces the hero badge while it runs.
 - **Business and contact**: name, legal name, phone, email (also the reply-to address on emails), WhatsApp number, address, map location and social links.
 - **Portfolio**: projects with a cover image and an optional YouTube, Vimeo, Spotify or SoundCloud link. Featured projects show on the home page.
 - **Team**, **Equipment and gallery**, **Testimonials**, **FAQs**: add, edit, reorder (lower order numbers show first), hide or remove.

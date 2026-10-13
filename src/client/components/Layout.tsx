@@ -1,8 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { Icon, Mark, Socials } from "./brand";
 import { useAuth } from "../lib/auth";
-import { TactileLink } from "./kitchen";
+import { Ring } from "./pill";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { hm } from "../lib/format";
 
@@ -33,33 +33,46 @@ export function usePageTitle(title?: string) {
 
 export const waLink = (number: string, text = "Hi, I would like to ask about booking a session.") => `https://wa.me/${number.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
 
-export function Nav({ dark }: { dark?: boolean }) {
+export function Nav() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [glide, setGlide] = useState({ x: 0, w: 0, on: false });
+  const links = useRef<HTMLDivElement>(null);
   const loc = useLocation();
-  useEffect(() => setOpen(false), [loc.pathname]);
   const home = user ? (user.role === "client" ? "/account" : "/admin") : "/login";
+  const move = (el?: HTMLElement | null) => setGlide((g) => (el ? { x: el.offsetLeft, w: el.offsetWidth, on: true } : { ...g, on: false }));
+  const rest = () => move(links.current?.querySelector<HTMLElement>("a.active"));
+  useEffect(() => setOpen(false), [loc.pathname]);
+  useEffect(() => {
+    rest();
+    document.fonts?.ready.then(rest);
+    window.addEventListener("resize", rest);
+    return () => window.removeEventListener("resize", rest);
+  }, [loc.pathname]);
+  useEffect(() => {
+    document.body.classList.toggle("menu-open", open);
+    return () => document.body.classList.remove("menu-open");
+  }, [open]);
+  const menu: [string, string][] = [["/", "Home"], ...LINKS, ["/faq", "FAQs"], ["/quote", "Request a quote"], [home, user ? "My account" : "Log in"]];
   return (
     <>
-      <nav className={`nav ${dark ? "dark" : ""}`}>
-        <div className="wrap row between">
-          <Link to="/" className="brandmark" aria-label="Psych Records Entertainment home"><Mark tone={dark ? "neon" : "ink"} /> Psych Records <span className="badge">ENTERTAINMENT</span></Link>
-          <div className="links">
-            {LINKS.map(([to, l]) => <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")}>{l}</NavLink>)}
+      <header className="nav">
+        <div className="navin">
+          <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home"><Mark tone="neon" size={30} /><span>Psych Records</span></Link>
+          <div className="npill nlinks" ref={links} onMouseLeave={rest}>
+            <span className={`nglide ${glide.on ? "on" : ""}`} style={{ transform: `translateX(${glide.x}px)`, width: glide.w }} aria-hidden />
+            {LINKS.map(([to, l]) => <NavLink key={to} to={to} onMouseEnter={(e) => move(e.currentTarget)} onFocus={(e) => move(e.currentTarget)} onBlur={rest} className={({ isActive }) => (isActive ? "active" : "")}>{l}</NavLink>)}
           </div>
-          <div className="row gap20">
-            <Link to={home} className="hide-m" style={{ fontWeight: 500 }}>{user ? "My account" : "Log in"}</Link>
-            <TactileLink to="/book" variant={dark ? "neon" : "brand"} size="md"><span>Book<span className="hide-m"> a session</span></span></TactileLink>
-            <button className="menu-btn" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}><Icon name={open ? "x" : "menu"} /></button>
+          <div className="nright">
+            <Link to={home} className="npill nlogin">{user ? "My account" : "Log in"}</Link>
+            <Ring><Link to="/book" className="pill gray"><span>Book<span className="nlong"> a session</span></span></Link></Ring>
+            <button className="npill nmenu" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}><Icon name={open ? "x" : "menu"} /></button>
           </div>
         </div>
-      </nav>
-      {open && (
-        <div className="mobile-menu">
-          {[["/", "Home"], ...LINKS, ["/faq", "FAQs"], ["/quote", "Request a quote"]].map(([to, l]) => <Link key={to} to={to}>{l}</Link>)}
-          <Link to={home}>{user ? "My account" : "Log in"}</Link>
-        </div>
-      )}
+      </header>
+      <div className={`mmenu ${open ? "on" : ""}`} aria-hidden={!open}>
+        {menu.map(([to, l], i) => <Link key={l} to={to} tabIndex={open ? 0 : -1} style={{ "--i": i } as CSSProperties}>{l}</Link>)}
+      </div>
     </>
   );
 }
@@ -92,6 +105,10 @@ export function WhatsAppButton() {
   );
 }
 
+function FootLinks({ title, links }: { title: string; links: [string, string][] }) {
+  return <div className="fcol"><h4>{title}</h4>{links.map(([to, l]) => <Link key={to} to={to}><Icon name="northeast" size={14} />{l}</Link>)}</div>;
+}
+
 export function Footer() {
   const site = useContent();
   const cat = useCatalog();
@@ -99,37 +116,38 @@ export function Footer() {
   const year = new Date().getFullYear();
   return (
     <footer className="footer">
-      <div className="wrap stack gap48">
-        <div className="cols">
-          <div className="stack gap20">
-            <Mark size={44} />
-            <h3 className="h3">{c.business_name ?? "Psych Records Entertainment"}</h3>
-            <p style={{ maxWidth: 380 }}>{c.footer_blurb}</p>
-            <Socials links={c} />
+      <div className="wrap">
+        <div className="fgrid">
+          <div className="fbrand">
+            <Link to="/" className="flogo"><Mark tone="neon" size={36} /><span>Psych Records</span></Link>
+            <p>{c.footer_blurb}</p>
           </div>
-          <div><div className="mono h">Explore</div>{[["/services", "Services"], ["/studio", "Studio and facilities"], ["/portfolio", "Portfolio"], ["/packages", "Pricing and packages"], ["/about", "About us"]].map(([to, l]) => <Link key={to} to={to}>{l}</Link>)}</div>
-          <div><div className="mono h">Help</div>{[["/book", "Book a session"], ["/quote", "Request a quote"], ["/faq", "FAQs"], ["/packages#policies", "Booking policies"], ["/contact", "Contact"]].map(([to, l]) => <Link key={to} to={to}>{l}</Link>)}</div>
-          <div>
-            <div className="mono h">Visit</div>
-            {c.studio_address && <p>{c.studio_address}</p>}
-            {cat && hoursSummary(cat.hours).map((h) => <p key={h.days}>{h.days} · {h.time}</p>)}
-            {c.contact_phone && <a href={`tel:${c.contact_phone.replace(/\s/g, "")}`}>{c.contact_phone}</a>}
-            {c.contact_email && <a href={`mailto:${c.contact_email}`}>{c.contact_email}</a>}
-            {c.whatsapp && <a href={waLink(c.whatsapp)} target="_blank" rel="noreferrer">WhatsApp us</a>}
+          <FootLinks title="Explore" links={[["/services", "Services"], ["/studio", "Studio and facilities"], ["/portfolio", "Portfolio"], ["/packages", "Pricing and packages"], ["/about", "About us"]]} />
+          <FootLinks title="Help" links={[["/book", "Book a session"], ["/quote", "Request a quote"], ["/faq", "FAQs"], ["/packages#policies", "Booking policies"], ["/contact", "Contact"]]} />
+          <div className="fcol">
+            <h4>Visit</h4>
+            {c.studio_address && <p><Icon name="pin" size={16} />{c.studio_address}</p>}
+            {cat && hoursSummary(cat.hours).map((h) => <p key={h.days}><Icon name="clock" size={16} />{h.days} · {h.time}</p>)}
+            {c.contact_phone && <a href={`tel:${c.contact_phone.replace(/\s/g, "")}`}><Icon name="phone" size={16} />{c.contact_phone}</a>}
+            {c.contact_email && <a href={`mailto:${c.contact_email}`}><Icon name="mail" size={16} />{c.contact_email}</a>}
           </div>
         </div>
-        <div className="row between wrapflex gap16 footbar">
-          <span className="mono" style={{ opacity: .5 }}>© {year} {c.legal_name ?? "Psych Records Entertainment Limited"}</span>
-          <div className="row gap20 wrapflex"><Link to="/privacy" className="small">Privacy</Link><Link to="/terms" className="small">Terms</Link><Link to="/login" className="small">Client login</Link><Link to="/staff/login" className="small">Staff sign in</Link></div>
+        <div className="fmid">
+          <div className="fcol"><h4>Follow us</h4><Socials links={c} /></div>
+          {c.whatsapp && <div className="fcol"><h4>Talk to us</h4><Ring><a className="pill dark" href={waLink(c.whatsapp)} target="_blank" rel="noreferrer">WhatsApp the studio<Icon name="northeast" size={16} /></a></Ring></div>}
+        </div>
+        <div className="fbar">
+          <span>© {year} {c.legal_name ?? "Psych Records Entertainment Limited"}</span>
+          <div><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/login">Client login</Link><Link to="/staff/login">Staff sign in</Link></div>
         </div>
       </div>
     </footer>
   );
 }
 
-export function PublicLayout({ children, dark, title }: { children: ReactNode; dark?: boolean; title?: string }) {
+export function PublicLayout({ children, title, bare }: { children: ReactNode; title?: string; bare?: boolean }) {
   usePageTitle(title);
-  return <><Announcement /><Nav dark={dark} /><main>{children}</main><Footer /><WhatsAppButton /></>;
+  return <>{!bare && <Announcement />}<Nav /><main>{children}</main><Footer /><WhatsAppButton /></>;
 }
 
 export function PageHero({ title, sub, kicker, children }: { title: string; sub?: string; kicker?: string; children?: ReactNode }) {

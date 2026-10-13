@@ -38,6 +38,9 @@ export function Socials({ links = {} }: { links?: Record<string, string> }) {
 
 const ICONS: Record<string, string> = {
   arrow: "M4 12h15m-6-6 6 6-6 6",
+  northeast: "M7 17 17 7M8.5 7H17v8.5",
+  shuffle: "M4 7h3.5c3 0 4.5 10 8 10H20M17 14l3 3-3 3M4 17h3.5c1.2 0 2-1.3 2.8-3M14 9.5C14.9 8 15.7 7 17 7h3M17 4l3 3-3 3",
+  minus: "M5 12h14",
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
   calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
   list: "M5 6h14M5 12h14M5 18h14",
