@@ -17,16 +17,16 @@ export function useScrollFrame(fn: () => void) {
   }, []);
 }
 
-/** Adds the "in" class to every [data-reveal] element under the returned ref as it enters the viewport. */
+/** Marks every [data-reveal] and [data-split] element under the returned ref with data-shown as it enters the viewport. An attribute, not a class, so React re-renders cannot strip it. */
 export function useReveal<T extends HTMLElement>(ready: boolean) {
   const ref = useRef<T>(null);
   useEffect(() => {
     const root = ref.current;
     if (!root || !ready) return;
     const io = new IntersectionObserver((entries) => entries.forEach((e) => {
-      if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      if (e.isIntersecting) { e.target.setAttribute("data-shown", ""); io.unobserve(e.target); }
     }), { rootMargin: "0px 0px -8% 0px" });
-    root.querySelectorAll("[data-reveal]").forEach((el) => io.observe(el));
+    root.querySelectorAll("[data-reveal], [data-split]").forEach((el) => io.observe(el));
     return () => io.disconnect();
   }, [ready]);
   return ref;

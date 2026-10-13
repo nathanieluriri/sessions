@@ -9,8 +9,9 @@ type Tab = "pages" | "business" | "portfolio" | "team" | "studio" | "testimonial
 
 const PAGE_GROUPS: [string, FieldDef[]][] = [
   ["Home page hero", [
-    { key: "hero_title", label: "Headline" }, { key: "hero_accent", label: "Second line, shown in green" }, { key: "hero_subtitle", label: "Intro text", type: "textarea", rows: 2 },
-    { key: "hero_image", label: "Hero photo", type: "image", hint: "A wide photo. It is shown in black and white." },
+    { key: "hero_badge", label: "Badge above the headline", hint: "A short line. A live announcement takes its place while it runs." },
+    { key: "hero_title", label: "Headline" }, { key: "hero_accent", label: "Second line", hint: "Its last word is shown in green." }, { key: "hero_subtitle", label: "Intro text", type: "textarea", rows: 2 },
+    { key: "hero_image", label: "How it works photo", type: "image", hint: "Shown as a colourful pixel mosaic behind the app preview in the How it works section." },
   ]],
   ["About us", [
     { key: "about_title", label: "Headline" }, { key: "about_intro", label: "Background", type: "textarea", rows: 4 }, { key: "about_vision", label: "Vision", type: "textarea", rows: 2 },

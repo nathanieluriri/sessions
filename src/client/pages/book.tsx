@@ -610,10 +610,10 @@ export function BookConfirmed({ id }: { id: string }) {
     const dt = (m: number) => `${b.date.replace(/-/g, "")}T${String(Math.floor(m / 60)).padStart(2, "0")}${String(m % 60).padStart(2, "0")}00`;
     return `data:text/calendar;charset=utf-8,${encodeURIComponent(`BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nDTSTART;TZID=Africa/Lagos:${dt(b.start_min)}\nDTEND;TZID=Africa/Lagos:${dt(b.end_min)}\nSUMMARY:${b.package_name} at ${name}\nLOCATION:${b.room_name}${site?.content.studio_address ? `, ${site.content.studio_address}` : ""}\nDESCRIPTION:Booking ${b.ref}\nEND:VEVENT\nEND:VCALENDAR`)}`;
   }, [b, name, site]);
-  if (!b) return <><Nav dark /><Loading /></>;
+  if (!b) return <><Nav /><Loading /></>;
   return (
     <div className="confpage">
-      <Nav dark />
+      <Nav />
       <div className="wrap grid cols-2" style={{ paddingTop: 72, paddingBottom: 120, alignItems: "center", gap: 64 }}>
         <div className="stack gap24">
           <h1 className="display">You’re <span className="neon">booked.</span></h1>

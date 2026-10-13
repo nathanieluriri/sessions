@@ -1,10 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { Icon, Mark, Socials } from "./brand";
 import { useAuth } from "../lib/auth";
-import { TactileLink } from "./kitchen";
+import { TactileAnchor, TactileLink } from "./kitchen";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { hm } from "../lib/format";
+import { useScrollFrame } from "../lib/motion";
+import { introPending } from "./Intro";
 
 const LINKS: [string, string][] = [["/services", "Services"], ["/studio", "Studio"], ["/portfolio", "Portfolio"], ["/packages", "Pricing"], ["/about", "About"], ["/contact", "Contact"]];
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -33,33 +35,65 @@ export function usePageTitle(title?: string) {
 
 export const waLink = (number: string, text = "Hi, I would like to ask about booking a session.") => `https://wa.me/${number.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
 
-export function Nav({ dark }: { dark?: boolean }) {
+let navEntered = false;
+
+export function Nav() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [glide, setGlide] = useState({ x: 0, w: 0, on: false });
+  const links = useRef<HTMLDivElement>(null);
+  const spot = useRef<HTMLElement | null>(null);
+  const hovering = useRef(false);
   const loc = useLocation();
-  useEffect(() => setOpen(false), [loc.pathname]);
+  const landing = loc.pathname === "/";
+  const [enter] = useState(() => { const first = !navEntered; navEntered = true; return first; });
+  const [late] = useState(() => landing && introPending());
   const home = user ? (user.role === "client" ? "/account" : "/admin") : "/login";
+  const move = (el?: HTMLElement | null) => setGlide((g) => (el ? { x: el.offsetLeft, w: el.offsetWidth, on: true } : { ...g, on: false }));
+  const rest = () => { hovering.current = false; move(landing ? spot.current : links.current?.querySelector<HTMLElement>("a.active")); };
+  const hover = (el: HTMLElement) => { hovering.current = true; move(el); };
+  useScrollFrame(() => {
+    if (!landing || !links.current) return;
+    const mid = window.innerHeight * 0.45;
+    let path = "";
+    for (const sec of document.querySelectorAll<HTMLElement>("[data-nav]")) {
+      const r = sec.getBoundingClientRect();
+      if (r.top <= mid && r.bottom > mid) { path = sec.dataset.nav ?? ""; break; }
+    }
+    const el = path ? links.current.querySelector<HTMLElement>(`a[href="${path}"]`) : null;
+    if (el !== spot.current) { spot.current = el; if (!hovering.current) move(el); }
+  });
+  useEffect(() => setOpen(false), [loc.pathname]);
+  useEffect(() => {
+    rest();
+    document.fonts?.ready.then(rest);
+    window.addEventListener("resize", rest);
+    return () => window.removeEventListener("resize", rest);
+  }, [loc.pathname]);
+  useEffect(() => {
+    document.body.classList.toggle("menu-open", open);
+    return () => document.body.classList.remove("menu-open");
+  }, [open]);
+  const menu: [string, string][] = [["/", "Home"], ...LINKS, ["/faq", "FAQs"], ["/quote", "Request a quote"], [home, user ? "My account" : "Log in"]];
   return (
     <>
-      <nav className={`nav ${dark ? "dark" : ""}`}>
-        <div className="wrap row between">
-          <Link to="/" className="brandmark" aria-label="Psych Records Entertainment home"><Mark tone={dark ? "neon" : "ink"} /> Psych Records <span className="badge">ENTERTAINMENT</span></Link>
-          <div className="links">
-            {LINKS.map(([to, l]) => <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")}>{l}</NavLink>)}
+      <header className={`nav ${enter ? "enter" : ""}`} style={late ? ({ "--nd": "2.2s" } as CSSProperties) : undefined}>
+        <div className="navin">
+          <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home"><Mark tone="neon" size={30} /><span>Psych Records</span></Link>
+          <div className="npill nlinks" ref={links} onMouseLeave={rest}>
+            <span className={`nglide ${glide.on ? "on" : ""}`} style={{ transform: `translateX(${glide.x}px)`, width: glide.w }} aria-hidden />
+            {LINKS.map(([to, l]) => <NavLink key={to} to={to} onMouseEnter={(e) => hover(e.currentTarget)} onFocus={(e) => hover(e.currentTarget)} onBlur={rest} className={({ isActive }) => (isActive ? "active" : "")}>{l}</NavLink>)}
           </div>
-          <div className="row gap20">
-            <Link to={home} className="hide-m" style={{ fontWeight: 500 }}>{user ? "My account" : "Log in"}</Link>
-            <TactileLink to="/book" variant={dark ? "neon" : "brand"} size="md"><span>Book<span className="hide-m"> a session</span></span></TactileLink>
-            <button className="menu-btn" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}><Icon name={open ? "x" : "menu"} /></button>
+          <div className="nright">
+            <TactileLink to={home} variant="light" size="md" className="nlogin">{user ? "My account" : "Log in"}</TactileLink>
+            <TactileLink to="/book" variant="neon" size="md"><span>Book<span className="nlong"> a session</span></span></TactileLink>
+            <button className="npill nmenu" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}><Icon name={open ? "x" : "menu"} /></button>
           </div>
         </div>
-      </nav>
-      {open && (
-        <div className="mobile-menu">
-          {[["/", "Home"], ...LINKS, ["/faq", "FAQs"], ["/quote", "Request a quote"]].map(([to, l]) => <Link key={to} to={to}>{l}</Link>)}
-          <Link to={home}>{user ? "My account" : "Log in"}</Link>
-        </div>
-      )}
+      </header>
+      <div className={`mmenu ${open ? "on" : ""}`} aria-hidden={!open}>
+        {menu.map(([to, l], i) => <Link key={l} to={to} tabIndex={open ? 0 : -1} style={{ "--i": i } as CSSProperties}>{l}</Link>)}
+      </div>
     </>
   );
 }
@@ -81,15 +115,10 @@ function Announcement() {
   );
 }
 
-export function WhatsAppButton() {
-  const site = useContent();
-  const n = site?.content.whatsapp;
-  if (!n) return null;
-  return (
-    <a className="wa-float" href={waLink(n)} target="_blank" rel="noreferrer" aria-label="Chat with the studio on WhatsApp">
-      <svg viewBox="0 0 24 24" aria-hidden><path d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48 0 1.46 1.07 2.88 1.21 3.08.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2.01-1.41.25-.69.25-1.29.17-1.41-.07-.12-.27-.2-.57-.35M12.04 21.8h-.01a9.8 9.8 0 0 1-4.99-1.37l-.36-.21-3.71.97.99-3.62-.23-.37a9.78 9.78 0 0 1-1.5-5.22c0-5.41 4.41-9.81 9.82-9.81 2.62 0 5.08 1.02 6.93 2.88a9.75 9.75 0 0 1 2.87 6.94c0 5.41-4.41 9.81-9.81 9.81m8.35-18.16A11.73 11.73 0 0 0 12.04.2C5.53.2.24 5.49.24 12c0 2.08.54 4.11 1.58 5.9L.14 24l6.25-1.64a11.8 11.8 0 0 0 5.64 1.44h.01c6.5 0 11.8-5.29 11.8-11.8 0-3.15-1.23-6.11-3.45-8.34" /></svg>
-    </a>
-  );
+const Arrow = () => <span className="farrow" aria-hidden><Icon name="northeast" size={14} /><Icon name="northeast" size={14} /></span>;
+
+function FootLinks({ title, links }: { title: string; links: [string, string][] }) {
+  return <div className="fcol"><h4>{title}</h4>{links.map(([to, l]) => <Link key={to} to={to}><Arrow />{l}</Link>)}</div>;
 }
 
 export function Footer() {
@@ -99,37 +128,38 @@ export function Footer() {
   const year = new Date().getFullYear();
   return (
     <footer className="footer">
-      <div className="wrap stack gap48">
-        <div className="cols">
-          <div className="stack gap20">
-            <Mark size={44} />
-            <h3 className="h3">{c.business_name ?? "Psych Records Entertainment"}</h3>
-            <p style={{ maxWidth: 380 }}>{c.footer_blurb}</p>
-            <Socials links={c} />
+      <div className="wrap">
+        <div className="fgrid">
+          <div className="fbrand">
+            <Link to="/" className="flogo"><Mark tone="neon" size={36} /><span>Psych Records</span></Link>
+            <p>{c.footer_blurb}</p>
           </div>
-          <div><div className="mono h">Explore</div>{[["/services", "Services"], ["/studio", "Studio and facilities"], ["/portfolio", "Portfolio"], ["/packages", "Pricing and packages"], ["/about", "About us"]].map(([to, l]) => <Link key={to} to={to}>{l}</Link>)}</div>
-          <div><div className="mono h">Help</div>{[["/book", "Book a session"], ["/quote", "Request a quote"], ["/faq", "FAQs"], ["/packages#policies", "Booking policies"], ["/contact", "Contact"]].map(([to, l]) => <Link key={to} to={to}>{l}</Link>)}</div>
-          <div>
-            <div className="mono h">Visit</div>
-            {c.studio_address && <p>{c.studio_address}</p>}
-            {cat && hoursSummary(cat.hours).map((h) => <p key={h.days}>{h.days} · {h.time}</p>)}
-            {c.contact_phone && <a href={`tel:${c.contact_phone.replace(/\s/g, "")}`}>{c.contact_phone}</a>}
-            {c.contact_email && <a href={`mailto:${c.contact_email}`}>{c.contact_email}</a>}
-            {c.whatsapp && <a href={waLink(c.whatsapp)} target="_blank" rel="noreferrer">WhatsApp us</a>}
+          <FootLinks title="Explore" links={[["/services", "Services"], ["/studio", "Studio and facilities"], ["/portfolio", "Portfolio"], ["/packages", "Pricing and packages"], ["/about", "About us"]]} />
+          <FootLinks title="Help" links={[["/book", "Book a session"], ["/quote", "Request a quote"], ["/faq", "FAQs"], ["/packages#policies", "Booking policies"], ["/contact", "Contact"]]} />
+          <div className="fcol">
+            <h4>Visit</h4>
+            {c.studio_address && <p><Icon name="pin" size={16} />{c.studio_address}</p>}
+            {cat && hoursSummary(cat.hours).map((h) => <p key={h.days}><Icon name="clock" size={16} />{h.days} · {h.time}</p>)}
+            {c.contact_phone && <a href={`tel:${c.contact_phone.replace(/\s/g, "")}`}><Icon name="phone" size={16} />{c.contact_phone}</a>}
+            {c.contact_email && <a href={`mailto:${c.contact_email}`}><Icon name="mail" size={16} />{c.contact_email}</a>}
           </div>
         </div>
-        <div className="row between wrapflex gap16 footbar">
-          <span className="mono" style={{ opacity: .5 }}>© {year} {c.legal_name ?? "Psych Records Entertainment Limited"}</span>
-          <div className="row gap20 wrapflex"><Link to="/privacy" className="small">Privacy</Link><Link to="/terms" className="small">Terms</Link><Link to="/login" className="small">Client login</Link><Link to="/staff/login" className="small">Staff sign in</Link></div>
+        <div className="fmid">
+          <div className="fcol"><h4>Follow us</h4><Socials links={c} /></div>
+          {c.whatsapp && <div className="fcol"><h4>Talk to us</h4><TactileAnchor variant="neon" size="md" href={waLink(c.whatsapp)} target="_blank" rel="noreferrer">WhatsApp the studio <Icon name="northeast" size={16} /></TactileAnchor></div>}
+        </div>
+        <div className="fbar">
+          <span>© {year} {c.legal_name ?? "Psych Records Entertainment Limited"}</span>
+          <div><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/login">Client login</Link><Link to="/staff/login">Staff sign in</Link></div>
         </div>
       </div>
     </footer>
   );
 }
 
-export function PublicLayout({ children, dark, title }: { children: ReactNode; dark?: boolean; title?: string }) {
+export function PublicLayout({ children, title, bare }: { children: ReactNode; title?: string; bare?: boolean }) {
   usePageTitle(title);
-  return <><Announcement /><Nav dark={dark} /><main>{children}</main><Footer /><WhatsAppButton /></>;
+  return <>{!bare && <Announcement />}<Nav /><main>{children}</main><Footer /></>;
 }
 
 export function PageHero({ title, sub, kicker, children }: { title: string; sub?: string; kicker?: string; children?: ReactNode }) {

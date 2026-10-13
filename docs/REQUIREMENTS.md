@@ -6,8 +6,8 @@ How this build meets the Website Requirements Document for Psych Records Enterta
 
 | Section | Requirement | Status |
 | --- | --- | --- |
-| 3 | Premium, cinematic, responsive design with clear calls to action | Done. Black and green brand, photo-led pages, Book a Session, Explore Our Services and Contact on every page, subtle motion that respects reduced-motion settings. |
-| 4.1 | Home: hero, overview, featured categories, facilities preview, selected projects, testimonials, booking section, footer details | Done. A hero video can replace the photo later if the studio supplies one. |
+| 3 | Premium, cinematic, responsive design with clear calls to action | Done. Black and green brand set in Reddit Sans, photo-led pages, Book a Session, Explore Our Services and Contact on every page, staggered motion that respects reduced-motion settings. |
+| 4.1 | Home: hero, overview, featured categories, facilities preview, selected projects, testimonials, booking section, footer details | Done. The hero plays the booking flow on a phone in front of an animated glass swirl; sections cover why book here, how it works, services, rooms, testimonials, work, packages and FAQs. |
 | 4.2 | About: background, vision, mission, philosophy, team, photos, reasons to work with the studio | Done, all editable. |
 | 4.3 | Services: music, video, podcast, photography and content, room for new categories; description, images, optional pricing, duration, deliverables, booking or enquiry per service | Done. Every service has its own page; new categories are added from the dashboard. |
 | 4.4 | Studio and facilities: rooms, equipment, personnel, gallery, virtual tour | Done. The tour accepts a YouTube or Vimeo link (played on the page) or any tour link. |
