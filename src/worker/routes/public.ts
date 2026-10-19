@@ -20,7 +20,7 @@ r.get("/catalog", async (c) => {
   ]);
   return c.json({
     services: services.map((s) => ({ ...s, deliverables: JSON.parse(s.deliverables), gallery: JSON.parse(s.gallery) })),
-    packages: packages.map((p) => ({ ...p, includes: JSON.parse(p.includes) })),
+    packages: packages.filter((p) => categories.some((x) => x.slug === p.service_category && x.bookable)).map((p) => ({ ...p, includes: JSON.parse(p.includes) })),
     rooms: rooms.map((x) => ({ ...x, features: JSON.parse(x.features) })),
     extras, categories, hours,
     rules: { holdMin: rules.holdMin, extraHourKobo: rules.extraHourKobo, maxPeople: rules.maxPeople, buffer: rules.buffer, depositPercent: rules.depositPercent, requireApproval: rules.requireApproval, paymentWindowHours: rules.paymentWindowHours },

@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api } from "./api";
+import { LEVELS, hasPermission, type Level, type Permission } from "../../shared/permissions";
 
-export interface User { id: string; email: string; name: string; phone: string; role: "client" | "admin" | "ceo"; title: string; permissions: string[]; emailVerified: boolean }
+export interface User { id: string; email: string; name: string; phone: string; role: "client" | "admin" | "ceo"; level: string; title: string; permissions: string[]; emailVerified: boolean }
 interface AuthCtx { user: User | null; ready: boolean; refresh: () => Promise<void>; setUser: (u: User | null) => void; logout: () => Promise<void> }
 
 const Ctx = createContext<AuthCtx>(null!);
@@ -20,4 +21,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export const useAuth = () => useContext(Ctx);
-export const can = (u: User | null, p: string) => !!u && (u.role === "ceo" || (u.role === "admin" && u.permissions.includes(p)));
+export const can = (u: User | null, p: string) => !!u && hasPermission(u, p as Permission);
+export const roleLabel = (u: Pick<User, "role" | "level" | "title">) => (u.role === "ceo" ? "CEO" : u.role === "client" ? "Client" : u.title || LEVELS[u.level as Level]?.label || "Staff");

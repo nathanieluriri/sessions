@@ -19,6 +19,7 @@ export interface SessionUser {
   name: string;
   phone: string;
   role: Role;
+  level: string;
   title: string;
   permissions: string[];
   emailVerified: boolean;

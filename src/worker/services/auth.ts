@@ -10,7 +10,7 @@ import { audit } from "./audit";
 export const SESSION_DAYS = 14;
 
 export const toSessionUser = (u: UserRow): SessionUser => ({
-  id: u.id, email: u.email, name: u.name, phone: u.phone, role: u.role, title: u.title,
+  id: u.id, email: u.email, name: u.name, phone: u.phone, role: u.role, level: u.level, title: u.title,
   permissions: JSON.parse(u.permissions), emailVerified: !!u.email_verified_at,
 });
 

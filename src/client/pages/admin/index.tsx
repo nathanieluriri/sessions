@@ -5,7 +5,8 @@ import { Area, Btn, Field, Loading, Modal, Seg, Tag } from "../../components/ui"
 import { TactileAnchor } from "../../components/kitchen";
 import { Icon } from "../../components/brand";
 import { api } from "../../lib/api";
-import { can, useAuth, type User } from "../../lib/auth";
+import { can, roleLabel, useAuth, type User } from "../../lib/auth";
+import { isOwner, staffChangeBlocked, type Level } from "../../../shared/permissions";
 import { addDays, dateTime, lagosToday, naira, shortDate, statusLabel, statusTone, t12 } from "../../lib/format";
 import { act, useApi } from "./kit";
 import { useCatalog } from "../../lib/catalog";
@@ -13,7 +14,7 @@ import { Availability, BookingDrawer, Bookings, Calendar, Clients } from "./book
 import { Catalogue } from "./catalog";
 import { Website } from "./content";
 
-type Access = { perm?: string; ceo?: boolean };
+type Access = { perm?: string; any?: string[] };
 const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "", to: "/admin", label: "Overview", title: "Overview", icon: "grid", end: true },
   { key: "calendar", to: "/admin/calendar", label: "Calendar", title: "Calendar", icon: "calendar", perm: "view_calendar" },
@@ -23,12 +24,14 @@ const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "catalogue", to: "/admin/catalogue", label: "Services and pricing", title: "Services, packages and rooms", icon: "music", perm: "edit_packages" },
   { key: "enquiries", to: "/admin/enquiries", label: "Enquiries", title: "Enquiries and quotes", icon: "chat", perm: "assist_clients" },
   { key: "website", to: "/admin/website", label: "Website", title: "Website content", icon: "pencil", perm: "edit_content" },
-  { key: "payments", to: "/admin/payments", label: "Payments", title: "Payments and balances", icon: "card", ceo: true },
-  { key: "reports", to: "/admin/reports", label: "Reports", title: "Reports", icon: "chart", ceo: true },
-  { key: "staff", to: "/admin/staff", label: "Staff", title: "Staff and permissions", icon: "shield", ceo: true },
-  { key: "audit", to: "/admin/audit", label: "Audit log", title: "Audit log and email outbox", icon: "receipt", ceo: true },
+  { key: "online-booking", to: "/admin/online-booking", label: "Online booking", title: "What clients can book online", icon: "calendar", perm: "toggle_booking_categories" },
+  { key: "verify", to: "/admin/verify", label: "Verify payment", title: "Verify a payment reference", icon: "card", perm: "verify_payments" },
+  { key: "payments", to: "/admin/payments", label: "Payments", title: "Payments and balances", icon: "card", perm: "view_payments" },
+  { key: "reports", to: "/admin/reports", label: "Reports", title: "Reports", icon: "chart", perm: "view_reports" },
+  { key: "staff", to: "/admin/staff", label: "Staff", title: "Staff and permissions", icon: "shield", perm: "manage_staff" },
+  { key: "audit", to: "/admin/audit", label: "Audit log", title: "Audit log and email outbox", icon: "receipt", perm: "view_audit" },
 ];
-const allowed = (u: User | null, s: Access) => (s.ceo ? u?.role === "ceo" : s.perm ? can(u, s.perm) : true);
+const allowed = (u: User | null, s: Access) => (s.perm ? can(u, s.perm) : true);
 
 export function Admin() {
   const { section = "" } = useParams();
@@ -222,27 +225,72 @@ function Reports() {
 function Staff() {
   const { user } = useAuth();
   const [list, load] = useApi<any[]>("/admin/staff");
-  const [perms] = useApi<{ permissions: Record<string, string>; ceoOnly: string[] }>("/admin/permissions");
+  const [perms] = useApi<{ permissions: Record<string, string>; levels: Record<string, { label: string; defaults: string[] }>; ownerOnly: string[] }>("/admin/permissions");
   const [edit, setEdit] = useState<any>(null);
-  if (!list || !perms) return <Loading />;
+  if (!list || !perms || !user) return <Loading />;
   const toggle = (p: string) => setEdit({ ...edit, permissions: edit.permissions.includes(p) ? edit.permissions.filter((x: string) => x !== p) : [...edit.permissions, p] });
+  const owner = isOwner(user);
+  const levels = Object.entries(perms.levels).filter(([k]) => k !== "ceo" && (owner || k !== "coo"));
+  const blocked = edit && staffChangeBlocked(user, edit.id ? list.find((s) => s.id === edit.id) : null, { level: edit.level as Level, permissions: edit.permissions });
+  const editable = (s: any) => !staffChangeBlocked(user, s, { level: s.level || "custom", permissions: [] });
   const save = () => edit.id
-    ? act(() => api(`/admin/staff/${edit.id}`, { method: "PUT", body: { permissions: edit.permissions, active: edit.active, title: edit.title } }), "Access updated", () => { setEdit(null); load(); })
-    : act(() => api("/admin/staff", { body: { name: edit.name, email: edit.email, title: edit.title, permissions: edit.permissions } }), "Staff account created, sign-in details emailed", () => { setEdit(null); load(); });
+    ? act(() => api(`/admin/staff/${edit.id}`, { method: "PUT", body: { level: edit.level, permissions: edit.permissions, active: edit.active, title: edit.title } }), "Access updated", () => { setEdit(null); load(); })
+    : act(() => api("/admin/staff", { body: { name: edit.name, email: edit.email, title: edit.title, level: edit.level, permissions: edit.permissions } }), "Staff account created, sign-in details emailed", () => { setEdit(null); load(); });
   return <>
-    <div className="row between wrapflex gap12"><span className="small muted">Staff accounts are created here only. There is no public staff sign-up.</span><Btn size="sm" onClick={() => setEdit({ name: "", email: "", title: "", permissions: [], active: true })}>Add staff</Btn></div>
+    <div className="row between wrapflex gap12"><span className="small muted">Staff accounts are created here only. There is no public staff sign-up.</span><Btn size="sm" onClick={() => setEdit({ name: "", email: "", title: "", level: "receptionist", permissions: [...perms.levels.receptionist.defaults], active: true })}>Add staff</Btn></div>
     <div className="scrollx"><table className="table">
       <thead><tr><th>Name</th><th>Role</th><th>Permissions</th><th>Status</th><th /></tr></thead>
-      <tbody>{list.map((s) => <tr key={s.id}><td><b>{s.name}</b><div className="caption">{s.email}</div></td><td>{s.role === "ceo" ? "CEO" : s.title || "Admin"}</td><td className="small">{s.role === "ceo" ? "Everything" : s.permissions.length ? s.permissions.map((p: string) => p.replace(/_/g, " ")).join(", ") : "None"}</td><td><Tag tone={s.active ? "success" : "danger"}>{s.active ? "Active" : "Suspended"}</Tag></td><td>{s.id !== user?.id && s.role !== "ceo" && <button className="link small" onClick={() => setEdit({ ...s })}>Edit access</button>}</td></tr>)}</tbody>
+      <tbody>{list.map((s) => <tr key={s.id}><td><b>{s.name}</b><div className="caption">{s.email}</div></td><td>{roleLabel(s)}</td><td className="small">{isOwner(s) ? "Everything" : s.permissions.length ? s.permissions.map((p: string) => p.replace(/_/g, " ")).join(", ") : "None"}</td><td><Tag tone={s.active ? "success" : "danger"}>{s.active ? "Active" : "Suspended"}</Tag></td><td>{editable(s) && <button className="link small" onClick={() => setEdit({ ...s, level: s.level || "custom" })}>Edit access</button>}</td></tr>)}</tbody>
     </table></div>
-    <div className="panel small"><b>CEO only:</b> {perms.ceoOnly.join(" · ")}</div>
+    <div className="panel small"><b>CEO and COO only:</b> {perms.ownerOnly.join(" · ")}</div>
     {edit && <Modal title={edit.id ? `Access for ${edit.name}` : "Add staff"} onClose={() => setEdit(null)}>
       {!edit.id && <><Field label="Name" name="sname" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /><Field label="Email" name="semail" type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></>}
       <Field label="Job title" name="stitle" value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
-      <div className="stack gap8">{Object.entries(perms.permissions).map(([k, v]) => <label key={k} className="row gap8 small"><input type="checkbox" checked={edit.permissions.includes(k)} onChange={() => toggle(k)} />{v}</label>)}</div>
+      <div className="field"><label>Role</label><select className="select" value={edit.level} onChange={(e) => setEdit({ ...edit, level: e.target.value, permissions: [...perms.levels[e.target.value].defaults] })}>
+        {levels.map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+      </select><span className="caption">Picking a role fills in its usual permissions. Adjust them below.</span></div>
+      {edit.level === "coo" ? <div className="panel small">The COO has the same access as the CEO.</div>
+        : <div className="stack gap8">{Object.entries(perms.permissions).map(([k, v]) => <label key={k} className="row gap8 small"><input type="checkbox" checked={edit.permissions.includes(k)} onChange={() => toggle(k)} />{v}</label>)}</div>}
       {edit.id && <label className="row gap8 small"><input type="checkbox" checked={edit.active} onChange={(e) => setEdit({ ...edit, active: e.target.checked })} /> Account active</label>}
-      <Btn onClick={save}>{edit.id ? "Save access" : "Create account"}</Btn>
+      {blocked && <div className="panel small">{blocked}</div>}
+      <Btn onClick={save} disabled={!!blocked}>{edit.id ? "Save access" : "Create account"}</Btn>
     </Modal>}
+  </>;
+}
+
+function OnlineBooking() {
+  const [cat, load] = useApi<any>("/catalog");
+  if (!cat) return <Loading />;
+  const set = (slug: string, bookable: boolean) => act(() => api(`/admin/categories/${slug}/bookable`, { method: "PUT", body: { bookable } }), bookable ? "Open for online booking" : "Closed for online booking", load);
+  return <>
+    <span className="small muted">Closed categories stay on the website with a quote button, but clients cannot book them online. Staff can still add bookings for them by hand.</span>
+    <div className="stack gap12">{cat.categories.map((c: any) => <div key={c.slug} className="card row between wrapflex gap12">
+      <div><b>{c.name}</b><div className="caption">{c.bookable ? "Clients can book online" : "Quote requests only"}</div></div>
+      <Btn size="sm" kind={c.bookable ? "neutral" : ""} onClick={() => set(c.slug, !c.bookable)}>{c.bookable ? "Close online booking" : "Open online booking"}</Btn>
+    </div>)}</div>
+  </>;
+}
+
+function Verify() {
+  const [ref, setRef] = useState("");
+  const [p, setP] = useState<any>(null);
+  const [error, setError] = useState("");
+  const run = async (fn: () => Promise<any>) => { setError(""); try { setP(await fn()); } catch (e: any) { setP(null); setError(e.message); } };
+  const find = () => run(() => api(`/admin/payments/lookup?reference=${encodeURIComponent(ref.trim())}`));
+  const check = () => run(() => api(`/admin/payments/${encodeURIComponent(p.reference)}/check`, { method: "POST" }));
+  return <>
+    <form className="row gap12 wrapflex" style={{ alignItems: "flex-end" }} onSubmit={(e) => { e.preventDefault(); find(); }}>
+      <Field label="Reference code" name="ref" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="PR..." />
+      <Btn type="submit" disabled={!ref.trim()}>Look up</Btn>
+    </form>
+    {error && <div className="panel small">{error}</div>}
+    {p && <div className="card stack gap12">
+      <div className="row between wrapflex gap12"><span className="mono">{p.reference}</span><Tag tone={statusTone(p.status)}>{p.status}</Tag></div>
+      <div className="grid cols-4"><Stat label="Amount" value={naira(p.amount_kobo)} /><Stat label="Client" value={p.client ?? "Unknown"} /><Stat label="Booking" value={p.booking_ref ?? "Not booked yet"} /><Stat label="Method" value={p.provider === "manual" ? `${p.channel} (staff)` : p.channel ?? p.provider} /></div>
+      {p.checked_by ? <span className="small muted">Validated by {p.checked_by_name} on {dateTime(p.checked_at)}</span>
+        : ["pending", "success"].includes(p.status) ? <div><Btn onClick={check}>{p.status === "pending" ? "Check with the payment provider and validate" : "Validate payment"}</Btn></div>
+        : <span className="small">This payment cannot be validated.</span>}
+    </div>}
   </>;
 }
 
@@ -266,5 +314,5 @@ function Audit() {
 
 const PAGES: Record<string, () => ReactNode> = {
   "": Overview, calendar: Calendar, bookings: Bookings, clients: Clients, availability: Availability, catalogue: Catalogue, enquiries: Enquiries,
-  website: Website, payments: Payments, reports: Reports, staff: Staff, audit: Audit,
+  website: Website, payments: Payments, reports: Reports, staff: Staff, audit: Audit, "online-booking": OnlineBooking, verify: Verify,
 };

@@ -1,3 +1,4 @@
+import { hasPermission, type Permission } from "../../shared/permissions";
 import type { Env, SessionUser } from "../env";
 import { bookingsRepo, paymentsRepo, changeRequestsRepo, type BookingRow, type BookingStatus, type NewBooking, type PaymentRow } from "../repositories/bookings";
 import { catalogRepo } from "../repositories/catalog";
@@ -88,7 +89,7 @@ export function dueNow(b: BookingRow) {
   return { full: 0, deposit: 0, kind: "none" as const };
 }
 
-const staffCanSeeMoney = (u: SessionUser) => u.role === "ceo" || u.permissions.includes("record_payments") || u.permissions.includes("manage_bookings");
+const staffCanSeeMoney = (u: SessionUser) => ["record_payments", "verify_payments", "view_payments", "manage_bookings"].some((p) => hasPermission(u, p as Permission));
 
 async function startPayment(env: Env, p: { holdId: string | null; bookingId: string | null; userId: string | null; email: string; amount: number; kind: PaymentRow["kind"] }, origin: string) {
   const provider = paymentProvider(env);
@@ -120,6 +121,7 @@ export const bookingService = {
   async createHold(env: Env, input: DraftInput, user: SessionUser | null) {
     const rules = await loadRules(env);
     const draft = await priceDraft(env, input, rules);
+    if (!(await catalogRepo.categoryBySlug(env.DB, draft.category))?.bookable) throw badRequest("This service is not booked online right now. Send a quote request instead.");
     const hours = await settingsRepo.hoursFor(env.DB, weekday(draft.date));
     const end = draft.start + draft.duration;
     checkHours(hours, draft.start, end);
@@ -177,7 +179,7 @@ export const bookingService = {
   },
 
   /** Called by the verify page and the webhook. Each payment is applied exactly once, and only after the provider confirms it. */
-  async confirmPayment(env: Env, reference: string, via: "server_verify" | "webhook") {
+  async confirmPayment(env: Env, reference: string, via: "server_verify" | "webhook" | "staff_check") {
     const payment = await paymentsRepo.byReference(env.DB, reference);
     if (!payment) throw notFound("Payment not found.");
     if (payment.verified_via) {
@@ -441,6 +443,32 @@ export const bookingService = {
     await mail(env, fresh, emails.cancelled(env, fresh, amount), "Booking cancelled");
     await audit(env.DB, actor, "Cancelled booking", b.ref, `${reason}. Refund ${naira(amount)}${manual ? `, ${naira(manual)} of it paid in cash or transfer to return by hand` : ""}`);
     return { refund: amount, manual };
+  },
+
+  async lookupPayment(env: Env, reference: string) {
+    if (!reference) throw badRequest("Enter a reference code.");
+    const p = await paymentsRepo.lookup(env.DB, reference);
+    if (!p) throw notFound("No payment has this reference.");
+    return p;
+  },
+
+  /** Staff check of a reference code. Pending online payments are confirmed with the provider first, so the amount must match before anything is applied. */
+  async checkPayment(env: Env, actor: SessionUser, reference: string) {
+    let p = await this.lookupPayment(env, reference);
+    if (p.status === "pending") {
+      await this.confirmPayment(env, p.reference, "staff_check");
+      p = await this.lookupPayment(env, reference);
+    }
+    if (p.status === "pending") throw conflict("The payment provider has not confirmed this payment yet. Try again in a few minutes.");
+    if (p.status === "failed") {
+      await audit(env.DB, actor, "Payment check failed", p.reference, `${naira(p.amount_kobo)} was not received`);
+      throw badRequest("This payment did not go through, or the amount paid does not match. Do not accept it.");
+    }
+    if (!p.checked_by) {
+      await paymentsRepo.markChecked(env.DB, p.reference, actor.id);
+      await audit(env.DB, actor, "Validated payment", p.reference, `${naira(p.amount_kobo)}${p.booking_ref ? ` for ${p.booking_ref}` : ""}`);
+    }
+    return this.lookupPayment(env, reference);
   },
 
   async recordPayment(env: Env, actor: SessionUser, id: string, p: { amount: number; method: string; note: string }, notify = true) {

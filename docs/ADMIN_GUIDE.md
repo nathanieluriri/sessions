@@ -1,12 +1,12 @@
 # Admin guide
 
-How to run Psych Records Entertainment day to day. Staff sign in at `/staff/login`. The CEO sees everything; other staff see only the areas the CEO grants in Staff.
+How to run Psych Records Entertainment day to day. Staff sign in at `/staff/login`. The CEO and COO see everything; other staff see only the areas they are granted in Staff.
 
 ## Daily routine
 
 1. Open **Overview**. Check sessions today, booking requests waiting for approval and client reschedule or cancellation requests.
 2. Decide every request before it expires. Undecided requests release their slot automatically (48 hours by default) and the client is told.
-3. Check **Payments, Outstanding balances** (CEO) or the **Balance due** filter in Bookings, and chase balances before sessions.
+3. Check **Payments, Outstanding balances** (view payments) or the **Balance due** filter in Bookings, and chase balances before sessions.
 4. After each session, mark it **Completed** or **No-show** from the booking. Sessions still marked confirmed are completed automatically the next day.
 
 ## Bookings
@@ -68,14 +68,32 @@ Contact form messages and quote requests arrive in **Enquiries** and by email to
 
 **Clients** lists everyone who has booked or registered, with bookings, booked value, paid and outstanding balance. Open a client to see their full history and contact them on WhatsApp.
 
-## Payments and reports (CEO)
+## Verify payment (verify payments)
+
+When a client shows a payment reference code (it starts with `PR`), open **Verify payment** and look it up. You see the amount, client, booking and method.
+
+- **Validate payment** marks a paid reference as checked by you, with the time.
+- If the online payment is still pending, the button first asks the payment provider. The booking is confirmed only when the provider says it was paid in full for the right amount. If it was not, the page says so and the payment must not be accepted.
+
+## Online booking (turn booking categories on or off)
+
+**Online booking** lists the categories. A closed category stays on the website with a quote button, but clients cannot book it online. Staff can still add bookings for it by hand. Music and audio is open; video, podcast and photography are closed.
+
+## Payments and reports (view payments, view reports)
 
 - **Payments**: every online and recorded payment with its type (deposit, full, balance, recorded), method and refunds, and the list of outstanding balances.
 - **Reports**: booked value, collected, outstanding, utilisation, repeat clients, value by week, popular packages, revenue by category and use of each room. **Export CSV** downloads every booking in the range with paid and balance columns.
 
-## Staff and permissions (CEO)
+## Staff and permissions (manage staff)
 
-Create staff accounts here; there is no public staff sign up. The new staff member gets a temporary password by email. Permissions:
+Create staff accounts here; there is no public staff sign up. The new staff member gets a temporary password by email. Pick a role to fill in its usual permissions, then adjust them.
+
+| Role | Usual permissions |
+| --- | --- |
+| CEO, COO | Everything |
+| Accountant | View calendar, record payments, verify payments, view payments, view reports |
+| Receptionist | View calendar, manage bookings, update booking details, verify payments, assist clients |
+| Developer | Edit content, turn booking categories on or off, view audit log, manage staff |
 
 | Permission | Allows |
 | --- | --- |
@@ -83,9 +101,15 @@ Create staff accounts here; there is no public staff sign up. The new staff memb
 | Manage bookings | Create, approve, decline, reschedule, cancel and complete bookings, decide client requests |
 | Update booking details | Edit people, notes, project and contact phone |
 | Record payments | Record cash or transfer payments and send payment links |
+| Verify payments | Look up payment reference codes and validate them |
+| View payments | Every payment and outstanding balance |
+| View reports | Financial reports and CSV export |
 | Assist clients | Enquiries and quote requests |
 | Edit availability | Opening hours, buffers and blocked time |
 | Edit packages | Services, packages, rooms, categories, extras, deposits and approval rules |
+| Turn booking categories on or off | Choose which categories clients can book online |
 | Edit content | Website pages, portfolio, team, FAQs, policies, SEO and analytics |
+| View audit log | Audit log and email outbox |
+| Manage staff | Add staff and change their access |
 
-Payments, reports, staff and the audit log stay with the CEO. Every sensitive action is recorded in the **Audit log**, and every email the system sends is in the **Email outbox**.
+Rules: nobody can change their own access. Only the CEO or COO can create or change a COO, or give out manage staff. Nobody can change the CEO account here. Anyone else with manage staff can only give permissions they have themselves. Every sensitive action is recorded in the **Audit log**, and every email the system sends is in the **Email outbox**.

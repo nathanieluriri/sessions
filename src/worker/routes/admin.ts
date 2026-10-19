@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { requireCeo, requirePermission, requireStaff } from "../middleware/auth";
+import { requirePermission, requireStaff } from "../middleware/auth";
 import { body, date, minute, required, text, email } from "../lib/validate";
 import { bookingService } from "../services/bookings";
 import { availabilitySettingsService, catalogService, clientService, contentService, dashboardService, enquiryService, reportService, staffService } from "../services/admin";
@@ -16,7 +16,7 @@ import { badRequest, forbidden } from "../lib/errors";
 import { uuid } from "../lib/crypto";
 import { studioNow, addDays } from "../lib/time";
 import { can } from "../middleware/auth";
-import { PERMISSIONS, CEO_ONLY } from "../../shared/permissions";
+import { LEVELS, OWNER_ONLY, PERMISSIONS, isOwner, type Level } from "../../shared/permissions";
 
 const r = new Hono<AppEnv>();
 r.use("*", requireStaff);
@@ -25,8 +25,7 @@ const ok = { ok: true };
 
 r.get("/overview", async (c) => {
   const data = await dashboardService.overview(c.env);
-  // Financial figures and launch setup are CEO only; admins get the operational parts.
-  if (actor(c).role !== "ceo") return c.json({ ...data, report: null });
+  if (!isOwner(actor(c))) return c.json({ ...data, report: can(actor(c), "view_reports") ? data.report : null });
   const content = await contentRepo.content(c.env.DB);
   const setup = {
     payments: !!c.env.PAYSTACK_SECRET_KEY, email: !!c.env.RESEND_API_KEY, domain: !new URL(c.env.APP_URL).hostname.endsWith(".workers.dev"),
@@ -34,7 +33,7 @@ r.get("/overview", async (c) => {
   };
   return c.json({ ...data, setup });
 });
-r.get("/permissions", (c) => c.json({ permissions: PERMISSIONS, ceoOnly: CEO_ONLY }));
+r.get("/permissions", (c) => c.json({ permissions: PERMISSIONS, levels: LEVELS, ownerOnly: OWNER_ONLY }));
 
 // Calendar, bookings and clients
 r.get("/calendar", requirePermission("view_calendar"), async (c) => {
@@ -152,6 +151,15 @@ r.put("/rules", requirePermission("edit_packages"), async (c) => {
   return c.json(ok);
 });
 
+r.put("/categories/:slug/bookable", requirePermission("toggle_booking_categories"), async (c) => {
+  const b = await body(c, z.object({ bookable: z.boolean() }));
+  const cat = await catalogRepo.categoryBySlug(c.env.DB, c.req.param("slug"));
+  if (!cat) throw badRequest("That category does not exist.");
+  await catalogRepo.setBookable(c.env.DB, cat.slug, b.bookable);
+  await audit(c.env.DB, actor(c), b.bookable ? "Opened category for booking" : "Closed category for booking", cat.name);
+  return c.json(ok);
+});
+
 // Generic collections: rooms, categories, services, extras, portfolio, team, equipment, gallery, testimonials, FAQs, announcements, page SEO
 const collectionAccess = (c: Context<AppEnv>) => {
   const col = collectionFor(c.req.param("name") ?? "");
@@ -203,33 +211,32 @@ r.post("/enquiries/:id/reply", requirePermission("assist_clients"), async (c) =>
 });
 r.post("/enquiries/:id/close", requirePermission("assist_clients"), async (c) => { await enquiryService.close(c.env, actor(c), c.req.param("id")); return c.json(ok); });
 
-// CEO only
-const ceo = new Hono<AppEnv>();
-ceo.use("*", requireCeo);
-ceo.get("/payments", async (c) => c.json(await dashboardService.payments(c.env)));
-ceo.get("/reports", async (c) => {
+// Payments, reports, staff and audit
+const levelSchema = z.enum(Object.keys(LEVELS) as [Level, ...Level[]]);
+r.get("/payments", requirePermission("view_payments"), async (c) => c.json(await dashboardService.payments(c.env)));
+r.get("/payments/lookup", requirePermission("verify_payments"), async (c) => c.json(await bookingService.lookupPayment(c.env, (c.req.query("reference") ?? "").trim())));
+r.post("/payments/:reference/check", requirePermission("verify_payments"), async (c) => c.json(await bookingService.checkPayment(c.env, actor(c), c.req.param("reference"))));
+r.get("/reports", requirePermission("view_reports"), async (c) => {
   const today = studioNow().date;
   return c.json(await reportService.overview(c.env, c.req.query("from") ?? `${today.slice(0, 7)}-01`, c.req.query("to") ?? today));
 });
-ceo.get("/reports.csv", async (c) => {
+r.get("/reports.csv", requirePermission("view_reports"), async (c) => {
   const today = studioNow().date;
   const csv = await reportService.csv(c.env, c.req.query("from") ?? `${today.slice(0, 7)}-01`, c.req.query("to") ?? addDays(today, 90));
   return c.body(csv, 200, { "Content-Type": "text/csv", "Content-Disposition": `attachment; filename="psych-records-bookings.csv"` });
 });
-ceo.get("/staff", async (c) => c.json(await staffService.list(c.env)));
-ceo.post("/staff", async (c) => {
-  const b = await body(c, z.object({ name: required("Name"), email, title: text(60).default(""), permissions: z.array(z.string()) }));
+r.get("/staff", requirePermission("manage_staff"), async (c) => c.json(await staffService.list(c.env)));
+r.post("/staff", requirePermission("manage_staff"), async (c) => {
+  const b = await body(c, z.object({ name: required("Name"), email, title: text(60).default(""), level: levelSchema.default("custom"), permissions: z.array(z.string()) }));
   await staffService.create(c.env, actor(c), b);
   return c.json(ok);
 });
-ceo.put("/staff/:id", async (c) => {
-  if (c.req.param("id") === actor(c).id) throw forbidden("You cannot change your own access.");
-  const b = await body(c, z.object({ permissions: z.array(z.string()), active: z.boolean(), title: text(60).default("") }));
+r.put("/staff/:id", requirePermission("manage_staff"), async (c) => {
+  const b = await body(c, z.object({ level: levelSchema.default("custom"), permissions: z.array(z.string()), active: z.boolean(), title: text(60).default("") }));
   await staffService.update(c.env, actor(c), c.req.param("id"), b);
   return c.json(ok);
 });
-ceo.get("/audit", async (c) => c.json(await dashboardService.audit(c.env)));
-ceo.get("/outbox", async (c) => c.json(await dashboardService.outbox(c.env)));
+r.get("/audit", requirePermission("view_audit"), async (c) => c.json(await dashboardService.audit(c.env)));
+r.get("/outbox", requirePermission("view_audit"), async (c) => c.json(await dashboardService.outbox(c.env)));
 
-r.route("/", ceo);
 export default r;
