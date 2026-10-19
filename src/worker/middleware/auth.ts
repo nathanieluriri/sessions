@@ -3,7 +3,7 @@ import { getCookie } from "hono/cookie";
 import type { AppEnv, SessionUser } from "../env";
 import { authService } from "../services/auth";
 import { forbidden, unauthorized } from "../lib/errors";
-import type { Permission } from "../../shared/permissions";
+import { hasPermission, type Permission } from "../../shared/permissions";
 
 export const COOKIE = "sessions_sid";
 
@@ -25,16 +25,9 @@ export const requireStaff: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
 };
 
-export const requireCeo: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const u = c.get("user");
-  if (!u) throw unauthorized();
-  if (u.role !== "ceo") throw forbidden("This area is for the CEO only.");
-  await next();
-};
+export const can = (u: SessionUser, p: Permission) => hasPermission(u, p);
 
-export const can = (u: SessionUser, p: Permission) => u.role === "ceo" || (u.role === "admin" && u.permissions.includes(p));
-
-/** CEO always passes; admins need the named permission. Enforced on every request, not just in the UI. */
+/** CEO and COO always pass; other staff need the named permission. Enforced on every request, not just in the UI. */
 export const requirePermission = (p: Permission): MiddlewareHandler<AppEnv> => async (c, next) => {
   const u = c.get("user");
   if (!u) throw unauthorized();

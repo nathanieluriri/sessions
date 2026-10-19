@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Icon, Mark } from "./brand";
-import { useAuth } from "../lib/auth";
+import { roleLabel, useAuth } from "../lib/auth";
 import { addDays, initials, lagosToday, shortDate, t12 } from "../lib/format";
 import { api } from "../lib/api";
 import { Tactile } from "./kitchen";
@@ -27,7 +27,7 @@ export function DashShell({ items, dark, title, action, children }: { items: Nav
         <div className="grow" />
         <div className="row gap12">
           <span className="avatar">{initials(user?.name ?? "")}</span>
-          <div className="grow" style={{ minWidth: 0 }}><b className="small" style={{ display: "block" }}>{user?.name}</b><span className="caption" style={{ color: dark ? "rgba(255,255,255,.6)" : undefined }}>{user?.role === "ceo" ? "CEO" : user?.role === "admin" ? user.title || "Admin" : "Client"}</span></div>
+          <div className="grow" style={{ minWidth: 0 }}><b className="small" style={{ display: "block" }}>{user?.name}</b><span className="caption" style={{ color: dark ? "rgba(255,255,255,.6)" : undefined }}>{user && roleLabel(user)}</span></div>
           <button className="link" onClick={out} aria-label="Log out" style={{ color: "inherit" }}><Icon name="logout" /></button>
         </div>
       </aside>

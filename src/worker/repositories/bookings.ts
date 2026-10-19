@@ -16,6 +16,7 @@ export interface PaymentRow {
   id: string; reference: string; hold_id: string | null; booking_id: string | null; user_id: string | null; amount_kobo: number;
   provider: "paystack" | "demo" | "manual"; kind: "full" | "deposit" | "balance" | "manual"; status: "pending" | "success" | "failed" | "refunded";
   channel: string | null; verified_via: string | null; note: string; recorded_by: string | null; refunded_kobo: number; paid_at: string | null; created_at: string;
+  checked_by: string | null; checked_at: string | null;
 }
 export interface ChangeRequestRow { id: string; booking_id: string; user_id: string; kind: "reschedule" | "cancel"; new_date: string | null; new_start_min: number | null; reason: string; status: string; decided_by: string | null; decided_at: string | null; created_at: string }
 
@@ -126,6 +127,11 @@ export const paymentsRepo = {
     stmt(db, `INSERT INTO payments (id, reference, booking_id, user_id, amount_kobo, provider, kind, status, channel, verified_via, note, recorded_by, paid_at)
       VALUES (?, ?, ?, ?, ?, 'manual', 'manual', 'success', ?, 'staff', ?, ?, ${NOW})`, p.id, p.reference, p.bookingId, p.userId, p.amount, p.channel, p.note, p.by),
   byReference: (db: D1Database, ref: string) => first<PaymentRow>(db, "SELECT * FROM payments WHERE reference = ?", ref),
+  lookup: (db: D1Database, ref: string) => first<PaymentRow & { booking_ref: string | null; client: string | null; checked_by_name: string | null }>(db,
+    `SELECT p.*, b.ref booking_ref, COALESCE(u.name, b.contact_name) client, s.name checked_by_name FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id
+     LEFT JOIN users u ON u.id = p.user_id LEFT JOIN users s ON s.id = p.checked_by WHERE upper(p.reference) = upper(?)`, ref),
+  markChecked: (db: D1Database, ref: string, by: string) =>
+    run(db, `UPDATE payments SET checked_by = ?, checked_at = ${NOW} WHERE reference = ? AND checked_by IS NULL`, by, ref),
   forBooking: (db: D1Database, bookingId: string) => all<PaymentRow>(db, "SELECT * FROM payments WHERE booking_id = ? AND status IN ('success', 'refunded') ORDER BY paid_at", bookingId),
   forUser: (db: D1Database, userId: string) => all<PaymentRow & { booking_ref: string | null; package_name: string | null; booking_id: string | null }>(db,
     "SELECT p.*, b.ref booking_ref, b.package_name FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id WHERE (p.user_id = ? OR b.user_id = ?) AND p.status != 'pending' ORDER BY p.created_at DESC", userId, userId),

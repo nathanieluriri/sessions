@@ -7,8 +7,8 @@ import { bookingsRepo, paymentsRepo, changeRequestsRepo } from "../repositories/
 import { hashPassword, randomToken, uuid } from "../lib/crypto";
 import { addDays, studioNow, prettyDate, label12 } from "../lib/time";
 import { naira } from "../lib/money";
-import { badRequest, conflict, notFound } from "../lib/errors";
-import { PERMISSIONS, type Permission } from "../../shared/permissions";
+import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
+import { LEVELS, PERMISSIONS, staffChangeBlocked, type Level, type Permission } from "../../shared/permissions";
 import { audit } from "./audit";
 import { notifyStaff, sendEmail } from "./notifications";
 import { toSessionUser } from "./auth";
@@ -86,22 +86,28 @@ export const availabilitySettingsService = {
   },
 };
 
+const cleanPerms = (perms: string[]) => [...new Set(perms)].filter((p): p is Permission => p in PERMISSIONS);
+
 export const staffService = {
   list: async (env: Env) => (await usersRepo.staff(env.DB)).map((u) => ({ ...toSessionUser(u), active: !!u.active, createdAt: u.created_at })),
-  async create(env: Env, actor: SessionUser, input: { name: string; email: string; title: string; permissions: string[] }) {
+  async create(env: Env, actor: SessionUser, input: { name: string; email: string; title: string; level: Level; permissions: string[] }) {
+    const perms = cleanPerms(input.permissions);
+    const blocked = staffChangeBlocked(actor, null, { level: input.level, permissions: perms });
+    if (blocked) throw forbidden(blocked);
     if (await usersRepo.byEmail(env.DB, input.email)) throw conflict("A user with this email already exists.");
-    const perms = input.permissions.filter((p): p is Permission => p in PERMISSIONS);
     const tempPassword = randomToken(9);
-    await usersRepo.create(env.DB, { id: uuid(), email: input.email, name: input.name, phone: "", passwordHash: await hashPassword(tempPassword), role: "admin", title: input.title, permissions: perms });
+    await usersRepo.create(env.DB, { id: uuid(), email: input.email, name: input.name, phone: "", passwordHash: await hashPassword(tempPassword), role: "admin", level: input.level, title: input.title, permissions: perms });
     await sendEmail(env, input.email, "Your staff account", `Hi ${input.name},\n\n${actor.name} created a staff account for you.\nSign in at ${env.APP_URL}/staff/login with ${input.email} and this temporary password: ${tempPassword}\nThen change it from your profile.`);
-    await audit(env.DB, actor, "Created staff account", input.email, perms.join(", "));
+    await audit(env.DB, actor, "Created staff account", input.email, `${LEVELS[input.level].label} · ${perms.join(", ") || "no permissions"}`);
   },
-  async update(env: Env, actor: SessionUser, id: string, input: { permissions: string[]; active: boolean; title: string }) {
+  async update(env: Env, actor: SessionUser, id: string, input: { level: Level; permissions: string[]; active: boolean; title: string }) {
     const u = await usersRepo.byId(env.DB, id);
-    if (!u || u.role !== "admin") throw notFound("Staff member not found.");
-    const perms = input.permissions.filter((p): p is Permission => p in PERMISSIONS);
-    await usersRepo.setStaff(env.DB, id, { permissions: perms, active: input.active, title: input.title });
-    await audit(env.DB, actor, "Changed permissions", u.email, `${input.active ? "Active" : "Suspended"} · ${perms.join(", ") || "no permissions"}`);
+    if (!u || u.role === "client") throw notFound("Staff member not found.");
+    const perms = cleanPerms(input.permissions);
+    const blocked = staffChangeBlocked(actor, toSessionUser(u), { level: input.level, permissions: perms });
+    if (blocked) throw forbidden(blocked);
+    await usersRepo.setStaff(env.DB, id, { level: input.level, permissions: perms, active: input.active, title: input.title });
+    await audit(env.DB, actor, "Changed permissions", u.email, `${LEVELS[input.level].label} · ${input.active ? "Active" : "Suspended"} · ${perms.join(", ") || "no permissions"}`);
   },
 };
 

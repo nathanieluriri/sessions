@@ -11,7 +11,7 @@ export interface PackageRow {
 }
 export interface ExtraRow { id: string; slug: string; name: string; price_kobo: number; active: number; category: string }
 export interface RoomRow { id: string; slug: string; name: string; kind: string; description: string; image_url: string; capacity: number; hourly_kobo: number; features: string; sort: number; active: number }
-export interface CategoryRow { slug: string; name: string; blurb: string; sort: number }
+export interface CategoryRow { slug: string; name: string; blurb: string; sort: number; bookable: number }
 
 const active = (includeInactive: boolean) => (includeInactive ? "" : "WHERE active = 1");
 
@@ -24,6 +24,8 @@ export const catalogRepo = {
   rooms: (db: D1Database, includeInactive = false) => all<RoomRow>(db, `SELECT * FROM rooms ${active(includeInactive)} ORDER BY sort, name`),
   roomById: (db: D1Database, id: string) => first<RoomRow>(db, "SELECT * FROM rooms WHERE id = ?", id),
   categories: (db: D1Database) => all<CategoryRow>(db, "SELECT * FROM categories ORDER BY sort, name"),
+  categoryBySlug: (db: D1Database, slug: string) => first<CategoryRow>(db, "SELECT * FROM categories WHERE slug = ?", slug),
+  setBookable: (db: D1Database, slug: string, on: boolean) => run(db, "UPDATE categories SET bookable = ? WHERE slug = ?", on ? 1 : 0, slug),
   upsertPackage: (db: D1Database, p: Omit<PackageRow, "sort" | "includes" | "featured" | "active"> & { includes: string[]; featured: boolean; active: boolean }) =>
     run(db, `INSERT INTO packages (id, slug, name, description, category, duration_min, price_kobo, includes, featured, active, service_category, room_id, pricing,
         deposit_percent, requires_approval, price_note, sort)

@@ -1,3 +1,4 @@
+import { hasPermission, type Permission } from "../../shared/permissions";
 import type { Env } from "../env";
 import { notificationsRepo, outboxRepo } from "../repositories/misc";
 import { usersRepo } from "../repositories/users";
@@ -38,7 +39,7 @@ export const notifyUser = async (env: Env, userId: string | null, title: string,
 /** Emails the CEO and every active admin who holds the given permission. */
 export async function notifyStaff(env: Env, permission: string, subject: string, text: string) {
   const staff = await usersRepo.staff(env.DB);
-  const to = staff.filter((s) => s.active && (s.role === "ceo" || JSON.parse(s.permissions).includes(permission)));
+  const to = staff.filter((s) => s.active && hasPermission({ ...s, permissions: JSON.parse(s.permissions) }, permission as Permission));
   for (const s of to) {
     await sendEmail(env, s.email, subject, text);
     await notifyUser(env, s.id, subject, text.split("\n")[0]);
