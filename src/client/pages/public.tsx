@@ -69,14 +69,15 @@ export function Packages() {
     setTimeout(() => document.getElementById(h)?.scrollIntoView({ block: "start" }), 50);
   }, [loc.hash, cat, site]);
   const booking = site?.policies.filter((p) => p.kind === "booking") ?? [];
+  const priced = cat?.categories.filter((c) => cat.packages.some((p) => p.service_category === c.slug)) ?? [];
   return (
     <PublicLayout title="Pricing and packages">
       <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub="Every package includes the people who run the room. Prices are locked when you book, and most packages take a deposit." />
       <section className="section" style={{ paddingTop: 40 }}><div className="wrap stack gap32">
         {!cat ? <Loading /> : <>
-          <div className="chips" role="tablist">
-            {[{ slug: "all", name: "All packages" }, ...cat.categories].map((c) => <button key={c.slug} className={`chip ${tab === c.slug ? "on" : ""}`} onClick={() => setTab(c.slug)} role="tab" aria-selected={tab === c.slug}>{c.name}</button>)}
-          </div>
+          {priced.length > 1 && <div className="chips" role="tablist">
+            {[{ slug: "all", name: "All packages" }, ...priced].map((c) => <button key={c.slug} className={`chip ${tab === c.slug ? "on" : ""}`} onClick={() => setTab(c.slug)} role="tab" aria-selected={tab === c.slug}>{c.name}</button>)}
+          </div>}
           {cat.categories.filter((c) => tab === "all" || tab === c.slug).map((c) => {
             const list = cat.packages.filter((p) => p.service_category === c.slug);
             if (!list.length) return null;

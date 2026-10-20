@@ -5,7 +5,7 @@ import { useAuth } from "../lib/auth";
 import { TactileAnchor, TactileLink } from "./kitchen";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { hm } from "../lib/format";
-import { prefersStill, useScrollFrame } from "../lib/motion";
+import { prefersStill } from "../lib/motion";
 import { introPending } from "./Intro";
 
 /** Page, label and the landing section the link scrolls to when on the home page. */
@@ -60,26 +60,16 @@ export function Nav() {
   const [act, setAct] = useState(OFF);
   const [hov, setHov] = useState(OFF);
   const links = useRef<HTMLDivElement>(null);
-  const spot = useRef<HTMLElement | null>(null);
   const loc = useLocation();
   const landing = loc.pathname === "/";
   const [enter] = useState(() => { const first = !navEntered; navEntered = true; return first; });
   const [late] = useState(() => landing && introPending());
   const home = user ? (user.role === "client" ? "/account" : "/admin") : "/login";
-  const settle = () => setAct((g) => glideTo(g, landing ? spot.current : links.current?.querySelector<HTMLElement>("a.active")));
+  const settle = () => setAct((g) => glideTo(g, links.current?.querySelector<HTMLElement>("a.active")));
   const hover = (el: HTMLElement) => setHov((g) => glideTo(g, el));
   const leave = () => setHov((g) => glideTo(g));
-  useScrollFrame(() => {
-    if (!landing || !links.current) return;
-    const mid = window.innerHeight * 0.45;
-    let key = "";
-    for (const sec of document.querySelectorAll<HTMLElement>("[data-nav]")) if (sec.getBoundingClientRect().top <= mid) key = sec.dataset.nav ?? "";
-    const el = key ? links.current.querySelector<HTMLElement>(`a[data-sec="${key}"]`) : null;
-    if (el !== spot.current) { spot.current = el; settle(); }
-  });
   useEffect(() => setOpen(false), [loc.pathname]);
   useEffect(() => {
-    spot.current = null;
     settle();
     document.fonts?.ready.then(settle);
     window.addEventListener("resize", settle);
@@ -100,9 +90,7 @@ export function Nav() {
           <div className="npill nlinks" ref={links} onMouseLeave={leave}>
             <span className={`nglide nhover ${hov.on ? "on" : ""}`} style={glideStyle(hov)} aria-hidden />
             <span className={`nglide ${act.on ? "on" : ""}`} style={glideStyle(act)} aria-hidden />
-            {LINKS.map(([to, l, sec]) => landing
-              ? <a key={to} href={`#${sec}`} data-sec={sec} onClick={jumpTo(sec)} {...hoverProps}>{l}</a>
-              : <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")} {...hoverProps}>{l}</NavLink>)}
+            {LINKS.map(([to, l]) => <NavLink key={to} to={to} className={({ isActive }) => (isActive ? "active" : "")} {...hoverProps}>{l}</NavLink>)}
           </div>
           <div className="nright">
             <TactileLink to={home} variant="light" size="md" className="nlogin">{user ? "My account" : "Log in"}</TactileLink>
@@ -114,7 +102,7 @@ export function Nav() {
       <div className={`mmenu ${open ? "on" : ""}`} aria-hidden={!open}>
         {menu.map(([to, l, sec], i) => {
           const style = { "--i": i } as CSSProperties, tab = open ? 0 : -1;
-          return landing && (sec || to === "/")
+          return landing && to === "/"
             ? <a key={l} href={`#${sec}`} tabIndex={tab} style={style} onClick={jumpTo(sec, close)}>{l}</a>
             : <Link key={l} to={to} tabIndex={tab} style={style}>{l}</Link>;
         })}
