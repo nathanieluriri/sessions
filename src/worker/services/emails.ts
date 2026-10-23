@@ -60,9 +60,9 @@ export const emails = {
     subject: `Booking released · ${b.ref}`,
     text: `Hi ${b.contact_name},\n\n${reason} ${isOrder(b) ? `Your order for ${b.package_name}` : `The time on ${when(b)}`} has been released and nothing was charged.\n\nYou can book again on the website at any time.`,
   }),
-  paymentReceived: (env: Env, b: BookingRow, amount: number) => ({
+  paymentReceived: (env: Env, b: BookingRow, amount: number, unlocked = false) => ({
     subject: `Payment received · ${b.ref}`,
-    text: `Hi ${b.contact_name},\n\nWe received ${naira(amount)} for booking ${b.ref}.\n\n${details(b)}\n${money(b)}\n\nManage your booking: ${bookingLink(env, b)}`,
+    text: `Hi ${b.contact_name},\n\nWe received ${naira(amount)} for booking ${b.ref}.\n\n${details(b)}\n${money(b)}\n\n${unlocked ? `Your finished files are now unlocked. Download them from your portal: ${b.user_id ? `${env.APP_URL}/account/bookings/${b.id}` : `${env.APP_URL}/register (create an account with this email address)`}\n\n` : ""}Manage your booking: ${bookingLink(env, b)}`,
   }),
   paymentLink: (env: Env, b: BookingRow, amount: number) => ({
     subject: `Payment for booking ${b.ref}`,

@@ -173,6 +173,9 @@ async function loadBooking(env: Env, id: string) {
   return b;
 }
 
+/** True when this booking has published deliveries and nothing left to pay, so a payment email can say the files are open. */
+const unlocks = async (env: Env, b: BookingRow) => paidNet(b) >= b.total_kobo && (await bookingsRepo.deliveredCount(env.DB, b.id)) > 0;
+
 /** Once an order is complete (final delivery approved or finalized) nothing about the booking may change. */
 const assertOpen = (b: BookingRow) => {
   if (b.delivered_final_at) throw badRequest("This order is complete and can no longer be changed.");
@@ -351,7 +354,7 @@ export const bookingService = {
     const booking = await loadBooking(env, b.id);
     if (res[1].meta.changes === 1) {
       const confirmedNow = b.status !== "confirmed" && booking.status === "confirmed";
-      await mail(env, booking, confirmedNow ? emails.confirmed(env, booking) : emails.paymentReceived(env, booking, payment.amount_kobo), confirmedNow ? "Booking confirmed" : "Payment received");
+      await mail(env, booking, confirmedNow ? emails.confirmed(env, booking) : emails.paymentReceived(env, booking, payment.amount_kobo, await unlocks(env, booking)), confirmedNow ? "Booking confirmed" : "Payment received");
       await notifyStaff(env, "manage_bookings", `${confirmedNow ? "Booking confirmed" : "Payment received"} · ${booking.ref}`,
         `${booking.contact_name} paid ${naira(payment.amount_kobo)} for ${booking.ref} (${when(booking)}).\nPaid so far: ${naira(paidNet(booking))} of ${naira(booking.total_kobo)}`);
       await audit(env.DB, null, confirmedNow ? "Booking confirmed" : "Payment received", booking.ref, `${naira(payment.amount_kobo)} via ${payment.reference}`);
@@ -575,7 +578,7 @@ export const bookingService = {
     ]);
     const fresh = await loadBooking(env, id);
     const confirmedNow = b.status !== "confirmed" && fresh.status === "confirmed";
-    if (notify) await mail(env, fresh, confirmedNow ? emails.confirmed(env, fresh) : emails.paymentReceived(env, fresh, p.amount), confirmedNow ? "Booking confirmed" : "Payment received");
+    if (notify) await mail(env, fresh, confirmedNow ? emails.confirmed(env, fresh) : emails.paymentReceived(env, fresh, p.amount, await unlocks(env, fresh)), confirmedNow ? "Booking confirmed" : "Payment received");
     await audit(env.DB, actor, "Recorded payment", b.ref, `${naira(p.amount)} by ${p.method}${p.note ? `. ${p.note}` : ""}`);
     return fresh;
   },

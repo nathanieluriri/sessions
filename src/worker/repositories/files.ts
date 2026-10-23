@@ -85,11 +85,31 @@ export const filesRepo = {
      ) WHERE id = ?1 AND state = 'uploading'`, id, p.partNumber, p.etag, p.size)).meta.changes === 1,
   markReady: async (db: D1Database, id: string, size: number) => (await run(db,
     `UPDATE booking_files SET state = 'ready', size = ?, completed_at = ${NOW}, upload_id = NULL, parts = '[]' WHERE id = ? AND state = 'uploading'`, size, id)).meta.changes === 1,
+  /** Only a file still uploading may be swept, so a file finished a moment ago is never removed by the job. */
+  markStale: async (db: D1Database, id: string) => (await run(db, "UPDATE booking_files SET state = 'removed', upload_id = NULL WHERE id = ? AND state = 'uploading'", id)).meta.changes === 1,
   markRemoved: async (db: D1Database, id: string) => (await run(db, "UPDATE booking_files SET state = 'removed', upload_id = NULL WHERE id = ? AND state != 'removed'", id)).meta.changes === 1,
   /** A removed row keeps its size until its object is really gone from R2, so the sweep knows what is left to delete. */
   emptied: (db: D1Database, id: string) => run(db, "UPDATE booking_files SET size = 0 WHERE id = ? AND state = 'removed'", id),
   counted: (db: D1Database, id: string) =>
     run(db, `UPDATE booking_files SET download_count = download_count + 1, first_downloaded_at = COALESCE(first_downloaded_at, ${NOW}) WHERE id = ?`, id),
+  /** One audit row per person and file per window: true for the request that wrote it, false for repeats inside the window. */
+  claimDownload: async (db: D1Database, a: { id: string; actorId: string; actorLabel: string; action: string; target: string; detail: string; since: string }) => (await run(db,
+    `INSERT INTO audit_logs (id, actor_id, actor_label, action, target, detail)
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE NOT EXISTS (SELECT 1 FROM audit_logs WHERE actor_id = ?2 AND action = ?4 AND target = ?5 AND detail = ?6 AND created_at > ?7)`,
+    a.id, a.actorId, a.actorLabel, a.action, a.target, a.detail, a.since)).meta.changes === 1,
+  releasedCount: async (db: D1Database, bookingId: string) =>
+    (await first<{ n: number }>(db, `SELECT COUNT(*) n FROM booking_files f WHERE f.booking_id = ? AND ${PUBLISHED} AND f.released = 1`, bookingId))?.n ?? 0,
+  markNotified: (db: D1Database, bookingId: string) => run(db, `UPDATE bookings SET delivery_notified_at = ${NOW} WHERE id = ?`, bookingId),
+  published: (db: D1Database, bookingId: string) => all<FileRow>(db, `SELECT f.* FROM booking_files f WHERE f.booking_id = ? AND ${PUBLISHED} ORDER BY f.delivered_at, f.title`, bookingId),
+  /** Bookings of this client with published work they were never told about (delivered before they had an email or account). */
+  unnotifiedForUser: (db: D1Database, userId: string) => all<BookingRow>(db,
+    `SELECT b.* FROM bookings b WHERE b.user_id = ? AND b.delivery_notified_at IS NULL AND EXISTS (SELECT 1 FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED})`, userId),
+  /** Delivered, paid, no open revision, and the newest delivery is old enough: these complete by themselves. */
+  settled: (db: D1Database, before: string, limit: number) => all<BookingRow>(db,
+    `SELECT b.* FROM bookings b WHERE b.status IN ('confirmed', 'completed') AND b.delivered_final_at IS NULL AND b.total_kobo - (b.amount_paid_kobo - b.refunded_kobo) <= 0
+       AND NOT EXISTS (SELECT 1 FROM revision_requests r WHERE r.booking_id = b.id AND r.status = 'open')
+       AND EXISTS (SELECT 1 FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED})
+       AND (SELECT MAX(f.delivered_at) FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED}) <= ? ORDER BY b.created_at LIMIT ?`, before, limit),
   setReleased: async (db: D1Database, id: string, released: boolean) =>
     (await run(db, "UPDATE booking_files SET released = ? WHERE id = ? AND direction = 'delivery' AND state = 'ready'", released ? 1 : 0, id)).meta.changes === 1,
 

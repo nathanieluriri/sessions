@@ -8,6 +8,9 @@ export const LIMITS = {
   active: 20,
 };
 
+/** A fully delivered, paid order with no open revision completes by itself after this many days. */
+export const AUTO_COMPLETE_DAYS = 7;
+
 export const UPLOAD_STATUSES = ["pending", "approved", "confirmed", "completed"];
 export const DELIVER_STATUSES = ["confirmed", "completed"];
 
