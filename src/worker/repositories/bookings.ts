@@ -25,7 +25,10 @@ export interface ChangeRequestRow { id: string; booking_id: string; user_id: str
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 
 /** Bookings that hold their room: confirmed ones, plus requests and approvals until they expire. ?5 is the current time. */
-const OCCUPIES = `(b.status = 'confirmed' OR (b.status IN ('pending', 'approved') AND (b.expires_at IS NULL OR b.expires_at > ?5)))`;
+// A completed booking keeps its room until its end has passed (Lagos is UTC+1, and an end above 1440 runs into the next day).
+const LOCAL = `datetime(?5, '+1 hour')`;
+const OCCUPIES = `(b.status = 'confirmed' OR (b.status IN ('pending', 'approved') AND (b.expires_at IS NULL OR b.expires_at > ?5))
+  OR (b.status = 'completed' AND CAST(julianday(b.date) - julianday(date(${LOCAL})) AS INTEGER) * 1440 + b.end_min > CAST(strftime('%H', ${LOCAL}) AS INTEGER) * 60 + CAST(strftime('%M', ${LOCAL}) AS INTEGER)))`;
 
 // Overlap with a buffer on both sides, per room: [start - buffer, end + buffer) must not intersect. Blocks without a room close every room.
 // Rows from the neighbouring dates are shifted by whole days, so a session that ends after midnight (end_min above 1440) still holds the room the next morning.
@@ -79,9 +82,38 @@ export const bookingsRepo = {
       b.date, b.start, b.end, buffer, now, "", "", b.roomId || null, ...values(b), yymm(b.date));
     return r.meta.changes === 1;
   },
-  /** Used when a paid hold becomes a booking: idempotent on hold_id, so the webhook and the verify page cannot both create one. */
-  insertFromHold: (db: D1Database, b: NewBooking) =>
-    stmt(db, `INSERT OR IGNORE INTO bookings (ref, ${COLS.join(", ")}) VALUES (${REF_SQL("?1")}, ${params(2)})`, yymm(b.date), ...values(b)),
+  /**
+   * Used when a paid hold becomes a booking: idempotent on hold_id, so the webhook and the verify page cannot both create one.
+   * With a guard the insert is atomic like the others: it only happens if the room is still free (the hold itself is ignored), and optionally only if the payment was just claimed.
+   */
+  insertFromHold: (db: D1Database, b: NewBooking, guard?: { buffer: number; now: string; payment?: { reference: string; via: string; paidAt: string } }) => {
+    if (!guard) return stmt(db, `INSERT OR IGNORE INTO bookings (ref, ${COLS.join(", ")}) VALUES (${REF_SQL("?1")}, ${params(2)})`, yymm(b.date), ...values(b));
+    const at = 9 + COLS.length;
+    const claimed = guard.payment ? ` AND EXISTS (SELECT 1 FROM payments WHERE reference = ?${at + 1} AND verified_via = ?${at + 2} AND paid_at = ?${at + 3})` : "";
+    return stmt(db, `INSERT OR IGNORE INTO bookings (ref, ${COLS.join(", ")}) SELECT ${REF_SQL(`?${at}`)}, ${params(9)} WHERE ${b.roomId ? CLASH : "1"}${claimed}`,
+      b.date, b.start, b.end, guard.buffer, guard.now, "", b.holdId ?? "", b.roomId || null, ...values(b), yymm(b.date), ...(guard.payment ? [guard.payment.reference, guard.payment.via, guard.payment.paidAt] : []));
+  },
+  /** Claims a payment so it is applied exactly once. Zero changes means another call already took it. */
+  claimPayment: (db: D1Database, reference: string, via: string, channel: string | null, paidAt: string) =>
+    stmt(db, "UPDATE payments SET status = 'success', verified_via = ?, channel = ?, paid_at = ? WHERE reference = ? AND verified_via IS NULL", via, channel, paidAt, reference),
+  /**
+   * Adds a claimed payment to a booking, atomically: it must not overpay the total, and a request or approval must still have its room free of everything else.
+   * Returns a statement for a batch that starts with claimPayment.
+   */
+  applyPayment: (db: D1Database, b: { id: string; date: string; start_min: number; end_min: number; room_id: string | null }, amount: number, p: { reference: string; via: string; paidAt: string }, buffer: number) =>
+    stmt(db, `UPDATE bookings SET amount_paid_kobo = amount_paid_kobo + ?9, status = CASE WHEN status IN ('pending', 'approved') THEN 'confirmed' ELSE status END,
+        expires_at = CASE WHEN status IN ('pending', 'approved') THEN NULL ELSE expires_at END, updated_at = ${NOW}
+      WHERE id = ?6 AND amount_paid_kobo - refunded_kobo + ?9 <= total_kobo
+        AND EXISTS (SELECT 1 FROM payments WHERE reference = ?10 AND verified_via = ?11 AND paid_at = ?5)
+        AND (status NOT IN ('pending', 'approved') OR room_id IS NULL OR ${CLASH})`,
+      b.date, b.start_min, b.end_min, buffer, p.paidAt, b.id, "", b.room_id, amount, p.reference, p.via),
+  /** A decision on a request or approval that only lands if its room is still free of every other booking, hold and block. Returns whether it did. */
+  decideIfFree: async (db: D1Database, b: { id: string; date: string; start_min: number; end_min: number; room_id: string | null }, d: { status: BookingStatus; by: string; note: string; expiresAt: string | null }, buffer: number, now: string) => {
+    const r = await run(db, `UPDATE bookings SET status = ?9, decided_by = ?10, decided_at = ${NOW}, decision_note = ?11, expires_at = ?12, updated_at = ${NOW}
+      WHERE id = ?6 AND status IN ('pending', 'approved') AND (room_id IS NULL OR ${CLASH})`,
+      b.date, b.start_min, b.end_min, buffer, now, b.id, "", b.room_id, d.status, d.by, d.note, d.expiresAt);
+    return r.meta.changes === 1;
+  },
 
   hold: (db: D1Database, id: string) => first<HoldRow>(db, "SELECT * FROM holds WHERE id = ?", id),
   attachHoldUser: (db: D1Database, id: string, userId: string) => run(db, "UPDATE holds SET user_id = ? WHERE id = ? AND (user_id IS NULL OR user_id = ?)", userId, id, userId),

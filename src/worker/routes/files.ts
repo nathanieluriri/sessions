@@ -47,6 +47,7 @@ const deliverers = requirePermission("deliver_files");
 transfer(staffFileRoutes, "staff", deliverers);
 staffFileRoutes.get("/bookings/:id/files", deliverers, async (c) => c.json(await filesService.staffFiles(c.env, c.get("user")!, c.req.param("id"))));
 staffFileRoutes.post("/bookings/:id/deliver", deliverers, async (c) => c.json(await filesService.deliver(c.env, c.get("user")!, c.req.param("id"), await body(c, deliver))));
+staffFileRoutes.post("/bookings/:id/notify-delivery", deliverers, async (c) => c.json(await filesService.notifyDelivery(c.env, c.get("user")!, c.req.param("id"))));
 staffFileRoutes.post("/bookings/:id/finalize", deliverers, async (c) => c.json(await filesService.finalize(c.env, c.get("user")!, c.req.param("id"))));
 staffFileRoutes.post("/files/:id/release", deliverers, async (c) =>
   c.json(await filesService.setReleased(c.env, c.get("user")!, c.req.param("id"), (await body(c, release)).released)));

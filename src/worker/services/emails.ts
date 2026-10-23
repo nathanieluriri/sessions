@@ -6,28 +6,38 @@ import { naira } from "../lib/money";
 type Moment = { date: string; start_min: number; end_min: number; scheduling?: string };
 
 /** Remote orders have no session time, only the day they were placed. */
-export const when = (b: Moment) => (b.scheduling === "project" ? `ordered ${prettyDate(b.date)}` : `${prettyDate(b.date)}, ${timeRange(b.date, b.start_min, b.end_min)}`);
+export const when = (b: Moment) =>
+  b.scheduling === "project" ? `ordered ${prettyDate(b.date)}` : b.scheduling === "day" ? `preferred start date ${prettyDate(b.date)}` : `${prettyDate(b.date)}, ${timeRange(b.date, b.start_min, b.end_min)}`;
 export const paidNet = (b: BookingRow) => b.amount_paid_kobo - b.refunded_kobo;
 export const balanceOf = (b: BookingRow) => Math.max(0, b.total_kobo - paidNet(b));
 export const payLink = (env: Env, b: BookingRow) => `${env.APP_URL}/pay/${b.id}?t=${b.pay_token ?? ""}`;
 export const bookingLink = (env: Env, b: BookingRow) => (b.user_id ? `${env.APP_URL}/account/bookings/${b.id}` : payLink(env, b));
 
 const isOrder = (b: BookingRow) => b.scheduling === "project";
+const isResidency = (b: BookingRow) => b.scheduling === "day";
+/** Anything with finished files to collect is paid up before they unlock, rather than before a session. */
+const hasFiles = (b: BookingRow) => isOrder(b) || isResidency(b) || !!b.due_date || b.revision_limit > 0;
 
+const residency = "The studio will confirm your full residency, accommodation and schedule with you after this.";
+
+/** "Name (note)", folding the note into a bracket the name already has. */
+const noted = (name: string, note: string) => (name.endsWith(")") ? `${name.slice(0, -1)}, ${note})` : `${name} (${note})`);
 const addOns = (b: BookingRow) =>
-  (JSON.parse(b.extras) as { name: string; price: number; quote?: boolean }[]).map((e) => `${e.name} (${e.quote ? "price on request" : naira(e.price)})`).join(", ");
+  (JSON.parse(b.extras) as { name: string; price: number; quote?: boolean }[]).map((e) => noted(e.name, e.quote ? "price on request" : naira(e.price))).join(", ");
 
 const details = (b: BookingRow) =>
   [
-    `Booking reference: ${b.ref}`, `Service: ${b.service_name} · ${b.package_name}`,
-    ...(isOrder(b) ? [`Order placed: ${prettyDate(b.date)}`] : [`Room: ${b.room_name}`, `Date: ${prettyDate(b.date)}`, `Time: ${timeRange(b.date, b.start_min, b.end_min)}`]),
+    `Booking reference: ${b.ref}`, `Service: ${b.service_name === b.package_name ? b.service_name : `${b.service_name} · ${b.package_name}`}`,
+    ...(isOrder(b) ? [`Order placed: ${prettyDate(b.date)}`]
+      : isResidency(b) ? [`Room: ${b.room_name}`, `Preferred start date: ${prettyDate(b.date)}`]
+      : [`Room: ${b.room_name}`, `Date: ${prettyDate(b.date)}`, `Time: ${timeRange(b.date, b.start_min, b.end_min)}`]),
     ...(b.due_date ? [`Delivery due: ${prettyDate(b.due_date)}`] : []),
     ...(addOns(b) ? [`Add-ons: ${addOns(b)}`] : []),
   ].join("\n");
 
 const money = (b: BookingRow) => {
   const bal = balanceOf(b);
-  return `Total: ${naira(b.total_kobo)}\nPaid: ${naira(paidNet(b))}${bal > 0 ? `\nBalance due before ${isOrder(b) ? "your finished files are released" : "your session"}: ${naira(bal)}` : "\nPayment status: paid in full"}`;
+  return `Total: ${naira(b.total_kobo)}\nPaid: ${naira(paidNet(b))}${bal > 0 ? `\nBalance due before ${hasFiles(b) ? "your finished files are released" : "your session"}: ${naira(bal)}` : "\nPayment status: paid in full"}`;
 };
 
 /** Where a remote order's client goes next. Walk-in clients without an account are told to register with the booking email. */
@@ -42,15 +52,15 @@ export const emails = {
       ? { subject: `Order confirmed · ${b.ref}`, text: `Hi ${b.contact_name},\n\nThanks, your order is confirmed.\n\n${details(b)}\n${money(b)}\n\n${orderSteps(env, b)}\n\nManage your order: ${bookingLink(env, b)}` }
       : {
         subject: `You're booked · ${b.ref} · ${prettyDate(b.date)}`,
-        text: `Hi ${b.contact_name},\n\nYour session is confirmed.\n\n${details(b)}\n${money(b)}\n\nArrive 10 minutes early. ${balanceOf(b) > 0 ? `Pay the balance any time here: ${payLink(env, b)}\n` : ""}Manage your booking: ${bookingLink(env, b)}`,
+        text: `Hi ${b.contact_name},\n\n${isResidency(b) ? "Your booking is confirmed." : "Your session is confirmed."}\n\n${details(b)}\n${money(b)}\n\n${isResidency(b) ? `${residency}\n\n` : "Arrive 10 minutes early. "} ${balanceOf(b) > 0 ? `Pay the balance any time here: ${payLink(env, b)}\n` : ""}Manage your booking: ${bookingLink(env, b)}`,
       },
   requestReceived: (env: Env, b: BookingRow) => ({
     subject: `Request received · ${b.ref}`,
-    text: `Hi ${b.contact_name},\n\nThanks for your booking request. This package needs studio approval, so nothing has been charged yet. ${isOrder(b) ? "We" : "We hold the time for you and"} reply within 24 hours.\n\n${details(b)}\nEstimated total: ${naira(b.total_kobo)}\n\nTrack your request: ${bookingLink(env, b)}`,
+    text: `Hi ${b.contact_name},\n\nThanks for your booking request. This package needs studio approval, so nothing has been charged yet. ${isOrder(b) ? "We" : isResidency(b) ? "We are holding that day while we review, and we" : "We hold the time for you and"} reply within 48 hours.\n\n${details(b)}\nEstimated total: ${naira(b.total_kobo)}\n${isResidency(b) ? `\n${residency}\n` : ""}\nTrack your request: ${bookingLink(env, b)}`,
   }),
   approved: (env: Env, b: BookingRow) => ({
     subject: `Approved, pay to confirm · ${b.ref}`,
-    text: `Hi ${b.contact_name},\n\nGood news: the studio approved your booking.${b.decision_note ? `\nNote from the studio: ${b.decision_note}` : ""}\n\n${details(b)}\nTotal: ${naira(b.total_kobo)}${b.deposit_kobo && b.deposit_kobo < b.total_kobo ? `\nDeposit to secure it: ${naira(b.deposit_kobo)}` : ""}\n\nPay to confirm your booking: ${payLink(env, b)}\n${isOrder(b) ? "The offer" : "The time"} is held until ${b.expires_at ? new Date(b.expires_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Lagos" }) : "your payment"}.`,
+    text: `Hi ${b.contact_name},\n\nGood news: the studio approved your booking.${b.decision_note ? `\nNote from the studio: ${b.decision_note}` : ""}\n\n${details(b)}\nTotal: ${naira(b.total_kobo)}${b.deposit_kobo && b.deposit_kobo < b.total_kobo ? `\nDeposit to secure it: ${naira(b.deposit_kobo)}` : ""}\n\n${isResidency(b) ? `${residency}\n\n` : ""}Pay to confirm your booking: ${payLink(env, b)}\n${isOrder(b) ? "The offer" : isResidency(b) ? "That day" : "The time"} is held until ${b.expires_at ? new Date(b.expires_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Lagos" }) : "your payment"}.`,
   }),
   rejected: (_env: Env, b: BookingRow) => ({
     subject: `About your booking request · ${b.ref}`,
@@ -80,7 +90,7 @@ export const emails = {
     subject: `Your session has moved · ${b.ref}`,
     text: `Hi ${b.contact_name},\n\nYour session ${b.ref} has moved.\nWas: ${before}\nNow: ${after}\nRoom: ${b.room_name}\nPackage and price are unchanged.`,
   }),
-  delivered: (env: Env, b: BookingRow, d: { files: { title: string; version: number }[]; note: string; released: boolean; final: boolean; revisionsLeft: number; account: boolean }) => {
+  delivered: (env: Env, b: BookingRow, d: { files: { title: string; version: number }[]; note: string; released: boolean; final: boolean; revisionsLeft: number; account: boolean; autoDays?: number }) => {
     const owed = balanceOf(b);
     const list = d.files.map((f) => `  ${f.title}${f.version > 1 ? ` (version ${f.version})` : ""}`).join("\n");
     const balance = owed > 0 ? `\nA balance of ${naira(owed)} is still due on this booking. ${d.released ? "You can pay it here" : "Your files unlock as soon as it is paid"}: ${payLink(env, b)}\n` : "";
@@ -88,9 +98,10 @@ export const emails = {
       ? `Download from your portal: ${env.APP_URL}/account/bookings/${b.id}`
       : `To get your files, create a free account with this email address at ${env.APP_URL}/register and confirm your email. Your booking and files will then appear in your portal.`;
     const next = d.final ? "\nThis is the final delivery, so this order is now complete." : d.revisionsLeft > 0 ? `\nNot quite right? You have ${d.revisionsLeft} revision${d.revisionsLeft === 1 ? "" : "s"} left. Ask for one from your portal.` : "";
+    const auto = !d.final && d.autoDays ? `\nIf we do not hear from you within ${d.autoDays} days the order is marked complete.` : "";
     return {
       subject: `${b.category === "music" || b.category === "exclusive" ? "Your music is ready" : "Your files are ready"} · ${b.ref}`,
-      text: `Hi ${b.contact_name},\n\nYour finished work is ready in your portal.\n\n${list}\n${d.note ? `\nNote from the studio: ${d.note}\n` : ""}\n${where}\n${balance}${next}`,
+      text: `Hi ${b.contact_name},\n\nYour finished work is ready in your portal.\n\n${list}\n${d.note ? `\nNote from the studio: ${d.note}\n` : ""}\n${where}\n${balance}${next}${auto}`,
     };
   },
   orderComplete: (env: Env, b: BookingRow) => ({

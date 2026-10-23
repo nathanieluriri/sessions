@@ -5,11 +5,12 @@ import { usersRepo } from "../repositories/users";
 import { enquiriesRepo, reportsRepo, auditRepo, outboxRepo, clientsRepo } from "../repositories/misc";
 import { bookingsRepo, paymentsRepo, changeRequestsRepo } from "../repositories/bookings";
 import { hashPassword, randomToken, uuid } from "../lib/crypto";
-import { addDays, daysBetween, studioNow, prettyDate, label12, endsNextDay, weekdayName } from "../lib/time";
+import { addDays, daysBetween, minutesUntil, studioNow, prettyDate, label12, endsNextDay, weekdayName } from "../lib/time";
 import { naira } from "../lib/money";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { LEVELS, PERMISSIONS, canSeeContacts, hasPermission, staffChangeBlocked, type Level, type Permission } from "../../shared/permissions";
 import { audit } from "./audit";
+import { windowsFor } from "./availability";
 import { notifyStaff, sendEmail } from "./notifications";
 import { toSessionUser } from "./auth";
 import { forStaff } from "../lib/redact";
@@ -192,10 +193,12 @@ export const reportService = {
       reportsRepo.byWeek(env.DB, from, to), reportsRepo.repeat(env.DB), reportsRepo.openMinutes(env.DB), reportsRepo.byCategory(env.DB, from, to), reportsRepo.byRoom(env.DB, from, to),
       catalogRepo.rooms(env.DB),
     ]);
+    // Capacity counts opening hours plus the all night session on the days that have one, so a full Saturday night cannot push utilisation past 100 percent.
+    const sessions = await catalogRepo.sessionSlots(env.DB);
     let openMinutes = 0;
     for (let d = from; d <= to; d = addDays(d, 1)) {
       const h = hours.find((x) => x.weekday === new Date(`${d}T00:00:00Z`).getUTCDay());
-      if (h?.is_open) openMinutes += h.close_min - h.open_min;
+      if (h?.is_open) openMinutes += h.close_min - h.open_min + windowsFor(sessions, "night", d).reduce((n, w) => n + w.end - w.start, 0);
     }
     const capacity = openMinutes * Math.max(1, rooms.length);
     return {
@@ -227,11 +230,11 @@ export const dashboardService = {
     const today = studioNow().date;
     const monthStart = `${today.slice(0, 7)}-01`;
     const [todays, requests, report, enquiries, approvals, projects] = await Promise.all([
-      bookingsRepo.list(env.DB, { from: today, to: today }), changeRequestsRepo.pending(env.DB),
+      bookingsRepo.list(env.DB, { from: addDays(today, -1), to: today }), changeRequestsRepo.pending(env.DB),
       reportService.overview(env, monthStart, addDays(monthStart, 30)), enquiriesRepo.list(env.DB), bookingsRepo.list(env.DB, { status: "pending" }), bookingsRepo.openOrders(env.DB),
     ]);
     return {
-      today, todays: hasPermission(user, "view_calendar") ? todays.filter((b) => b.scheduling !== "project" && ["confirmed", "completed", "no_show", "approved"].includes(b.status)).sort((a, b) => a.start_min - b.start_min).map((b) => forStaff(b, user)) : [],
+      today, todays: hasPermission(user, "view_calendar") ? todays.filter((b) => b.scheduling !== "project" && (b.date === today || minutesUntil(b.date, b.end_min) > 0) && ["confirmed", "completed", "no_show", "approved"].includes(b.status)).sort((a, b) => a.date.localeCompare(b.date) || a.start_min - b.start_min).map((b) => forStaff(b, user)) : [],
       requests, approvals: approvals.map((b) => ({ id: b.id, ref: b.ref, date: b.date, start_min: b.start_min, end_min: b.end_min, scheduling: b.scheduling, artist_name: b.artist_name, package_name: b.package_name, room_name: b.room_name, total_kobo: b.total_kobo, expires_at: b.expires_at })),
       report, newEnquiries: enquiries.filter((e) => e.status === "new").length, projects: hasPermission(user, "view_calendar") ? projects : 0,
     };

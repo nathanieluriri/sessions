@@ -1,6 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Client, createHarness, type Harness } from "../helpers/harness";
 import { filesService } from "../../src/worker/services/files";
+import { filesRepo } from "../../src/worker/repositories/files";
 import worker from "../../src/worker/index";
 
 const MiB = 1024 * 1024;
@@ -374,7 +375,7 @@ describe("delivery and the payment gate", () => {
     expect(done.body.delivered[0].delivered_at).toBeTruthy();
 
     const listed = (await alice.client.get(`${CLIENT}/files`)).body.bookings.find((b: any) => b.id === order.id);
-    expect(listed).toMatchObject({ ref: order.ref, balance_kobo: 10_000_000, final: false, canUpload: true, canApprove: true, canRequest: true, revision_limit: 3, revisions_used: 0, openRevision: null });
+    expect(listed).toMatchObject({ ref: order.ref, balance_kobo: 10_000_000, final: false, canUpload: true, canApprove: false, canRequest: false, revision_limit: 3, revisions_used: 0, openRevision: null });
     expect(listed.deliveries).toHaveLength(1);
     expect(listed.deliveries[0]).toMatchObject({ id: file.id, title: "Midnight (Master)", locked: true, released: false, version: 1 });
 
@@ -466,13 +467,13 @@ describe("delivery and the payment gate", () => {
     const resumed = await alice.client.call("GET", `${CLIENT}/files/${file.id}/download`, { headers: { range: "bytes=1000-" } });
     await resumed.res.arrayBuffer();
     expect((await head(alice.client, `${CLIENT}/files/${file.id}/download`)).status).toBe(200);
-    expect(await row(file.id)).toMatchObject({ download_count: 2, first_downloaded_at: stamp });
+    expect(await row(file.id)).toMatchObject({ download_count: 1, first_downloaded_at: stamp });
     const view = (await alice.client.get(`${CLIENT}/files`)).body.bookings.find((b: any) => b.id === order.id).deliveries[0];
-    expect(view).toMatchObject({ downloads: 2, first_downloaded_at: stamp });
+    expect(view).toMatchObject({ downloads: 1, first_downloaded_at: stamp });
 
     const logs = await h.sql("SELECT * FROM audit_logs WHERE action = 'Downloaded delivery' AND target = ? ORDER BY created_at", order.ref);
-    expect(logs).toHaveLength(3);
-    expect(logs.filter((l: any) => /\(CLIENT\)$/.test(l.actor_label))).toHaveLength(2);
+    expect(logs).toHaveLength(2);
+    expect(logs.filter((l: any) => /\(CLIENT\)$/.test(l.actor_label))).toHaveLength(1);
     expect(logs.some((l: any) => /\(CEO\)$/.test(l.actor_label))).toBe(true);
     expect(logs[0].detail).toContain("Counted");
     expect(logs[0].detail).toContain("count.mp3");
@@ -609,7 +610,7 @@ describe("delivery and the payment gate", () => {
 
 describe("revisions, approval and completion", () => {
   it("lets a revision be asked for only when the rules allow it", async () => {
-    const order = await mine({ limit: 2 });
+    const order = await mine({ paid: 10_000_000, limit: 2 });
     const ask = (note: string, who = alice.client) => who.post(`${CLIENT}/bookings/${order.id}/revisions`, { note });
     expect((await ask("make the vocals louder")).status).toBe(400);
     const first = await stage(order.id);
@@ -646,7 +647,7 @@ describe("revisions, approval and completion", () => {
   }, 60000);
 
   it("does not offer revisions on a package that has none", async () => {
-    const order = await mine({ limit: 0 });
+    const order = await mine({ paid: 10_000_000, limit: 0 });
     const file = await stage(order.id);
     await deliver(maker.client, order.id, [{ fileId: file.id, title: "Done" }]);
     const r = await alice.client.post(`${CLIENT}/bookings/${order.id}/revisions`, { note: "please change the intro" });
@@ -656,7 +657,7 @@ describe("revisions, approval and completion", () => {
   });
 
   it("never lets simultaneous requests go past the limit", async () => {
-    const order = await mine({ limit: 2 });
+    const order = await mine({ paid: 10_000_000, limit: 2 });
     const ask = () => alice.client.post(`${CLIENT}/bookings/${order.id}/revisions`, { note: "fix the snare" });
     const deliverAgain = async (name: string) => { const f = await stage(order.id, name); await deliver(maker.client, order.id, [{ fileId: f.id, title: "Mix" }]); };
     await deliverAgain("a.mp3");
@@ -676,7 +677,7 @@ describe("revisions, approval and completion", () => {
   }, 60000);
 
   it("tells the staff who deliver, without any way to reach the client", async () => {
-    const order = await mine({ limit: 3, artist: "Alice Wonder" });
+    const order = await mine({ paid: 10_000_000, limit: 3, artist: "Alice Wonder" });
     const file = await stage(order.id);
     await deliver(maker.client, order.id, [{ fileId: file.id, title: "Mix" }]);
     await alice.client.post(`${CLIENT}/bookings/${order.id}/revisions`, { note: `call me on +234 805 111 2233 or ${alice.email} to fix the bass` });
@@ -695,7 +696,7 @@ describe("revisions, approval and completion", () => {
   });
 
   it("completes the order when the client approves and then closes everything", async () => {
-    const order = await mine({ limit: 3 });
+    const order = await mine({ paid: 10_000_000, limit: 3 });
     expect((await alice.client.post(`${CLIENT}/bookings/${order.id}/approve`)).status).toBe(400);
     const file = await stage(order.id);
     await deliver(maker.client, order.id, [{ fileId: file.id, title: "Master" }]);
@@ -729,7 +730,7 @@ describe("revisions, approval and completion", () => {
   }, 60000);
 
   it("completes the order when staff finalize it, tells the client, and keeps the files reachable once paid", async () => {
-    const order = await mine({ limit: 3, paid: 10_000_000 });
+    const order = await mine({ paid: 10_000_000, limit: 3, paid: 10_000_000 });
     expect((await maker.client.post(`${STAFF}/bookings/${order.id}/finalize`)).status).toBe(400);
     const file = await stage(order.id);
     await deliver(maker.client, order.id, [{ fileId: file.id, title: "Master" }]);
@@ -745,7 +746,7 @@ describe("revisions, approval and completion", () => {
   });
 
   it("can deliver and complete in one step, only for confirmed or completed bookings", async () => {
-    const order = await mine({ limit: 3 });
+    const order = await mine({ paid: 10_000_000, limit: 3 });
     const file = await stage(order.id);
     await alice.client.post(`${CLIENT}/bookings/${order.id}/revisions`, { note: "too early to ask" });
     const res = await deliver(maker.client, order.id, [{ fileId: file.id, title: "All done" }], { final: true });
@@ -868,7 +869,7 @@ describe("production queue", () => {
     const pending = await mine({ scheduling: "project", status: "pending" });
     const delivered = await mine({ scheduling: "project", due: yesterday });
     const finished = await mine({ scheduling: "project", due: yesterday });
-    const withRevision = await mine({ scheduling: "project", due: tomorrow });
+    const withRevision = await mine({ scheduling: "project", due: tomorrow, paid: 10_000_000 });
     const uploaded = await mine({ scheduling: "flex" });
     const closedUploads = await mine({ scheduling: "flex" });
 
@@ -905,6 +906,7 @@ describe("production queue", () => {
     for (const b of [late, open, uploaded]) expect(delivery, b.ref).not.toContain(b.id);
     const overdueFinished = (await maker.client.get(`${STAFF}/deliveries?tab=delivered`)).body.rows.find((x: any) => x.id === finished.id);
     expect(overdueFinished).toMatchObject({ final: true, overdue: false });
+    expect((await maker.client.get(`${STAFF}/deliveries?tab=delivered`)).body.rows.find((x: any) => x.id === delivered.id)).toMatchObject({ final: false, overdue: false });
 
     expect(await tabIds("client")).toContain(uploaded.id);
     expect(await tabIds("client")).not.toContain(closedUploads.id);
@@ -1027,4 +1029,210 @@ describe("housekeeping and limits", () => {
     expect(blocked.status).toBe(400);
     expect(blocked.body.error).toMatch(/in progress/);
   }, 120000);
+});
+
+describe("round two fixes", () => {
+  const audits = (action: string, ref: string) => h.sql("SELECT * FROM audit_logs WHERE action = ? AND target = ? ORDER BY created_at", action, ref);
+
+  it("audits every download once per person and file per ten minutes, whatever the range", async () => {
+    const order = await mine({ paid: 10_000_000 });
+    const file = await stage(order.id, "trace.mp3", 30_000, 6);
+    await deliver(maker.client, order.id, [{ fileId: file.id, title: "Trace" }]);
+    const probe = await head(alice.client, `${CLIENT}/files/${file.id}/download`);
+    expect(probe.status).toBe(200);
+    expect(await audits("Downloaded delivery", order.ref)).toHaveLength(0);
+    const taken = await alice.client.call("GET", `${CLIENT}/files/${file.id}/download`, { headers: { range: "bytes=1-" } });
+    expect(taken.status).toBe(206);
+    expect((await bytesOf(taken)).length).toBe(29_999);
+    expect(await audits("Downloaded delivery", order.ref)).toHaveLength(1);
+    expect(await row(file.id)).toMatchObject({ download_count: 1 });
+    expect((await row(file.id)).first_downloaded_at).toBeTruthy();
+    for (const range of ["bytes=5-9", "bytes=0-"]) await (await alice.client.call("GET", `${CLIENT}/files/${file.id}/download`, { headers: { range } })).res.arrayBuffer();
+    expect(await audits("Downloaded delivery", order.ref)).toHaveLength(1);
+    expect((await row(file.id)).download_count).toBe(1);
+    await h.env.DB.prepare("UPDATE audit_logs SET created_at = ? WHERE action = 'Downloaded delivery' AND target = ?").bind(ago(11 * 60_000), order.ref).run();
+    await (await alice.client.call("GET", `${CLIENT}/files/${file.id}/download`, { headers: { range: "bytes=2-3" } })).res.arrayBuffer();
+    expect(await audits("Downloaded delivery", order.ref)).toHaveLength(2);
+    expect((await row(file.id)).download_count).toBe(2);
+    await (await bob.client.call("GET", `${CLIENT}/files/${file.id}/download`)).res.arrayBuffer();
+    expect(await audits("Downloaded delivery", order.ref)).toHaveLength(2);
+  });
+
+  it("tells a walk-in client once an email is added, and again lists nothing twice", async () => {
+    const order = await makeBooking({ email: "", userId: null });
+    const file = await stage(order.id);
+    expect((await deliver(maker.client, order.id, [{ fileId: file.id, title: "Waiting" }])).body).toMatchObject({ notified: false, reason: "no_contact" });
+    expect((await maker.client.post(`${STAFF}/bookings/${order.id}/notify-delivery`)).body).toMatchObject({ ok: true, notified: false, reason: "no_contact" });
+    const details = { people: 1, artist_name: "Walk In", contact_phone: "+234 803 000 0000", notes: "" };
+    expect((await desk.client.put(`${STAFF}/bookings/${order.id}/details`, { ...details, contact_email: "late.walkin@example.com" })).status).toBe(200);
+    const mails = await outbox("late.walkin@example.com", `%ready · ${order.ref}`);
+    expect(mails).toHaveLength(1);
+    expect(mails[0].body).toContain("Waiting");
+    expect((await booking(order.id)).delivery_notified_at).toBeTruthy();
+    await desk.client.put(`${STAFF}/bookings/${order.id}/details`, { ...details, contact_email: "late.walkin@example.com" });
+    expect(await outbox("late.walkin@example.com", `%ready · ${order.ref}`)).toHaveLength(1);
+  });
+
+  it("tells a guest when their account is verified and the booking is linked", async () => {
+    const guest = await h.newClient("Guest Later");
+    const order = await makeBooking({ email: "", userId: null });
+    const file = await stage(order.id);
+    await deliver(maker.client, order.id, [{ fileId: file.id, title: "For the guest" }]);
+    await h.env.DB.prepare("UPDATE bookings SET contact_email = ? WHERE id = ?").bind(guest.email, order.id).run();
+    const token = (await outbox(guest.email, "%Verify%"))[0].body.match(/token=(\S+)/)![1];
+    expect((await h.client().post("/api/auth/verify-email", { token })).status).toBe(200);
+    const mails = await outbox(guest.email, `%ready · ${order.ref}`);
+    expect(mails).toHaveLength(1);
+    const note = (await guest.client.get(`${CLIENT}/overview`)).body.notifications.find((n: any) => n.booking_id === order.id);
+    expect(note.title).toBe("Your music is ready");
+  });
+
+  it("lets staff resend the ready notice, at most every two minutes, without client contacts in anything they see", async () => {
+    const order = await mine({ paid: 10_000_000 });
+    expect((await maker.client.post(`${STAFF}/bookings/${order.id}/notify-delivery`)).status).toBe(400);
+    const file = await stage(order.id);
+    await deliver(maker.client, order.id, [{ fileId: file.id, title: "Again" }]);
+    const resent = await maker.client.post(`${STAFF}/bookings/${order.id}/notify-delivery`);
+    expect(resent.body).toMatchObject({ ok: true, notified: true, notified_via: "outbox" });
+    expect(JSON.stringify(resent.body)).not.toContain(alice.email);
+    expect(await outbox(alice.email, `%ready · ${order.ref}`)).toHaveLength(2);
+    expect((await maker.client.post(`${STAFF}/bookings/${order.id}/notify-delivery`)).status).toBe(429);
+    expect((await desk.client.post(`${STAFF}/bookings/${order.id}/notify-delivery`)).status).toBe(403);
+  });
+
+  it("reports a refused email as not notified, and an unconfigured provider as the outbox", async () => {
+    const order = await mine();
+    const [a, b] = [await stage(order.id), await stage(order.id, "b.mp3")];
+    const plain = await deliver(maker.client, order.id, [{ fileId: a.id, title: "One" }]);
+    expect(plain.body).toMatchObject({ notified: true, notified_via: "outbox" });
+    const env = h.env as any;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation((async (url: any, init: any) => (String(url).includes("resend.com") ? new Response("no", { status: 500 }) : fetch(url, init))) as never);
+    env.RESEND_API_KEY = "re_test";
+    try {
+      const failed = await deliver(maker.client, order.id, [{ fileId: b.id, title: "Two" }]);
+      expect(failed.status).toBe(200);
+      expect(failed.body).toMatchObject({ notified: false, reason: "send_failed" });
+      expect((await outbox(alice.email, `%ready · ${order.ref}`)).pop().status).toBe("failed");
+    } finally {
+      delete env.RESEND_API_KEY;
+      spy.mockRestore();
+    }
+  });
+
+  it("freezes a completed order against every status change", async () => {
+    const order = await mine({ status: "completed", final: true, scheduling: "flex", paid: 10_000_000 });
+    const checks: [string, string, object][] = [
+      ["POST", "outcome", { outcome: "no_show" }], ["POST", "cancel", { reason: "x", fullRefund: true }], ["POST", "reject", { reason: "x" }], ["POST", "approve", { note: "" }],
+      ["POST", "confirm", { note: "" }], ["POST", "reschedule", { date: "2030-01-01", start: 600 }],
+    ];
+    for (const [method, path, body] of checks) {
+      const r = await boss.call(method, `${STAFF}/bookings/${order.id}/${path}`, { body });
+      expect(r.status, path).toBe(400);
+      expect(r.body.error, path).toMatch(/complete|cannot|Only/);
+    }
+    expect((await alice.client.post(`${CLIENT}/bookings/${order.id}/requests`, { kind: "cancel", reason: "x" })).status).toBe(400);
+    expect((await alice.client.post(`${CLIENT}/bookings/${order.id}/withdraw`)).status).toBe(400);
+    expect(await booking(order.id)).toMatchObject({ status: "completed" });
+    const open = await mine({ status: "confirmed", final: true, scheduling: "flex" });
+    expect((await boss.post(`${STAFF}/bookings/${open.id}/outcome`, { outcome: "no_show" })).body.error).toMatch(/complete and can no longer/);
+    expect((await booking(open.id)).status).toBe("confirmed");
+  });
+
+  it("completes a paid, delivered order by itself after seven quiet days, and only then", async () => {
+    const make = async (o: { paid: number; days: number; revision?: boolean }) => {
+      const order = await mine({ paid: o.paid, limit: 3 });
+      const f = await stage(order.id);
+      await deliver(maker.client, order.id, [{ fileId: f.id, title: "Auto" }]);
+      if (o.revision) await alice.client.post(`${CLIENT}/bookings/${order.id}/revisions`, { note: "needs more bass" });
+      await h.env.DB.prepare("UPDATE booking_files SET delivered_at = ? WHERE booking_id = ?").bind(ago(o.days * 86_400_000), order.id).run();
+      return order;
+    };
+    const ready = await make({ paid: 10_000_000, days: 8 });
+    const young = await make({ paid: 10_000_000, days: 6 });
+    const owing = await make({ paid: 5_000_000, days: 30 });
+    const asking = await make({ paid: 10_000_000, days: 30, revision: true });
+    await filesService.housekeeping(h.env);
+    await filesService.housekeeping(h.env);
+    expect(await booking(ready.id)).toMatchObject({ status: "completed" });
+    expect((await booking(ready.id)).delivered_final_at).toBeTruthy();
+    for (const o of [young, owing, asking]) expect((await booking(o.id)).delivered_final_at).toBeNull();
+    const logs = await audits("Completed order automatically", ready.ref);
+    expect(logs).toHaveLength(1);
+    expect(logs[0].actor_label).toBe("System");
+    expect(await outbox(alice.email, `Your order is complete · ${ready.ref}`)).toHaveLength(1);
+    expect((await h.sql("SELECT 1 FROM email_outbox WHERE subject = ?", `Order completed automatically · ${ready.ref}`)).length).toBeGreaterThan(0);
+    const mail = (await outbox(alice.email, `%ready · ${young.ref}`))[0];
+    expect(mail.body).toContain("within 7 days the order is marked complete");
+  });
+
+  it("refuses approval and revisions while every delivery is locked by an unpaid balance", async () => {
+    const order = await mine({ paid: 0, limit: 3 });
+    const f = await stage(order.id);
+    await deliver(maker.client, order.id, [{ fileId: f.id, title: "Locked" }]);
+    const a = await alice.client.post(`${CLIENT}/bookings/${order.id}/approve`);
+    expect(a.status).toBe(400);
+    expect(a.body.error).toBe("Pay the balance to open your files before you approve.");
+    expect((await alice.client.post(`${CLIENT}/bookings/${order.id}/revisions`, { note: "change it" })).status).toBe(400);
+    expect((await alice.client.get(`${CLIENT}/bookings/${order.id}`)).body.revisions).toMatchObject({ canApprove: false, canRequest: false });
+    await maker.client.post(`${STAFF}/files/${f.id}/release`, { released: true });
+    expect((await alice.client.get(`${CLIENT}/bookings/${order.id}`)).body.revisions).toMatchObject({ canApprove: true, canRequest: true });
+    expect((await alice.client.post(`${CLIENT}/bookings/${order.id}/revisions`, { note: "change it" })).status).toBe(200);
+  });
+
+  it("says in the payment email that files are unlocked, and gives notices a booking id", async () => {
+    const order = await mine({ paid: 5_000_000 });
+    const f = await stage(order.id);
+    await deliver(maker.client, order.id, [{ fileId: f.id, title: "Pay me" }]);
+    expect((await boss.post(`${STAFF}/bookings/${order.id}/payments`, { amount: 5_000_000, method: "cash" })).status).toBe(200);
+    const mail = (await outbox(alice.email, `Payment received · ${order.ref}`))[0];
+    expect(mail.body).toContain("now unlocked");
+    expect(mail.body).toContain(`/account/bookings/${order.id}`);
+    const mine2 = (await alice.client.get(`${CLIENT}/overview`)).body.notifications;
+    expect(mine2.find((n: any) => n.title === "Your music is ready" && n.body.startsWith(order.ref)).booking_id).toBe(order.id);
+    const staffNotes = await h.sql("SELECT n.booking_id FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = ? AND n.title = ?", maker.email, `Files from Alice Wonder · ${order.ref}`);
+    expect(staffNotes).toEqual([]);
+  });
+
+  it("groups versions of a title and marks the newest", async () => {
+    const order = await mine({ paid: 10_000_000 });
+    for (const title of ["Mix", " mix ", "Other"]) {
+      const f = await stage(order.id);
+      await deliver(maker.client, order.id, [{ fileId: f.id, title }]);
+    }
+    const list = (await alice.client.get(`${CLIENT}/files`)).body.bookings.find((b: any) => b.id === order.id).deliveries;
+    const mix = list.filter((f: any) => f.group === "mix").sort((a: any, b: any) => a.version - b.version);
+    expect(mix.map((f: any) => [f.version, f.latest])).toEqual([[1, false], [2, true]]);
+    expect(list.find((f: any) => f.group === "other")).toMatchObject({ version: 1, latest: true });
+    const up = await send(alice.client, CLIENT, order.id, "u.wav", noise(500, 1));
+    expect(up).toMatchObject({ group: null, latest: true });
+  });
+
+  it("sweeps only files still uploading, refuses expired requests, and keeps delivered files with the owners", async () => {
+    const finished = await mine();
+    const f = await stage(finished.id);
+    expect(await filesRepo.markStale(h.env.DB, f.id)).toBe(false);
+    expect((await row(f.id)).state).toBe("ready");
+    const expired = await mine({ status: "pending" });
+    await h.env.DB.prepare("UPDATE bookings SET expires_at = ? WHERE id = ?").bind(ago(60_000), expired.id).run();
+    const r = await alice.client.post(`${CLIENT}/bookings/${expired.id}/files`, { name: "late.wav", size: 10 });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/expired/);
+    const live = await mine({ status: "pending" });
+    await h.env.DB.prepare("UPDATE bookings SET expires_at = ? WHERE id = ?").bind(new Date(Date.now() + 3_600_000).toISOString(), live.id).run();
+    expect((await alice.client.post(`${CLIENT}/bookings/${live.id}/files`, { name: "ok.wav", size: 10 })).status).toBe(200);
+
+    await deliver(maker.client, finished.id, [{ fileId: f.id, title: "Given" }]);
+    expect((await maker.client.del(`${STAFF}/files/${f.id}`)).status).toBe(403);
+    expect((await row(f.id)).state).toBe("ready");
+    const upload = await send(alice.client, CLIENT, finished.id, "theirs.wav", noise(900, 2));
+    expect((await maker.client.del(`${STAFF}/files/${upload.id}`)).status).toBe(200);
+    expect((await boss.del(`${STAFF}/files/${f.id}`)).status).toBe(200);
+
+    const kept = await send(alice.client, CLIENT, finished.id, "needs r2.wav", noise(900, 3));
+    const bare = new Client({ ...h.env, MEDIA: undefined } as never, h.ctx);
+    await bare.login(alice.email, "studio2026");
+    const none = await bare.get(`${CLIENT}/files/${kept.id}/download`);
+    expect(none.status).toBe(400);
+    expect(none.body.code).toBe("storage_unavailable");
+  });
 });
