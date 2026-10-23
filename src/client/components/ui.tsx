@@ -1,4 +1,4 @@
-import { useEffect, useState, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { Icon, LogoLoader } from "./brand";
 import { Tactile } from "./kitchen";
 
@@ -21,10 +21,32 @@ export function Seg<T extends string>({ value, options, onChange }: { value: T; 
   return <div className="seg">{options.map(([v, l]) => <button key={v} type="button" className={v === value ? "on" : ""} onClick={() => onChange(v)}>{l}</button>)}</div>;
 }
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    const el = box.current!;
+    (el.querySelector<HTMLElement>("input, textarea, select") ?? el).focus();
+    const keys = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); close.current(); return; }
+      if (e.key !== "Tab") return;
+      const items = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((x) => x.offsetParent !== null);
+      if (!items.length) { e.preventDefault(); return; }
+      const first = items[0], last = items[items.length - 1];
+      if (!el.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && (document.activeElement === first || document.activeElement === el)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", keys);
+    return () => { document.removeEventListener("keydown", keys); opener?.focus?.(); };
+  }, []);
   return (
     <div className="modal-bg" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
+      <div ref={box} className="modal" tabIndex={-1} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <div className="row between"><h3 className="h3">{title}</h3><button className="link" onClick={onClose} aria-label="Close"><Icon name="x" /></button></div>
         {children}
       </div>
