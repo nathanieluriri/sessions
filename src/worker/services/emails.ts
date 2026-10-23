@@ -44,7 +44,7 @@ const money = (b: BookingRow) => {
 const orderSteps = (env: Env, b: BookingRow) =>
   `What happens next:\n1. ${b.user_id ? `Upload your files (stems, references or lyrics) in your portal: ${bookingLink(env, b)}` : `Create a free account with ${b.contact_email} at ${env.APP_URL}/register, then upload your files (stems, references or lyrics) in your portal`}\n` +
   `2. We work on your order and deliver the finished files in your portal. We never send finished work by email.\n` +
-  `3. You get an email when it is ready. Sign in and download it${balanceOf(b) > 0 ? `. Finished files unlock once your balance is paid: ${payLink(env, b)}` : ""}.`;
+  `3. You get an email when it is ready. Sign in and download it.${balanceOf(b) > 0 ? `\n   Finished files unlock once your balance is paid. Pay here: ${payLink(env, b)}` : ""}`;
 
 export const emails = {
   confirmed: (env: Env, b: BookingRow) =>
@@ -87,8 +87,8 @@ export const emails = {
     text: `Hi ${b.contact_name},\n\nYour booking ${b.ref} (${when(b)}) has been cancelled.\n${refund > 0 ? `${naira(refund)} is being refunded to your original payment method within 5 to 10 working days.` : paidNet(b) > 0 ? "Under the cancellation policy this booking is not refunded." : "Nothing was charged."}`,
   }),
   moved: (_env: Env, b: BookingRow, before: string, after: string) => ({
-    subject: `Your session has moved · ${b.ref}`,
-    text: `Hi ${b.contact_name},\n\nYour session ${b.ref} has moved.\nWas: ${before}\nNow: ${after}\nRoom: ${b.room_name}\nPackage and price are unchanged.`,
+    subject: `${isResidency(b) ? "Your preferred start date has moved" : "Your session has moved"} · ${b.ref}`,
+    text: `Hi ${b.contact_name},\n\n${isResidency(b) ? `The preferred start date for ${b.ref} has moved.` : `Your session ${b.ref} has moved.`}\nWas: ${before}\nNow: ${after}\nRoom: ${b.room_name}\nPackage and price are unchanged.`,
   }),
   delivered: (env: Env, b: BookingRow, d: { files: { title: string; version: number }[]; note: string; released: boolean; final: boolean; revisionsLeft: number; account: boolean; autoDays?: number }) => {
     const owed = balanceOf(b);

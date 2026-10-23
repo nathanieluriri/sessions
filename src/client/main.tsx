@@ -5,5 +5,6 @@ import "./styles.css";
 import "./kitchen.css";
 import "./pages.css";
 import "./landing.css";
+import "./portal.css";
 
 createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);

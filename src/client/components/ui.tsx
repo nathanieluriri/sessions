@@ -40,21 +40,22 @@ export function Toaster() {
   return m ? <div className="toast">{m}</div> : null;
 }
 
-export function Steps({ step }: { step: number }) {
-  const labels = ["Service", "Package", "Date & time", "Details", "Checkout"];
+export function Steps({ steps, at }: { steps: { key: string; label: string }[]; at: string }) {
+  const cur = Math.max(0, steps.findIndex((s) => s.key === at));
+  const n = steps.length;
   return (
     <>
       <div className="steps">
-        {labels.map((l, i) => (
-          <div key={l} className="row gap12" style={{ flex: i < 4 ? 1 : "none" }}>
-            <div className={`s ${i + 1 < step ? "done" : i + 1 === step ? "cur" : ""}`}><i>{i + 1 < step ? <Icon name="check" size={14} /> : i + 1}</i>{l}</div>
-            {i < 4 && <div className={`bar ${i + 1 < step ? "done" : ""}`} />}
+        {steps.map((st, i) => (
+          <div key={st.key} className="row gap12" style={{ flex: i < n - 1 ? 1 : "none" }}>
+            <div className={`s ${i < cur ? "done" : i === cur ? "cur" : ""}`} aria-current={i === cur ? "step" : undefined}><i>{i < cur ? <Icon name="check" size={14} /> : i + 1}</i>{st.label}</div>
+            {i < n - 1 && <div className={`bar ${i < cur ? "done" : ""}`} />}
           </div>
         ))}
       </div>
       <div className="steps-m">
-        <div className="row between"><b className="small">{labels[step - 1]}</b><span className="mono faint">Step {step} of 5</span></div>
-        <div className="bars">{labels.map((l, i) => <i key={l} className={i < step ? "on" : ""} />)}</div>
+        <div className="row between"><b className="small">{steps[cur]?.label}</b><span className="mono faint">Step {cur + 1} of {n}</span></div>
+        <div className="bars">{steps.map((st, i) => <i key={st.key} className={i <= cur ? "on" : ""} />)}</div>
       </div>
     </>
   );

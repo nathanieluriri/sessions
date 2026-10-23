@@ -49,7 +49,7 @@ r.get("/bookings/:id", requirePermission("view_calendar"), async (c) => c.json(a
 r.post("/bookings", requirePermission("manage_bookings"), async (c) => {
   const b = await body(c, z.object({
     ...draftFields, contactEmail: z.union([email, z.literal("")]).default(""),
-    status: z.enum(["confirmed", "approved"]), source: z.enum(["phone", "whatsapp", "walk_in", "email", "instagram", "other"]), ignoreHours: z.boolean().default(false), notify: z.boolean().default(true),
+    status: z.enum(["confirmed", "approved"]), source: z.enum(["phone", "whatsapp", "walk_in", "email", "instagram", "other"]), ignoreHours: z.boolean().default(false), pastOk: z.boolean().default(false), notify: z.boolean().default(true),
     payment: z.object({ amount: z.number().int().min(1), method: z.enum(["cash", "transfer", "pos", "other"]), note: text(200).default("") }).nullable().default(null),
   }));
   if (b.payment && !can(actor(c), "record_payments")) throw forbidden("Recording payments needs the record payments permission.");

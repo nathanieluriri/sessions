@@ -181,6 +181,7 @@ const assertOpen = (b: BookingRow) => {
   if (b.delivered_final_at) throw badRequest("This order is complete and can no longer be changed.");
 };
 
+const alreadyDecided = () => conflict("Already decided. Someone else dealt with this booking a moment ago, so reload to see where it stands.", "already_decided");
 const taken = () => conflict("That time was taken by another booking while this one waited. Decline it, or move it to a free time first.", "slot_taken");
 
 /** Add-ons without a price yet, for the staff who have to quote them. */
@@ -316,6 +317,11 @@ export const bookingService = {
     ]);
     const booking = await bookingsRepo.byHold(env.DB, hold.id);
     if (res[0].meta.changes !== 1) return { status: booking ? ("confirmed" as const) : ("pending" as const), booking };
+    // Another payment on this hold created the booking first: this one is already claimed, so it is added to that booking or refunded, never dropped.
+    if (booking && res[1].meta.changes !== 1) {
+      const added = await bookingsRepo.applyPayment(env.DB, booking, payment.amount_kobo, { reference: payment.reference, via, paidAt: now }, rules.buffer).run();
+      return this.finishApplied(env, payment, booking, added.meta.changes === 1);
+    }
 
     if (!booking) {
       // The hold lapsed and someone else took the slot before this payment arrived: refund in full.
@@ -349,25 +355,31 @@ export const bookingService = {
       bookingsRepo.claimPayment(env.DB, payment.reference, via, channel, now),
       ...(closed ? [] : [bookingsRepo.applyPayment(env.DB, b, payment.amount_kobo, { reference: payment.reference, via, paidAt: now }, rules.buffer)]),
     ]);
-    const booking = await loadBooking(env, b.id);
-    if (res[0].meta.changes !== 1) return { status: "confirmed" as const, booking };
+    if (res[0].meta.changes !== 1) return { status: "confirmed" as const, booking: await loadBooking(env, b.id) };
     if (!payment.booking_id) await run(env.DB, "UPDATE payments SET booking_id = ? WHERE reference = ? AND booking_id IS NULL", b.id, payment.reference);
-    if (!closed && res[1].meta.changes === 1) {
-      const confirmedNow = b.status !== "confirmed" && booking.status === "confirmed";
+    return this.finishApplied(env, payment, b, !closed && res[1].meta.changes === 1);
+  },
+
+  /** The one place a claimed payment ends: counted on the booking (applied) or refunded in full, never both and never neither. */
+  async finishApplied(env: Env, payment: PaymentRow, before: BookingRow, applied: boolean) {
+    const booking = await loadBooking(env, before.id);
+    if (applied) {
+      const confirmedNow = before.status !== "confirmed" && booking.status === "confirmed";
       await mail(env, booking, confirmedNow ? emails.confirmed(env, booking) : emails.paymentReceived(env, booking, payment.amount_kobo, await unlocks(env, booking)), confirmedNow ? "Booking confirmed" : "Payment received");
       await notifyStaff(env, "manage_bookings", `${confirmedNow ? "Booking confirmed" : "Payment received"} · ${booking.ref}`,
         `${booking.contact_name} paid ${naira(payment.amount_kobo)} for ${booking.ref} (${when(booking)}).\nPaid so far: ${naira(paidNet(booking))} of ${naira(booking.total_kobo)}`);
       await audit(env.DB, null, confirmedNow ? "Booking confirmed" : "Payment received", booking.ref, `${naira(payment.amount_kobo)} via ${payment.reference}`);
       return { status: "confirmed" as const, booking };
     }
+    const closed = ["cancelled", "rejected", "no_show"].includes(booking.status);
     const overpaid = paidNet(booking) + payment.amount_kobo > booking.total_kobo;
     const reason = closed ? "Paid after the booking closed" : overpaid ? "Paid more than the booking total" : "Time was taken before payment";
     const why = closed ? "was already closed when your payment arrived" : overpaid ? "is already paid in full, so this extra payment was not kept" : "lost its time to another booking before your payment arrived, so it has been cancelled";
-    if (!closed && !overpaid) await bookingsRepo.setStatus(env.DB, b.id, "cancelled", { cancelReason: reason, expiresAt: null });
-    await refundClaimed(env, payment, b.id, reason);
-    await sendEmail(env, b.contact_email, `Payment refunded · ${b.ref}`, `Hi ${b.contact_name},\n\nBooking ${b.ref} ${why}, so ${naira(payment.amount_kobo)} is on its way back to you.`);
-    await audit(env.DB, null, "Auto refund", b.ref, `Payment ${payment.reference}: ${reason}`);
-    return { status: "refunded" as const, booking: await loadBooking(env, b.id) };
+    if (!closed && !overpaid) await bookingsRepo.transition(env.DB, booking.id, ["pending", "approved"], "cancelled", { reason, unpaid: true });
+    await refundClaimed(env, payment, booking.id, reason);
+    await sendEmail(env, booking.contact_email, `Payment refunded · ${booking.ref}`, `Hi ${booking.contact_name},\n\nBooking ${booking.ref} ${why}, so ${naira(payment.amount_kobo)} is on its way back to you.`);
+    await audit(env.DB, null, "Auto refund", booking.ref, `Payment ${payment.reference}: ${reason}`);
+    return { status: "refunded" as const, booking: await loadBooking(env, booking.id) };
   },
 
   /** Starts an online payment for an existing booking: a deposit or full payment after approval, or the balance later. */
@@ -435,6 +447,7 @@ export const bookingService = {
     if (input.kind === "reschedule") {
       if (b.scheduling === "project") throw badRequest("Remote orders have no session time to move.");
       if (!input.newDate || input.newStart == null) throw badRequest("Pick a new date and time.");
+      if (b.reschedules_used >= 1) throw badRequest("Your free reschedule has been used. Any further change is treated as a cancellation, so send a cancellation request or contact the studio.");
       if (minutesUntil(b.date, b.start_min) < 48 * 60) throw badRequest("Free rescheduling closes 48 hours before your session. A later change is treated as a cancellation, so send a cancellation request or contact the studio.");
       const rules = await loadRules(env);
       const t = await moveTarget(env, b, input.newDate, input.newStart);
@@ -456,7 +469,7 @@ export const bookingService = {
     assertOpen(b);
     if (b.user_id !== user.id) throw notFound();
     if (!["pending", "approved"].includes(b.status) || paidNet(b) > 0) throw badRequest("This booking cannot be withdrawn. Request a cancellation instead.");
-    await bookingsRepo.setStatus(env.DB, b.id, "cancelled", { cancelReason: "Withdrawn by client", expiresAt: null });
+    if (!(await bookingsRepo.transition(env.DB, b.id, ["pending", "approved"], "cancelled", { reason: "Withdrawn by client", unpaid: true }))) throw conflict("This booking was already decided or paid. Reload to see where it stands.", "already_decided");
     await notifyStaff(env, "manage_bookings", `Request withdrawn · ${b.ref}`, `${b.contact_name} withdrew ${b.ref} (${when(b)}). The time is free again.`);
     await audit(env.DB, user, "Withdrew booking", b.ref);
   },
@@ -466,14 +479,20 @@ export const bookingService = {
     if (!r || r.status !== "pending") throw notFound("Request not found.");
     const b = await loadBooking(env, r.booking_id);
     const yes = approve && !b.delivered_final_at;
+    // Claim the request first so two staff (or one double click) cannot act on it twice; hand it back if the action fails.
+    if ((await changeRequestsRepo.decide(env.DB, requestId, yes ? "approved" : "declined", actor.id)).meta.changes !== 1) throw alreadyDecided();
     if (yes) {
-      if (r.kind === "reschedule") await this.reschedule(env, actor, b.id, r.new_date!, r.new_start_min!, true);
-      else await this.cancel(env, actor, b.id, "Cancelled at client request");
+      try {
+        if (r.kind === "reschedule") await this.reschedule(env, actor, b.id, r.new_date!, r.new_start_min!, true);
+        else await this.cancel(env, actor, b.id, "Cancelled at client request");
+      } catch (e) {
+        await changeRequestsRepo.reopen(env.DB, requestId);
+        throw e;
+      }
     } else {
       await notifyUser(env, b.user_id, "Request declined", `Your ${r.kind} request for ${b.ref} was declined. ${b.delivered_final_at ? "The order is already complete." : "Your booking stays as it is."}`);
       await sendEmail(env, b.contact_email, `Your ${r.kind} request · ${b.ref}`, `Hi ${b.contact_name},\n\nYour ${r.kind} request for ${b.ref} was declined. Your booking stays on ${when(b)}.`);
     }
-    await changeRequestsRepo.decide(env.DB, requestId, yes ? "approved" : "declined", actor.id);
     await audit(env.DB, actor, `${yes ? "Approved" : "Declined"} ${r.kind} request`, b.ref, approve && !yes ? "Order was already complete" : "");
   },
 
@@ -483,7 +502,9 @@ export const bookingService = {
     if (b.status !== "pending") throw badRequest("Only requests waiting for approval can be approved.");
     if (b.scheduling !== "project" && minutesUntil(b.date, b.start_min) <= 0) throw badRequest("This session time has passed.");
     const rules = await loadRules(env);
-    if (!(await bookingsRepo.decideIfFree(env.DB, b, { status: "approved", by: actor.id, note, expiresAt: windowEnd(rules.paymentWindowHours, b) }, rules.buffer, new Date().toISOString()))) throw taken();
+    if (!(await bookingsRepo.decideIfFree(env.DB, b, { status: "approved", by: actor.id, note, expiresAt: windowEnd(rules.paymentWindowHours, b), from: ["pending"] }, rules.buffer, new Date().toISOString()))) {
+      throw (await loadBooking(env, id)).status === "pending" ? taken() : alreadyDecided();
+    }
     const fresh = await loadBooking(env, id);
     await mail(env, fresh, emails.approved(env, fresh), "Booking approved, pay to confirm");
     await audit(env.DB, actor, "Approved booking", b.ref, note);
@@ -494,7 +515,7 @@ export const bookingService = {
     assertOpen(b);
     if (!["pending", "approved"].includes(b.status)) throw badRequest("Only requests and unpaid approvals can be declined.");
     if (paidNet(b) > 0) throw badRequest("This booking has payments. Cancel it instead so the refund is handled.");
-    await bookingsRepo.decide(env.DB, b.id, { status: "rejected", by: actor.id, note: reason, expiresAt: null });
+    if (!(await bookingsRepo.decide(env.DB, b.id, { status: "rejected", by: actor.id, note: reason, expiresAt: null }, ["pending", "approved"], true))) throw alreadyDecided();
     const fresh = await loadBooking(env, id);
     await mail(env, fresh, emails.rejected(env, fresh), "Booking request declined");
     await audit(env.DB, actor, "Declined booking", b.ref, reason);
@@ -505,7 +526,9 @@ export const bookingService = {
     const b = await loadBooking(env, id);
     assertOpen(b);
     if (!["pending", "approved"].includes(b.status)) throw badRequest("Only requests and approvals can be confirmed.");
-    if (!(await bookingsRepo.decideIfFree(env.DB, b, { status: "confirmed", by: actor.id, note, expiresAt: null }, (await loadRules(env)).buffer, new Date().toISOString()))) throw taken();
+    if (!(await bookingsRepo.decideIfFree(env.DB, b, { status: "confirmed", by: actor.id, note, expiresAt: null }, (await loadRules(env)).buffer, new Date().toISOString()))) {
+      throw ["pending", "approved"].includes((await loadBooking(env, id)).status) ? taken() : alreadyDecided();
+    }
     const fresh = await loadBooking(env, id);
     await mail(env, fresh, emails.confirmed(env, fresh), "Booking confirmed");
     await audit(env.DB, actor, "Confirmed without payment", b.ref, note);
@@ -517,7 +540,7 @@ export const bookingService = {
     if (b.scheduling === "project") throw badRequest("A remote order is completed when its final delivery is approved or finalized.");
     if (!["confirmed", "completed", "no_show"].includes(b.status)) throw badRequest("Only confirmed sessions can be marked.");
     if (minutesUntil(b.date, b.start_min) > 0) throw badRequest("You can mark a session once it has started.");
-    await bookingsRepo.setStatus(env.DB, b.id, outcome);
+    if (!(await bookingsRepo.transition(env.DB, b.id, ["confirmed", "completed", "no_show"], outcome))) throw alreadyDecided();
     await audit(env.DB, actor, outcome === "completed" ? "Marked completed" : "Marked no-show", b.ref);
   },
 
@@ -543,11 +566,13 @@ export const bookingService = {
     assertOpen(b);
     if (!["pending", "approved", "confirmed"].includes(b.status)) throw badRequest("This booking cannot be cancelled.");
     const share = overrideShare ?? (await refundShareOf(env, b));
-    const amount = Math.round(paidNet(b) * share);
-    await bookingsRepo.setStatus(env.DB, b.id, "cancelled", { cancelReason: reason, expiresAt: null });
-    const manual = amount > 0 ? await refundBooking(env, b, amount, reason) : 0;
+    // Only the call that wins this write refunds and emails, so a double click or two staff cannot refund twice.
+    if (!(await bookingsRepo.transition(env.DB, b.id, ["pending", "approved", "confirmed"], "cancelled", { reason }))) throw conflict("This booking was already cancelled or changed. Reload to see where it stands.", "already_decided");
     const fresh = await loadBooking(env, bookingId);
-    await mail(env, fresh, emails.cancelled(env, fresh, amount), "Booking cancelled");
+    const amount = Math.round(paidNet(fresh) * share);
+    const manual = amount > 0 ? await refundBooking(env, fresh, amount, reason) : 0;
+    const done = await loadBooking(env, bookingId);
+    await mail(env, done, emails.cancelled(env, done, amount), "Booking cancelled");
     await audit(env.DB, actor, "Cancelled booking", b.ref, `${reason}. Refund ${naira(amount)}${manual ? `, ${naira(manual)} of it paid in cash or transfer to return by hand` : ""}`);
     return { refund: amount, manual };
   },
@@ -581,11 +606,15 @@ export const bookingService = {
   async recordPayment(env: Env, actor: SessionUser, id: string, p: { amount: number; method: string; note: string }, notify = true) {
     const b = await loadBooking(env, id);
     if (["cancelled", "rejected"].includes(b.status)) throw badRequest("This booking is closed.");
-    if (["pending", "approved"].includes(b.status) && !(await bookingsRepo.decideIfFree(env.DB, b, { status: "confirmed", by: actor.id, note: b.decision_note, expiresAt: null }, (await loadRules(env)).buffer, new Date().toISOString()))) throw taken();
-    await env.DB.batch([
+    if (p.amount > balanceOf(b)) throw badRequest(`That is more than the ${naira(balanceOf(b))} still owed on this booking. Record the amount actually received, up to the balance.`);
+    if (["pending", "approved"].includes(b.status) && !(await bookingsRepo.decideIfFree(env.DB, b, { status: "confirmed", by: actor.id, note: b.decision_note, expiresAt: null }, (await loadRules(env)).buffer, new Date().toISOString()))) {
+      throw ["pending", "approved"].includes((await loadBooking(env, id)).status) ? taken() : alreadyDecided();
+    }
+    const res = await env.DB.batch([
       paymentsRepo.manual(env.DB, { id: uuid(), reference: newReference("PRM"), bookingId: b.id, userId: b.user_id, amount: p.amount, channel: p.method, note: p.note, by: actor.id }),
       bookingsRepo.addPaid(env.DB, b.id, p.amount),
     ]);
+    if (res[0].meta.changes !== 1 || res[1].meta.changes !== 1) throw badRequest("The balance on this booking changed while you were recording. Reload and try again.");
     const fresh = await loadBooking(env, id);
     const confirmedNow = b.status !== "confirmed" && fresh.status === "confirmed";
     if (notify) await mail(env, fresh, confirmedNow ? emails.confirmed(env, fresh) : emails.paymentReceived(env, fresh, p.amount, await unlocks(env, fresh)), confirmedNow ? "Booking confirmed" : "Payment received");
@@ -604,11 +633,12 @@ export const bookingService = {
   },
 
   /** Staff bookings for phone, WhatsApp and walk-in clients. Opening hours can be overridden, clashes cannot. */
-  async createManual(env: Env, actor: SessionUser, input: DraftInput & { status: "confirmed" | "approved"; source: string; ignoreHours: boolean; notify: boolean; payment: { amount: number; method: string; note: string } | null }) {
+  async createManual(env: Env, actor: SessionUser, input: DraftInput & { status: "confirmed" | "approved"; source: string; ignoreHours: boolean; pastOk?: boolean; notify: boolean; payment: { amount: number; method: string; note: string } | null }) {
     const rules = await loadRules(env);
     const draft = await priceDraft(env, input, rules);
-    if (draft.scheduling !== "project" && minutesUntil(draft.date, draft.start + draft.duration) <= 0 && !(draft.scheduling === "flex" && input.ignoreHours)) {
-      throw badRequest("That session is already over. Pick a time that has not finished yet.");
+    if (input.payment && input.payment.amount > draft.total) throw badRequest(`The payment is more than the ${naira(draft.total)} total.`);
+    if (draft.scheduling !== "project" && minutesUntil(draft.date, draft.start + draft.duration) <= 0 && !(draft.scheduling === "flex" && input.ignoreHours && input.pastOk && hasPermission(actor, "manage_bookings"))) {
+      throw badRequest("That session is already over. Pick a time that has not finished yet. Only a flex booking can be recorded after the fact, by staff who manage bookings, with the past-date box ticked.");
     }
     if (!input.ignoreHours) await checkOpen(env, draft.scheduling, draft.date, draft.start, draft.start + draft.duration);
     const user = input.contactEmail ? await usersRepo.byEmail(env.DB, input.contactEmail) : null;
@@ -647,7 +677,8 @@ export const bookingService = {
     await paymentsRepo.failPendingForExpiredHolds(env.DB, now);
     for (const b of await bookingsRepo.expiring(env.DB, now)) {
       const pending = b.status === "pending";
-      await bookingsRepo.setStatus(env.DB, b.id, "cancelled", { cancelReason: pending ? "Request expired" : "Payment window expired", expiresAt: null });
+      // Only an unpaid booking that is still waiting is released; one paid while this ran stays confirmed.
+      if (!(await bookingsRepo.transition(env.DB, b.id, [b.status], "cancelled", { reason: pending ? "Request expired" : "Payment window expired", unpaid: true, expiredBefore: now }))) continue;
       await mail(env, b, emails.expired(env, b, pending ? "The studio could not review your request in time." : "The payment window for your approved booking closed."), "Booking released");
       await audit(env.DB, null, "Released booking", b.ref, pending ? "Request expired before a decision" : "Not paid within the payment window");
     }

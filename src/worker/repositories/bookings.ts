@@ -105,12 +105,14 @@ export const bookingsRepo = {
         expires_at = CASE WHEN status IN ('pending', 'approved') THEN NULL ELSE expires_at END, updated_at = ${NOW}
       WHERE id = ?6 AND amount_paid_kobo - refunded_kobo + ?9 <= total_kobo
         AND EXISTS (SELECT 1 FROM payments WHERE reference = ?10 AND verified_via = ?11 AND paid_at = ?5)
+        AND status NOT IN ('cancelled', 'rejected', 'no_show')
         AND (status NOT IN ('pending', 'approved') OR room_id IS NULL OR ${CLASH})`,
       b.date, b.start_min, b.end_min, buffer, p.paidAt, b.id, "", b.room_id, amount, p.reference, p.via),
   /** A decision on a request or approval that only lands if its room is still free of every other booking, hold and block. Returns whether it did. */
-  decideIfFree: async (db: D1Database, b: { id: string; date: string; start_min: number; end_min: number; room_id: string | null }, d: { status: BookingStatus; by: string; note: string; expiresAt: string | null }, buffer: number, now: string) => {
+  decideIfFree: async (db: D1Database, b: { id: string; date: string; start_min: number; end_min: number; room_id: string | null }, d: { status: BookingStatus; by: string; note: string; expiresAt: string | null; from?: BookingStatus[] }, buffer: number, now: string) => {
+    const from = d.from ?? ['pending', 'approved'];
     const r = await run(db, `UPDATE bookings SET status = ?9, decided_by = ?10, decided_at = ${NOW}, decision_note = ?11, expires_at = ?12, updated_at = ${NOW}
-      WHERE id = ?6 AND status IN ('pending', 'approved') AND (room_id IS NULL OR ${CLASH})`,
+      WHERE id = ?6 AND status IN (${from.map((x) => `'${x}'`).join(', ')}) AND (room_id IS NULL OR ${CLASH})`,
       b.date, b.start_min, b.end_min, buffer, now, b.id, "", b.room_id, d.status, d.by, d.note, d.expiresAt);
     return r.meta.changes === 1;
   },
@@ -134,15 +136,28 @@ export const bookingsRepo = {
     f.from ?? null, f.to ?? null, f.status ?? null, f.q ? `%${f.q}%` : null, f.room ?? null),
   holdsBetween: (db: D1Database, from: string, to: string, now: string) =>
     all<HoldRow>(db, "SELECT * FROM holds WHERE date BETWEEN ? AND ? AND status = 'active' AND expires_at > ?", from, to, now),
-  expiring: (db: D1Database, now: string) => all<BookingRow>(db, "SELECT * FROM bookings WHERE status IN ('pending', 'approved') AND expires_at IS NOT NULL AND expires_at <= ?", now),
+  expiring: (db: D1Database, now: string) => all<BookingRow>(db, "SELECT * FROM bookings WHERE status IN ('pending', 'approved') AND amount_paid_kobo = 0 AND expires_at IS NOT NULL AND expires_at <= ?", now),
   dueReminders: (db: D1Database, from: string, to: string) =>
     all<BookingRow>(db, "SELECT * FROM bookings WHERE status = 'confirmed' AND scheduling != 'project' AND reminder_sent_at IS NULL AND date BETWEEN ? AND ?", from, to),
 
   setStatus: (db: D1Database, id: string, status: BookingStatus, extra: { cancelReason?: string; expiresAt?: string | null } = {}) =>
     run(db, `UPDATE bookings SET status = ?, cancel_reason = COALESCE(?, cancel_reason), expires_at = CASE WHEN ? THEN ? ELSE expires_at END, updated_at = ${NOW} WHERE id = ?`,
       status, extra.cancelReason ?? null, "expiresAt" in extra ? 1 : 0, extra.expiresAt ?? null, id),
-  decide: (db: D1Database, id: string, d: { status: BookingStatus; by: string; note: string; expiresAt: string | null }) =>
-    run(db, `UPDATE bookings SET status = ?, decided_by = ?, decided_at = ${NOW}, decision_note = ?, expires_at = ?, updated_at = ${NOW} WHERE id = ?`, d.status, d.by, d.note, d.expiresAt, id),
+  /**
+   * Every status change is one conditional write: it only lands if the booking is still in one of the `from` statuses (and, when asked, unpaid or past its expiry).
+   * The caller carries on to refunds, emails and audit only when this returns true.
+   */
+  transition: async (db: D1Database, id: string, from: BookingStatus[], to: BookingStatus, o: { reason?: string; unpaid?: boolean; expiredBefore?: string } = {}) => {
+    const r = await run(db, `UPDATE bookings SET status = ?1, cancel_reason = COALESCE(?2, cancel_reason), expires_at = NULL, updated_at = ${NOW}
+      WHERE id = ?3 AND status IN (${from.map((x) => `'${x}'`).join(", ")}) AND (?4 = 0 OR amount_paid_kobo = 0) AND (?5 IS NULL OR (expires_at IS NOT NULL AND expires_at <= ?5))`,
+      to, o.reason ?? null, id, o.unpaid ? 1 : 0, o.expiredBefore ?? null);
+    return r.meta.changes === 1;
+  },
+  decide: async (db: D1Database, id: string, d: { status: BookingStatus; by: string; note: string; expiresAt: string | null }, from: BookingStatus[] = ["pending", "approved"], unpaid = false) => {
+    const r = await run(db, `UPDATE bookings SET status = ?, decided_by = ?, decided_at = ${NOW}, decision_note = ?, expires_at = ?, updated_at = ${NOW}
+      WHERE id = ? AND status IN (${from.map((x) => `'${x}'`).join(", ")}) AND (? = 0 OR amount_paid_kobo = 0)`, d.status, d.by, d.note, d.expiresAt, id, unpaid ? 1 : 0);
+    return r.meta.changes === 1;
+  },
   /** Atomic like the inserts: the booking only moves if the new time clears every other booking, hold and block in its room. */
   move: async (db: D1Database, m: { id: string; roomId: string; date: string; start: number; end: number; slotLabel: string; dueDate: string | null }, buffer: number, now: string, countAsReschedule: boolean) => {
     const r = await run(db, `UPDATE bookings SET date = ?1, start_min = ?2, end_min = ?3, slot_label = ?9, due_date = ?10, reschedules_used = reschedules_used + ?11,
@@ -153,9 +168,10 @@ export const bookingsRepo = {
   updateDetails: (db: D1Database, id: string, d: { people: number; artist_name: string; contact_phone: string; notes: string; project: string; reference_links: string }) =>
     run(db, `UPDATE bookings SET people = ?, artist_name = ?, contact_phone = ?, notes = ?, project = ?, reference_links = ?, updated_at = ${NOW} WHERE id = ?`,
       d.people, d.artist_name, d.contact_phone, d.notes, d.project, d.reference_links, id),
+  /** A staff-recorded payment never takes a booking past its total; the guard matches the one on the payment row so the two land together or not at all. */
   addPaid: (db: D1Database, id: string, amount: number) =>
     stmt(db, `UPDATE bookings SET amount_paid_kobo = amount_paid_kobo + ?, status = CASE WHEN status IN ('pending', 'approved') THEN 'confirmed' ELSE status END,
-      expires_at = CASE WHEN status IN ('pending', 'approved') THEN NULL ELSE expires_at END, updated_at = ${NOW} WHERE id = ?`, amount, id),
+      expires_at = CASE WHEN status IN ('pending', 'approved') THEN NULL ELSE expires_at END, updated_at = ${NOW} WHERE id = ? AND amount_paid_kobo - refunded_kobo + ? <= total_kobo`, amount, id, amount),
   addRefunded: (db: D1Database, id: string, amount: number) => stmt(db, `UPDATE bookings SET refunded_kobo = refunded_kobo + ?, updated_at = ${NOW} WHERE id = ?`, amount, id),
   markReminded: (db: D1Database, id: string) => run(db, `UPDATE bookings SET reminder_sent_at = ${NOW} WHERE id = ?`, id),
   linkGuestBookings: (db: D1Database, userId: string, email: string) => run(db, "UPDATE bookings SET user_id = ? WHERE user_id IS NULL AND lower(contact_email) = lower(?)", userId, email),
@@ -176,7 +192,8 @@ export const paymentsRepo = {
       p.id, p.reference, p.holdId, p.bookingId, p.userId, p.amount, p.provider, p.kind),
   manual: (db: D1Database, p: { id: string; reference: string; bookingId: string; userId: string | null; amount: number; channel: string; note: string; by: string }) =>
     stmt(db, `INSERT INTO payments (id, reference, booking_id, user_id, amount_kobo, provider, kind, status, channel, verified_via, note, recorded_by, paid_at)
-      VALUES (?, ?, ?, ?, ?, 'manual', 'manual', 'success', ?, 'staff', ?, ?, ${NOW})`, p.id, p.reference, p.bookingId, p.userId, p.amount, p.channel, p.note, p.by),
+      SELECT ?, ?, ?, ?, ?, 'manual', 'manual', 'success', ?, 'staff', ?, ?, ${NOW} WHERE (SELECT amount_paid_kobo - refunded_kobo + ? <= total_kobo FROM bookings WHERE id = ?)`,
+      p.id, p.reference, p.bookingId, p.userId, p.amount, p.channel, p.note, p.by, p.amount, p.bookingId),
   byReference: (db: D1Database, ref: string) => first<PaymentRow>(db, "SELECT * FROM payments WHERE reference = ?", ref),
   lookup: (db: D1Database, ref: string) => first<PaymentRow & { booking_ref: string | null; client: string | null; checked_by_name: string | null }>(db,
     `SELECT p.*, b.ref booking_ref, COALESCE(u.name, b.contact_name) client, s.name checked_by_name FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id
@@ -209,6 +226,8 @@ export const changeRequestsRepo = {
   pending: (db: D1Database) => all<ChangeRequestRow & { ref: string; artist_name: string; date: string; start_min: number; end_min: number; package_name: string; total_kobo: number; room_name: string }>(db,
     "SELECT c.*, b.ref, b.artist_name, b.date, b.start_min, b.end_min, b.package_name, b.total_kobo, b.room_name FROM change_requests c JOIN bookings b ON b.id = c.booking_id WHERE c.status = 'pending' ORDER BY c.created_at"),
   forUser: (db: D1Database, userId: string) => all<ChangeRequestRow>(db, "SELECT * FROM change_requests WHERE user_id = ? ORDER BY created_at DESC", userId),
+  /** Hands a claimed request back when the action it was claimed for failed. */
+  reopen: (db: D1Database, id: string) => run(db, "UPDATE change_requests SET status = 'pending', decided_by = NULL, decided_at = NULL WHERE id = ? AND status = 'approved'", id),
   decide: (db: D1Database, id: string, status: "approved" | "declined", by: string) =>
     run(db, "UPDATE change_requests SET status = ?, decided_by = ?, decided_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'pending'", status, by, id),
 };

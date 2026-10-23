@@ -11,6 +11,7 @@ import { addDays, dateTime, lagosToday, naira, shortDate, statusLabel, statusTon
 import { act, useApi } from "./kit";
 import { useCatalog } from "../../lib/catalog";
 import { Availability, BookingDrawer, Bookings, Calendar, Clients } from "./bookings";
+import { Deliveries } from "./deliveries";
 import { Catalogue } from "./catalog";
 import { Website } from "./content";
 
@@ -19,6 +20,7 @@ const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "", to: "/admin", label: "Overview", title: "Overview", icon: "grid", end: true },
   { key: "calendar", to: "/admin/calendar", label: "Calendar", title: "Calendar", icon: "calendar", perm: "view_calendar" },
   { key: "bookings", to: "/admin/bookings", label: "Bookings", title: "Bookings", icon: "list", perm: "view_calendar" },
+  { key: "deliveries", to: "/admin/deliveries", label: "Deliveries", title: "Deliveries and production queue", icon: "music", perm: "deliver_files" },
   { key: "clients", to: "/admin/clients", label: "Clients", title: "Clients and history", icon: "users", perm: "view_calendar", any: ["manage_bookings", "update_booking_details", "assist_clients", "record_payments"] },
   { key: "availability", to: "/admin/availability", label: "Availability", title: "Availability", icon: "clock", perm: "edit_availability" },
   { key: "catalogue", to: "/admin/catalogue", label: "Services and pricing", title: "Services, packages and rooms", icon: "music", perm: "edit_packages" },
@@ -313,6 +315,6 @@ function Audit() {
 }
 
 const PAGES: Record<string, () => ReactNode> = {
-  "": Overview, calendar: Calendar, bookings: Bookings, clients: Clients, availability: Availability, catalogue: Catalogue, enquiries: Enquiries,
+  "": Overview, calendar: Calendar, bookings: Bookings, deliveries: Deliveries, clients: Clients, availability: Availability, catalogue: Catalogue, enquiries: Enquiries,
   website: Website, payments: Payments, reports: Reports, staff: Staff, audit: Audit, "online-booking": OnlineBooking, verify: Verify,
 };
