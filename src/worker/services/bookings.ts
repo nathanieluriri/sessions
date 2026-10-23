@@ -284,7 +284,9 @@ export const bookingService = {
       await paymentsRepo.markFailed(env.DB, reference);
       const releases = payment.hold_id && !payment.booking_id;
       if (releases) await bookingsRepo.releaseHold(env.DB, payment.hold_id!);
-      await audit(env.DB, null, "Payment failed", reference, releases ? "Slot released" : "");
+      const mismatch = result.status === "success" && result.amount !== payment.amount_kobo;
+      await audit(env.DB, null, mismatch ? "Payment amount mismatch" : "Payment failed", reference, mismatch ? `Provider reports ${naira(result.amount)}, expected ${naira(payment.amount_kobo)}. Check the provider dashboard and refund by hand if money was taken.` : releases ? "Slot released" : "");
+      if (mismatch) await notifyStaff(env, "verify_payments", `Payment amount mismatch · ${reference}`, `The provider confirmed ${naira(result.amount)} but ${naira(payment.amount_kobo)} was expected. The payment was not applied to any booking. Check the provider dashboard and refund by hand if money was taken.`);
       return { status: "failed" as const, booking: null };
     }
     return payment.booking_id ? this.applyToBooking(env, payment, via, result.channel) : this.bookFromHold(env, payment, via, result.channel);

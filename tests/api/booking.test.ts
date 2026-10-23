@@ -817,3 +817,20 @@ describe("change requests and cancellations", () => {
     expect((await boss.post(`/api/admin/bookings/${none.id}/cancel`, { reason: "Same day", fullRefund: false })).body.refund).toBe(0);
   });
 });
+
+describe("amount mismatch", () => {
+  it("does not apply a charge whose confirmed amount differs from the one expected, and tells the staff who verify payments", async () => {
+    const { client, email } = await h.newClient();
+    const hold = await client.post("/api/holds", { ...draft(REC, monday(), S1), contactEmail: email });
+    expect(hold.status).toBe(200);
+    const co = await client.post("/api/checkout", { holdId: hold.body.holdId, plan: "full" });
+    await h.sql("UPDATE demo_transactions SET amount_kobo = amount_kobo - 100 WHERE reference = ?", co.body.reference);
+    const paid = await h.payDemo(client, co.body.reference);
+    expect(paid.body.status).toBe("failed");
+    expect(await h.sql("SELECT 1 FROM bookings WHERE hold_id = ?", hold.body.holdId)).toHaveLength(0);
+    const logs = await h.sql<{ detail: string }>("SELECT detail FROM audit_logs WHERE action = 'Payment amount mismatch' AND target = ?", co.body.reference);
+    expect(logs).toHaveLength(1);
+    expect(logs[0].detail).toContain("refund by hand");
+    expect((await h.sql("SELECT 1 FROM email_outbox WHERE subject = ?", `Payment amount mismatch · ${co.body.reference}`)).length).toBeGreaterThan(0);
+  });
+});
