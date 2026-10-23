@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const EMBLEM = [48, 64, 96, 128, 192, 256, 384].map((w) => `/brand/emblem-${w}.webp ${w}w`).join(", ");
-const LOCKUP = [320, 480, 640, 960].map((w) => `/brand/lockup-${w}.webp ${w}w`).join(", ");
+const LOCKUP = [320, 480, 720, 960].map((w) => `/brand/lockup-${w}.webp ${w}w`).join(", ");
 const LOCKUP_RATIO = 6656 / 2368;
 
 /** The Psych Records tiger emblem, size px square. Tone "ink" is for light surfaces and sits it on a black rounded tile; the other tones go straight onto a dark surface. */
@@ -13,11 +13,22 @@ export function Mark({ tone = "neon", size = 34, alt = "", lazy, className }: { 
   );
 }
 
-/** The full PSYCH Records Entertainment lockup, for dark surfaces at moderate sizes. Loads lazily, so keep it below the fold. */
+/** The full PSYCH Records Entertainment lockup, for dark surfaces at moderate sizes. The image is only requested once its box is near the viewport; until then an empty box of the same size holds the space. */
 export function Lockup({ width = 300, alt = "Psych Records Entertainment", className }: { width?: number; alt?: string; className?: string }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || !("IntersectionObserver" in window)) return setNear(true);
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setNear(true); io.disconnect(); } }, { rootMargin: "200px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const height = Math.round(width / LOCKUP_RATIO);
   return (
-    <img className={`lockup${className ? ` ${className}` : ""}`} src="/brand/lockup-640.webp" srcSet={LOCKUP} sizes={`${width}px`} width={width} height={Math.round(width / LOCKUP_RATIO)}
-      alt={alt} loading="lazy" decoding="async" draggable={false} />
+    <span ref={box} className="lockupbox" style={{ width, height }}>
+      {near && <img className={`lockup${className ? ` ${className}` : ""}`} src="/brand/lockup-480.webp" srcSet={LOCKUP} sizes={`${width}px`} width={width} height={height} alt={alt} decoding="async" draggable={false} />}
+    </span>
   );
 }
 

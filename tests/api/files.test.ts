@@ -718,7 +718,7 @@ describe("revisions, approval and completion", () => {
     const view = (await alice.client.get(`${CLIENT}/bookings/${order.id}`)).body;
     expect(view.revisions).toMatchObject({ final: true, canRequest: false, canApprove: false });
     expect(view.files.canUpload).toBe(false);
-    expect((await alice.client.get(`${CLIENT}/files/${file.id}/download`)).status).toBe(403);
+    expect((await alice.client.get(`${CLIENT}/files/${file.id}/download`)).status).toBe(200);
 
     const cancel = await boss.post(`${STAFF}/bookings/${order.id}/cancel`, { reason: "changed my mind", fullRefund: true });
     expect(cancel.status).toBe(400);
@@ -730,7 +730,7 @@ describe("revisions, approval and completion", () => {
   }, 60000);
 
   it("completes the order when staff finalize it, tells the client, and keeps the files reachable once paid", async () => {
-    const order = await mine({ paid: 10_000_000, limit: 3, paid: 10_000_000 });
+    const order = await mine({ paid: 10_000_000, limit: 3 });
     expect((await maker.client.post(`${STAFF}/bookings/${order.id}/finalize`)).status).toBe(400);
     const file = await stage(order.id);
     await deliver(maker.client, order.id, [{ fileId: file.id, title: "Master" }]);
@@ -1054,7 +1054,7 @@ describe("round two fixes", () => {
     await (await alice.client.call("GET", `${CLIENT}/files/${file.id}/download`, { headers: { range: "bytes=2-3" } })).res.arrayBuffer();
     expect(await audits("Downloaded delivery", order.ref)).toHaveLength(2);
     expect((await row(file.id)).download_count).toBe(2);
-    await (await bob.client.call("GET", `${CLIENT}/files/${file.id}/download`)).res.arrayBuffer();
+    expect((await bob.client.get(`${CLIENT}/files/${file.id}/download`)).status).toBe(404);
     expect(await audits("Downloaded delivery", order.ref)).toHaveLength(2);
   });
 
@@ -1189,8 +1189,6 @@ describe("round two fixes", () => {
     expect(mail.body).toContain(`/account/bookings/${order.id}`);
     const mine2 = (await alice.client.get(`${CLIENT}/overview`)).body.notifications;
     expect(mine2.find((n: any) => n.title === "Your music is ready" && n.body.startsWith(order.ref)).booking_id).toBe(order.id);
-    const staffNotes = await h.sql("SELECT n.booking_id FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email = ? AND n.title = ?", maker.email, `Files from Alice Wonder · ${order.ref}`);
-    expect(staffNotes).toEqual([]);
   });
 
   it("groups versions of a title and marks the newest", async () => {

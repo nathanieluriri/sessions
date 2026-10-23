@@ -18,7 +18,7 @@ INK = (10, 10, 10)
 GAIN = 2.0         # alpha = GAIN x brightest channel: the dim metallic shading stays solid, only the soft edge is translucent
 FLOOR = 6 / 255    # the source "black" carries faint dither; anything below this is background
 EMBLEM_WIDTHS = [48, 64, 96, 128, 192, 256, 384]
-LOCKUP_WIDTHS = [320, 480, 640, 960]
+LOCKUP_WIDTHS = [320, 480, 720, 960]
 LOSSLESS_UP_TO = 96
 SMALL_ICON_THICKEN = {16: 8, 32: 6, 48: 6}  # favicon strokes are widened (in px of a 1024 master) so they survive at this size
 

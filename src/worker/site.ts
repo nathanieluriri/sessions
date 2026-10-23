@@ -42,9 +42,10 @@ export async function media(env: Env, path: string) {
 
 /** Serves the single-page app with the right title, description, social tags, structured data and analytics for each URL. */
 export async function page(request: Request, env: Env) {
-  const res = await env.ASSETS.fetch(request);
-  if (!(res.headers.get("content-type") ?? "").includes("text/html")) return res;
   const url = new URL(request.url);
+  let res = await env.ASSETS.fetch(request);
+  if (res.status === 404 && !/\.[a-z0-9]+$/i.test(url.pathname)) res = await env.ASSETS.fetch(new Request(url.origin + "/"));
+  if (!(res.headers.get("content-type") ?? "").includes("text/html")) return res;
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const [content, pages, hours] = await Promise.all([contentRepo.content(env.DB), contentRepo.pageMeta(env.DB), settingsRepo.hours(env.DB)]);
   const name = content.business_name || env.STUDIO_NAME;

@@ -51,13 +51,13 @@ UPDATE categories SET name = 'Music and audio', blurb = 'Recording, beats, mixin
 DELETE FROM services WHERE slug IN ('song-arrangement', 'mastering', 'vocal-editing', 'voice-over');
 UPDATE services SET slug = 'recording', name = 'Recording', sort = 0, price_label = '₦80,000 / session', duration_label = 'Four sessions every day',
   description = 'Vocals, rap and voice-over recorded in the treated booth with an engineer at the desk. Song arrangement is included.',
-  details = 'Book one of four recording sessions every day. Your engineer sets up the booth, records and comps takes as you go, and helps shape the arrangement of your song so you leave with a finished idea. Vocals, rap and voice-over all come under Recording.',
-  deliverables = '["Song arrangement included", "Comped takes", "Session files in your portal"]'
+  details = 'Book one of four recording sessions every day. Your engineer sets up the booth, records your takes as you go, and helps shape the arrangement of your song so you leave with a finished idea. Vocals, rap and voice-over all come under Recording.',
+  deliverables = '["Song arrangement included", "Engineer at the desk", "Session files in your portal"]'
   WHERE slug = 'vocal-recording';
 UPDATE services SET sort = 1, price_label = '₦100,000 / beat', duration_label = 'Delivered in your portal',
   description = 'A producer builds an original beat for your song, or finishes one you started.',
-  details = 'Tell us the style, tempo and references when you order and upload anything you want us to hear. A producer builds the beat and delivers it in your portal, with stems for mixing.',
-  deliverables = '["Beat in WAV and MP3", "Stems for mixing", "Usage terms in writing"]'
+  details = 'Tell us the style, tempo and references when you order and upload anything you want us to hear. A producer builds the beat and delivers it in your portal.',
+  deliverables = '["Beat in WAV and MP3", "Delivered in your portal"]'
   WHERE slug = 'beat-production';
 UPDATE services SET slug = 'mixing-mastering', name = 'Mixing and mastering', sort = 2, price_label = 'From ₦100,000 / song', duration_label = 'Express 1 day, Standard 7 days',
   description = 'Balance, tone and polish for your record, with audio editing and vocal comping included. For music.',
@@ -80,7 +80,7 @@ VALUES ('pkg_recording_session', 'recording-session', 'Recording session', 'One 
   '["Engineer at the desk", "Song arrangement included", "Vocals, rap or voice-over", "Session files in your portal"]', 0, 1, 0, 'music', 'room_studio_a', 'fixed', 0, 0, '', 'recording', 'slot', 'day', 'per session', NULL, NULL, 0, NULL);
 INSERT INTO packages (id, slug, name, description, category, duration_min, price_kobo, includes, featured, active, sort, service_category, room_id, pricing, deposit_percent, requires_approval, price_note, service_slug, scheduling, slot_kind, unit, compare_at_kobo, turnaround_days, revision_limit, tracks)
 VALUES ('pkg_beat_production', 'beat-production', 'Beat production', 'A producer builds an original beat for your song. Tell us the style, tempo and references when you order and collect the finished beat in your portal.', 'post', 0, 10000000,
-  '["Original beat for your song", "WAV and MP3 with stems", "Delivered in your portal"]', 0, 1, 1, 'music', NULL, 'fixed', 0, 0, '', 'beat-production', 'project', 'day', 'per beat', NULL, NULL, 0, NULL);
+  '["Original beat for your song", "WAV and MP3", "Delivered in your portal"]', 0, 1, 1, 'music', NULL, 'fixed', 0, 0, '', 'beat-production', 'project', 'day', 'per beat', NULL, NULL, 0, NULL);
 INSERT INTO packages (id, slug, name, description, category, duration_min, price_kobo, includes, featured, active, sort, service_category, room_id, pricing, deposit_percent, requires_approval, price_note, service_slug, scheduling, slot_kind, unit, compare_at_kobo, turnaround_days, revision_limit, tracks)
 VALUES ('pkg_mm_standard', 'mixing-mastering-standard', 'Mixing and mastering, Standard', 'Your song mixed and mastered within 7 days, with audio editing and vocal comping included. Up to 3 revisions. For music only.', 'post', 0, 10000000,
   '["Delivered in 7 days", "Audio editing and vocal comping included", "Up to 3 revisions", "Upload your stems in your portal"]', 0, 1, 2, 'music', NULL, 'fixed', 0, 0, '', 'mixing-mastering', 'project', 'day', 'per song', NULL, 7, 3, NULL);
@@ -111,8 +111,8 @@ INSERT INTO extras (id, slug, name, price_kobo, active, category, service_slug, 
 UPDATE policies SET sort = 0, body = 'Smaller packages are paid in full when you book. Larger packages show a deposit option before you pay. Pay by card, bank transfer or USSD through Paystack. Your booking is confirmed once Paystack verifies the payment, and any balance is due before your finished files are released.' WHERE slug = 'payment';
 DELETE FROM policies WHERE slug = 'overtime';
 INSERT INTO policies (slug, title, body, sort, kind) VALUES ('sessions', 'Session times', 'Recording sessions run at set times every day: 10:00am to 12:00noon, 12:30pm to 2:00pm, 2:30pm to 4:30pm and 5:00pm to 7:00pm. The All night session runs on Saturdays only, from 11:00pm to 5:00am on Sunday. Each session ends at its scheduled time so the room can be reset for the next artist.', 1, 'booking');
-UPDATE policies SET sort = 2, body = 'Some bookings, such as the EP and album offers, are sent as requests. The studio replies within 24 hours. Once approved you have 24 hours to pay a deposit or the full amount to secure your dates. Requests that are not approved or paid in time are released.' WHERE slug = 'approvals';
-UPDATE policies SET sort = 3, body = 'Cancel 72 hours or more before your session for a full refund of what you have paid. Between 24 and 72 hours, 50% of what you paid is refunded. Under 24 hours or no-shows are not refunded. There are no refunds after job completion.' WHERE slug = 'cancellations';
+UPDATE policies SET sort = 2, body = 'Some bookings, such as the EP and album offers, are sent as requests. The studio replies within 48 hours. Once approved you have 24 hours to pay a deposit or the full amount to secure your dates. Requests that are not approved or paid in time are released.' WHERE slug = 'approvals';
+UPDATE policies SET sort = 3, body = 'Cancel 72 hours or more before your session for a full refund of what you have paid. Between 24 and 72 hours, 50% of what you paid is refunded. Under 24 hours or no-shows are not refunded. Remote orders (beats, mixing and mastering, song covers) can be cancelled for a full refund until the first finished files are delivered. After that, and after job completion, there are no refunds.' WHERE slug = 'cancellations';
 UPDATE policies SET sort = 4, body = 'Reschedule once for free, up to 48 hours before your session, to any open session. Later changes are treated as a cancellation.' WHERE slug = 'rescheduling';
 UPDATE policies SET sort = 5 WHERE slug = 'late-arrivals';
 INSERT INTO policies (slug, title, body, sort, kind) VALUES ('revisions', 'Revisions and completion', 'Mixing and mastering includes a maximum of 3 revisions. Ask for a revision from your portal and say what to change. Once work is delivered in all agreed formats, no further adjustments are made. Any additional work after completion requires new payment or renegotiation.', 6, 'booking');
@@ -141,7 +141,7 @@ All finished work is delivered through your portal, never by email or private me
 - Any additional work after completion requires new payment or renegotiation.
 
 ## Changes and cancellations
-Rescheduling, cancellation and refund rules are set out in the booking policies, which you accept when you book.
+Rescheduling, cancellation and refund rules are set out in the booking policies, which you accept when you book. Remote orders (beats, mixing and mastering, song covers) can be cancelled for a full refund until the first finished files are delivered. After that, and after job completion, there are no refunds.
 
 ## Using the studio
 Follow the instructions of studio staff. You are responsible for damage to equipment or rooms caused by you or your guests. The studio may end a session without a refund for unsafe behaviour.
@@ -168,4 +168,7 @@ INSERT INTO faqs (id, question, answer, sort) VALUES ('faq_14', 'Can I send you 
 
 UPDATE announcements SET title = 'Exclusive offers', body = 'Produce your EP (5 tracks) or your album (12 tracks) with accommodation and unlimited studio sessions.', link_label = 'See the offers', link_url = '/packages#exclusive' WHERE id = 'ann_1';
 UPDATE page_meta SET description = 'Recording sessions, beat production, mixing and mastering, full production and exclusive EP and album offers, with prices and booking policies.' WHERE path = '/packages';
-UPDATE content SET value = 'Recording sessions run at set times. See Pricing for the session times.' WHERE key = 'hours_note';
+UPDATE content SET value = 'Recording sessions run daily from 10:00am to 7:00pm. The All night session runs on Saturdays from 11:00pm to 5:00am (Sunday).' WHERE key = 'hours_note';
+UPDATE content SET value = 'Book recording sessions, beats, mixing and mastering online, with fixed session times and live availability. Video, podcast and photo work is by quote.' WHERE key = 'hero_subtitle';
+UPDATE content SET value = 'A music studio in Lagos. Book recording sessions, beats, mixing and mastering online. Video, podcast and photo work by quote.' WHERE key = 'footer_blurb';
+UPDATE content SET value = 'Book recording sessions, beats, mixing and mastering at Psych Records Entertainment in Lagos, with live availability and secure Paystack checkout. Video, podcast and photo work by quote.' WHERE key = 'seo_description';

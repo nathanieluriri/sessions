@@ -52,7 +52,7 @@ export const emails = {
       ? { subject: `Order confirmed · ${b.ref}`, text: `Hi ${b.contact_name},\n\nThanks, your order is confirmed.\n\n${details(b)}\n${money(b)}\n\n${orderSteps(env, b)}\n\nManage your order: ${bookingLink(env, b)}` }
       : {
         subject: `You're booked · ${b.ref} · ${prettyDate(b.date)}`,
-        text: `Hi ${b.contact_name},\n\n${isResidency(b) ? "Your booking is confirmed." : "Your session is confirmed."}\n\n${details(b)}\n${money(b)}\n\n${isResidency(b) ? `${residency}\n\n` : "Arrive 10 minutes early. "} ${balanceOf(b) > 0 ? `Pay the balance any time here: ${payLink(env, b)}\n` : ""}Manage your booking: ${bookingLink(env, b)}`,
+        text: `Hi ${b.contact_name},\n\n${isResidency(b) ? "Your booking is confirmed." : "Your session is confirmed."}\n\n${details(b)}\n${money(b)}\n\n${isResidency(b) ? `${residency}\n\n` : "Arrive 10 minutes early. "}${balanceOf(b) > 0 ? `Pay the balance any time here: ${payLink(env, b)}\n` : ""}Manage your booking: ${bookingLink(env, b)}`,
       },
   requestReceived: (env: Env, b: BookingRow) => ({
     subject: `Request received · ${b.ref}`,
@@ -72,7 +72,7 @@ export const emails = {
   }),
   paymentReceived: (env: Env, b: BookingRow, amount: number, unlocked = false) => ({
     subject: `Payment received · ${b.ref}`,
-    text: `Hi ${b.contact_name},\n\nWe received ${naira(amount)} for booking ${b.ref}.\n\n${details(b)}\n${money(b)}\n\n${unlocked ? `Your finished files are now unlocked. Download them from your portal: ${b.user_id ? `${env.APP_URL}/account/bookings/${b.id}` : `${env.APP_URL}/register (create an account with this email address)`}\n\n` : ""}Manage your booking: ${bookingLink(env, b)}`,
+    text: `Hi ${b.contact_name},\n\nWe received ${naira(amount)} for booking ${b.ref}.\n\n${details(b)}\n${money(b)}\n\n${isResidency(b) ? `${residency}\n\n` : ""}${unlocked ? `Your finished files are now unlocked. Download them from your portal: ${b.user_id ? `${env.APP_URL}/account/bookings/${b.id}` : `${env.APP_URL}/register (create an account with this email address)`}\n\n` : ""}Manage your booking: ${bookingLink(env, b)}`,
   }),
   paymentLink: (env: Env, b: BookingRow, amount: number) => ({
     subject: `Payment for booking ${b.ref}`,

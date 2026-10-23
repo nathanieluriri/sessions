@@ -380,7 +380,7 @@ describe("session bookings", () => {
     const mail = await mailTo(email, "You're booked%");
     expect(mail).toContain("Time: 11:00pm to 5:00am (Sunday)");
     expect(mail).toContain("Room: Studio A");
-    expect(mail).toContain("Balance due before your session: ₦140,000");
+    expect(mail).toContain("Balance due before your finished files are released: ₦140,000");
     expect(mail).toContain(`Delivery due: ${new Date(`${addDays(sat, 7)}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}`);
     const pay = await client.post(`/api/pay/${id}`, { plan: "full" });
     expect(pay.status, JSON.stringify(pay.body)).toBe(200);
@@ -488,7 +488,10 @@ describe("day packages (EP and album)", () => {
     expect((await h.client().get(`/api/availability/day?date=${date}&package=pkg_produce_ep`)).body.slots[0].available).toBe(false);
     const received = await mailTo(email, "Request received%");
     expect(received).toContain("Room: Studio A");
-    expect(received).toContain("Time: 10:00am to 7:00pm");
+    expect(received).toContain("Preferred start date:");
+    expect(received).not.toMatch(/Time:|10:00am|7:00pm|held until/);
+    expect(received).toContain("We are holding that day while we review");
+    expect(received).toContain("confirm your full residency, accommodation and schedule");
 
     expect((await boss.post(`/api/admin/bookings/${id}/approve`, { note: "See you then" })).status).toBe(200);
     const approved = await row(id);
@@ -504,7 +507,10 @@ describe("day packages (EP and album)", () => {
     expect(pay.body.amount).toBe(75_620_000);
     expect((await h.payDemo(client, pay.body.reference)).body.status).toBe("confirmed");
     expect(await row(id)).toMatchObject({ status: "confirmed", amount_paid_kobo: 75_620_000, expires_at: null });
-    expect(await mailTo(email, "You're booked%")).toContain("Time: 10:00am to 7:00pm");
+    const booked = await mailTo(email, "You're booked%");
+    expect(booked).toContain("Preferred start date:");
+    expect(booked).not.toMatch(/Time:|10:00am/);
+    expect(booked).toContain("Balance due before your finished files are released");
     expect((await h.client().post("/api/holds", draft(REC, date, S3))).status).toBe(409);
 
     const rest = await client.post(`/api/pay/${id}`, { plan: "full" });
@@ -540,7 +546,7 @@ describe("day packages (EP and album)", () => {
     const r = await boss.post("/api/admin/bookings", manual(EP, date, S1, { status: "approved", notify: true, contactEmail: "label@example.com" }));
     expect(r.status).toBe(200);
     expect(await row(r.body.id)).toMatchObject({ status: "approved", scheduling: "day", start_min: 600, end_min: 1140 });
-    expect(await mailTo("label@example.com", "Approved, pay to confirm%")).toContain("Time: 10:00am to 7:00pm");
+    expect(await mailTo("label@example.com", "Approved, pay to confirm%")).toContain("Preferred start date:");
     expect((await boss.post("/api/admin/bookings", manual(EP, date, S1))).status).toBe(409);
   });
 });

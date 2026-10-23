@@ -112,6 +112,7 @@ h1, h2, h3, h4, p { margin: 0; }
 /* Logo */
 .mark { flex: none; max-width: none; object-fit: contain; }
 .mark.tile { border-radius: 22%; background: #0a0a0a; }
+.lockupbox { display: block; max-width: 100%; }
 .lockup { height: auto; }
 .brandmark { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; letter-spacing: -.02em; white-space: nowrap; }
 

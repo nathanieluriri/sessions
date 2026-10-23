@@ -45,9 +45,11 @@
   background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 4px, currentColor 4px 5px, transparent 5px 8px, currentColor 8px 12px, transparent 12px 14px); }
 .tkt-body { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 7.3cqw; height: 100%; padding: 9.2cqw 9.6cqw 11.5cqw; }
 .tkt-micro { display: flex; align-items: center; justify-content: space-between; gap: 5cqw; font-family: var(--mono); font-size: 3.2cqw; font-weight: 700; line-height: 1; letter-spacing: .08em; text-transform: uppercase; }
+.tkt-micro { white-space: nowrap; }
 .tkt-micro > span:last-child, .tkt-brand > span { opacity: .72; }
-.tkt-brand { display: inline-flex; align-items: center; gap: 2.4cqw; }
-.tkt-brand .mark { width: 8cqw; height: 8cqw; }
+.tkt-brand { display: inline-flex; align-items: center; gap: 2cqw; min-width: 0; }
+.tkt-brand > span { overflow: hidden; text-overflow: ellipsis; }
+.tkt-brand .mark { width: 6cqw; height: 6cqw; }
 .tkt-art { display: grid; place-items: center; min-height: 0; }
 .tkt-art .kt-pattern { max-height: 100%; width: auto; aspect-ratio: 1; }
 .tkt-title { font-size: 12.8cqw; font-weight: 700; line-height: .84; letter-spacing: -.07em; text-transform: uppercase; }
