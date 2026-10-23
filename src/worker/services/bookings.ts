@@ -173,6 +173,11 @@ async function loadBooking(env: Env, id: string) {
   return b;
 }
 
+/** Once an order is complete (final delivery approved or finalized) nothing about the booking may change. */
+const assertOpen = (b: BookingRow) => {
+  if (b.delivered_final_at) throw badRequest("This order is complete and can no longer be changed.");
+};
+
 /** Add-ons without a price yet, for the staff who have to quote them. */
 const quoteLine = (b: BookingRow) => {
   const names = (JSON.parse(b.extras) as { name: string; quote?: boolean }[]).filter((e) => e.quote).map((e) => e.name);
@@ -411,6 +416,7 @@ export const bookingService = {
 
   async requestChange(env: Env, user: SessionUser, bookingId: string, input: { kind: "reschedule" | "cancel"; newDate?: string; newStart?: number; reason: string }) {
     const b = await loadBooking(env, bookingId);
+    assertOpen(b);
     if (b.user_id !== user.id) throw notFound();
     if (b.status !== "confirmed") throw badRequest("Only confirmed bookings can be changed. Withdraw a request instead.");
     if (await changeRequestsRepo.pendingForBooking(env.DB, bookingId)) throw conflict("You already have a request waiting for the studio.");
@@ -435,6 +441,7 @@ export const bookingService = {
   /** A client can withdraw a request or an approved booking they have not paid for yet. */
   async withdraw(env: Env, user: SessionUser, bookingId: string) {
     const b = await loadBooking(env, bookingId);
+    assertOpen(b);
     if (b.user_id !== user.id) throw notFound();
     if (!["pending", "approved"].includes(b.status) || paidNet(b) > 0) throw badRequest("This booking cannot be withdrawn. Request a cancellation instead.");
     await bookingsRepo.setStatus(env.DB, b.id, "cancelled", { cancelReason: "Withdrawn by client", expiresAt: null });
@@ -446,6 +453,7 @@ export const bookingService = {
     const r = await changeRequestsRepo.byId(env.DB, requestId);
     if (!r || r.status !== "pending") throw notFound("Request not found.");
     const b = await loadBooking(env, r.booking_id);
+    assertOpen(b);
     if (approve) {
       if (r.kind === "reschedule") await this.reschedule(env, actor, b.id, r.new_date!, r.new_start_min!, true);
       else await this.cancel(env, actor, b.id, "Cancelled at client request");
@@ -459,6 +467,7 @@ export const bookingService = {
 
   async approve(env: Env, actor: SessionUser, id: string, note: string) {
     const b = await loadBooking(env, id);
+    assertOpen(b);
     if (b.status !== "pending") throw badRequest("Only requests waiting for approval can be approved.");
     if (b.scheduling !== "project" && minutesUntil(b.date, b.start_min) <= 0) throw badRequest("This session time has passed.");
     const rules = await loadRules(env);
@@ -470,6 +479,7 @@ export const bookingService = {
 
   async reject(env: Env, actor: SessionUser, id: string, reason: string) {
     const b = await loadBooking(env, id);
+    assertOpen(b);
     if (!["pending", "approved"].includes(b.status)) throw badRequest("Only requests and unpaid approvals can be declined.");
     if (paidNet(b) > 0) throw badRequest("This booking has payments. Cancel it instead so the refund is handled.");
     await bookingsRepo.decide(env.DB, b.id, { status: "rejected", by: actor.id, note: reason, expiresAt: null });
@@ -481,6 +491,7 @@ export const bookingService = {
   /** Studio policy allows staff to confirm without payment, for example pay-on-arrival or a label account. */
   async confirmWithoutPayment(env: Env, actor: SessionUser, id: string, note: string) {
     const b = await loadBooking(env, id);
+    assertOpen(b);
     if (!["pending", "approved"].includes(b.status)) throw badRequest("Only requests and approvals can be confirmed.");
     await bookingsRepo.decide(env.DB, b.id, { status: "confirmed", by: actor.id, note, expiresAt: null });
     const fresh = await loadBooking(env, id);
@@ -490,6 +501,7 @@ export const bookingService = {
 
   async setOutcome(env: Env, actor: SessionUser, id: string, outcome: "completed" | "no_show") {
     const b = await loadBooking(env, id);
+    assertOpen(b);
     if (b.scheduling === "project") throw badRequest("A remote order is completed when its final delivery is approved or finalized.");
     if (!["confirmed", "completed", "no_show"].includes(b.status)) throw badRequest("Only confirmed sessions can be marked.");
     if (minutesUntil(b.date, b.start_min) > 0) throw badRequest("You can mark a session once it has started.");
@@ -499,6 +511,7 @@ export const bookingService = {
 
   async reschedule(env: Env, actor: SessionUser, bookingId: string, date: string, start: number, fromRequest = false) {
     const b = await loadBooking(env, bookingId);
+    assertOpen(b);
     if (!["confirmed", "approved", "pending"].includes(b.status)) throw badRequest("Only upcoming bookings can be moved.");
     const rules = await loadRules(env);
     const t = await moveTarget(env, b, date, start);
@@ -515,6 +528,7 @@ export const bookingService = {
 
   async cancel(env: Env, actor: SessionUser, bookingId: string, reason: string, overrideShare?: number) {
     const b = await loadBooking(env, bookingId);
+    assertOpen(b);
     if (!["pending", "approved", "confirmed"].includes(b.status)) throw badRequest("This booking cannot be cancelled.");
     const share = overrideShare ?? (await refundShareOf(env, b));
     const amount = Math.round(paidNet(b) * share);
