@@ -73,7 +73,8 @@ export function stepsFor(fixed: Package[], packageId?: string): Step[] {
   return list.map(([key, label]) => ({ key, label, path: PATH[key] }));
 }
 
-export const nextPath = (steps: Step[], at: StepKey) => steps[steps.findIndex((s) => s.key === at) + 1]?.path ?? PATH.checkout;
+const ORDER: StepKey[] = ["service", "package", "time", "details", "checkout"];
+export const nextPath = (steps: Step[], at: StepKey) => steps.find((s) => ORDER.indexOf(s.key) > ORDER.indexOf(at))?.path ?? PATH.checkout;
 export const prevPath = (steps: Step[], at: StepKey) => steps[Math.max(0, steps.findIndex((s) => s.key === at) - 1)]?.path ?? PATH.service;
 
 export interface FlowDraft { serviceSlug?: string; packageId?: string; date?: string; start?: number }

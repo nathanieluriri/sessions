@@ -76,7 +76,7 @@ The platform is built and running. Remaining time depends on supplying real cont
 **To confirm.** Technically everything can be handed over: the Git repository, the Figma files, the Cloudflare account (Worker, database, storage), the Paystack and Resend accounts and the domain should sit in the studio's own accounts at handover.
 
 **Will the website be easy to expand with new services and features?**
-Yes. New categories, services, rooms, packages and content are added from the dashboard. The code is layered (routes, services, repositories) so features such as beat sales, downloads or a client file portal can be added without a rebuild.
+Yes. New categories, services, rooms, packages and content are added from the dashboard. The code is layered (routes, services, repositories) so features such as beat sales or downloads can be added without a rebuild.
 
 **Which features are excluded or attract additional charges?**
-Not included: online sales of beats, products or merchandise, digital downloads and licensing, memberships, a client portal for project files, artist and producer profiles, automatic WhatsApp notifications (Meta charges per conversation), two-way external calendar sync, and content production such as copywriting and photography. Third-party fees (Paystack, domain, email above the free plan) are paid by the studio.
+Not included: online sales of beats, products or merchandise, digital downloads and licensing, memberships, artist and producer profiles, automatic WhatsApp notifications (Meta charges per conversation), two-way external calendar sync, and content production such as copywriting and photography. Third-party fees (Paystack, domain, email above the free plan) are paid by the studio.

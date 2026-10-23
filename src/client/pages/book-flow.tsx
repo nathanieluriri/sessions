@@ -354,7 +354,7 @@ export function BookTime() {
                 })}
               </div>
             )}
-          {night && nightSession && <div className="panel small">{nightSession.label} runs {sessionDays(nightSession).toLowerCase()} and ends the next morning, so your session finishes on Sunday at {t12(nightSession.end_min)}.</div>}
+          {night && nightSession && <div className="panel small">{nightSession.label} is for {sessionDays(nightSession).replace(" only", "")} only and ends the next morning, so your session finishes on Sunday at {t12(nightSession.end_min)}.</div>}
           {mode === "day" && <div className="panel small muted">The studio confirms the full schedule and accommodation after approving your request.</div>}
           {updated && mode !== "day" && <span className="caption">Updated {updated.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}{mode === "flex" ? ` · ${cat.rules.buffer} min changeover included` : ""}</span>}
         </div>

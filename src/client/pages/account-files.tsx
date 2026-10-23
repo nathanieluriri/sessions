@@ -71,7 +71,7 @@ function UploadSection({ bookings, reload }: { bookings: FilesBooking[]; reload:
           <select id="which" className="select" value={cur.id} onChange={(e) => setPick(e.target.value)}>{can.map((b) => <option key={b.id} value={b.id}>{label(b)}</option>)}</select></div>
       ) : <span className="small muted">For {label(cur)}</span>}
       <ClientUploader key={cur.id} bookingId={cur.id} onChanged={reload} />
-      <div className="stack gap8"><b className="small">Sent to the studio</b><UploadsList files={cur.uploads} canRemove={cur.canUpload} onChanged={reload} /></div>
+      <div className="stack gap8"><b className="small">Files you have uploaded</b><UploadsList files={cur.uploads} canRemove={cur.canUpload} onChanged={reload} /></div>
     </div>
   );
 }

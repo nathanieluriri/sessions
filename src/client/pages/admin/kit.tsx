@@ -58,7 +58,22 @@ export function ImageField({ label, value, onChange, hint }: { label: string; va
 }
 
 export interface FieldDef {
-  key: string; label: string; type?: "text" | "textarea" | "number" | "money" | "bool" | "image" | "list" | "select" | "date"; options?: [string, string][]; hint?: string; rows?: number;
+  key: string; label: string; type?: "text" | "textarea" | "number" | "money" | "bool" | "image" | "list" | "select" | "date" | "time"; options?: [string, string][]; hint?: string; rows?: number;
+  numeric?: boolean; nextDay?: boolean;
+}
+
+/** Hours and minutes for a time of day stored as minutes; with `nextDay` a tick adds 1440 so 23:00 to 05:00 can be entered. */
+function TimeField({ f, value, onChange }: { f: FieldDef; value: number; onChange: (v: number) => void }) {
+  const next = !!f.nextDay && value >= 1440, m = value % 1440;
+  const hh = String(Math.floor(m / 60)).padStart(2, "0"), mm = String(m % 60).padStart(2, "0");
+  const set = (time: string, plus: boolean) => { const [h, n] = time.split(":").map(Number); if (!Number.isNaN(h) && !Number.isNaN(n)) onChange(h * 60 + n + (plus ? 1440 : 0)); };
+  return (
+    <div className="field"><label htmlFor={f.key}>{f.label}</label>
+      <input id={f.key} className="input" type="time" value={`${hh}:${mm}`} onChange={(e) => set(e.target.value, next)} />
+      {f.nextDay && <label className="row gap8 small"><input type="checkbox" checked={next} onChange={(e) => set(`${hh}:${mm}`, e.target.checked)} /> Ends the next day</label>}
+      {f.hint && <span className="hint">{f.hint}</span>}
+    </div>
+  );
 }
 
 export function FormFields({ fields, value, onChange }: { fields: FieldDef[]; value: Record<string, any>; onChange: (v: Record<string, any>) => void }) {
@@ -73,9 +88,10 @@ export function FormFields({ fields, value, onChange }: { fields: FieldDef[]; va
       case "image": return <ImageField key={f.key} label={f.label} hint={f.hint} value={v ?? ""} onChange={(x) => set(f.key, x)} />;
       case "list": return <Area key={f.key} label={`${f.label} (one per line)`} name={f.key} rows={f.rows ?? 3} value={(v ?? []).join("\n")} onChange={(e) => set(f.key, e.target.value.split("\n").map((x) => x.trimStart()).filter(Boolean))} />;
       case "date": return <Field key={f.key} label={f.label} name={f.key} type="date" hint={f.hint} value={v ?? ""} onChange={(e) => set(f.key, e.target.value || null)} />;
+      case "time": return <TimeField key={f.key} f={f} value={v ?? 0} onChange={(x) => set(f.key, x)} />;
       case "select": return (
         <div key={f.key} className="field"><label htmlFor={f.key}>{f.label}</label>
-          <select id={f.key} className="select" value={v ?? ""} onChange={(e) => set(f.key, e.target.value || null)}>{f.options!.map(([o, l]) => <option key={o} value={o}>{l}</option>)}</select>
+          <select id={f.key} className="select" value={v ?? ""} onChange={(e) => set(f.key, e.target.value === "" ? null : f.numeric ? Number(e.target.value) : e.target.value)}>{f.options!.map(([o, l]) => <option key={o} value={o}>{l}</option>)}</select>
           {f.hint && <span className="hint">{f.hint}</span>}
         </div>
       );
@@ -85,8 +101,8 @@ export function FormFields({ fields, value, onChange }: { fields: FieldDef[]; va
 }
 
 /** List, add, edit and remove rows of a content collection. */
-export function CollectionEditor({ name, noun, fields, blank, row, intro, sortable = true }: {
-  name: string; noun: string; fields: FieldDef[]; blank: Record<string, any>; row: (r: any) => ReactNode; intro?: ReactNode; sortable?: boolean;
+export function CollectionEditor({ name, noun, fields, blank, row, intro, sortable = true, check }: {
+  name: string; noun: string; fields: FieldDef[]; blank: Record<string, any>; row: (r: any) => ReactNode; intro?: ReactNode; sortable?: boolean; check?: (e: Record<string, any>) => string | null;
 }) {
   const [list, load] = useApi<any[]>(`/admin/collections/${name}`);
   const [edit, setEdit] = useState<Record<string, any> | null>(null);
@@ -95,6 +111,8 @@ export function CollectionEditor({ name, noun, fields, blank, row, intro, sortab
   const payload = (e: Record<string, any>) => Object.fromEntries([...fields.map((f) => f.key), ...(sortable ? ["sort"] : [])].map((k) => [k, e[k] ?? (k === "sort" ? 0 : blank[k])]));
   const save = () => {
     const key = edit!.__key;
+    const problem = check?.(edit!);
+    if (problem) return toast(problem);
     act(() => api(`/admin/collections/${name}${key ? `/${encodeURIComponent(key)}` : ""}`, { method: key ? "PUT" : "POST", body: payload(edit!) }), `${noun[0].toUpperCase()}${noun.slice(1)} saved`, () => { setEdit(null); load(); });
   };
   return <>
