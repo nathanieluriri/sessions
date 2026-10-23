@@ -1,6 +1,6 @@
 # Handoff: Psych Records catalog, portal deliveries and brand upgrade
 
-Branch `claude/zen-clarke-xltn5i` (pushed). Production is NOT deployed yet. Date of this note: 2026-10-23.
+Working branch `claude/charming-gauss-wpv228`. Deployed to production on 2026-10-23 (Cloudflare version f2164b1f, migrations 0005 to 0007 applied). Pre-deploy backup is outside the repo; D1 time-travel rollback bookmark `00000c74-00000000-0000510d-c872f9d0a51090df41b0da3eaee8167b`.
 
 Start by reading `handoff/BRIEF.md` (owner's brief, requirements R1 to R20), `handoff/ARCHITECTURE.md`, `handoff/API-NOTES.md` (exact JSON), `handoff/LEDGER.md` (decisions A1 to A16 to flag to the owner) and the part specs `handoff/P2-engine.md`, `P3-files-server.md`, `P4-booking-ui.md`, `P5-portal-ui.md`, `P6-brand.md`. `handoff/CRITIC.md` is the review checklist used on each part. House rules from the owner: no em dashes anywhere, no AI attribution anywhere (commits, code, docs), minimal code comments, cost-effective choices, no new dependencies.
 
@@ -20,15 +20,11 @@ Checked in a real browser (local wrangler dev, 390 and 1440 px): no horizontal s
 
 ## Open work, in order
 
-1. **P2 engine round 3 review has not run.** Run a fresh critic against `handoff/CRITIC.md` with the P2 spec.
-2. **Not yet exercised in a browser:** Mixing and mastering Standard and Express end to end, Song cover, staff approval and payment of the EP request, 30 MB upload with a killed network, revision requests to the limit, keyboard and screen reader pass, session booking on a weekday completed to payment, the Deliveries tabs with data.
-3. **Final whole-app check** against the brief with a fresh critic, then verify the brand first-load logo bytes (target about 60 KB or less at 1x/2x/3x).
-4. **Deploy** (credentials `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` were present in the earlier environment):
-   - `npx wrangler d1 export sessions-db --remote --output=<outside the repo>/prod-before.sql` (never commit it, it contains real client data) and note `npx wrangler d1 time-travel info sessions-db`. The bookmark taken at the start of this work was `00000bfe-00000000-0000510d-e856692273f20c3eab2cf20e2260bae9`.
-   - Rehearse migrations on a copy of production first (`handoff/harness/import-prod.mjs`, `dev.sh <port> <name> prod`).
-   - `npm run typecheck && npm test && npm run db:migrate:remote && npm run deploy`, then smoke test the live URL with GET requests only (no test bookings in production, no guessed passwords).
-   - R2 bucket `psych-records-media` already exists. Live site: https://sessions.uririnathaniel.workers.dev.
-5. **Report to the owner** the assumptions in `handoff/LEDGER.md` (A1 to A16), especially: Mixing and mastering Standard 100,000 and Express 170,000; Full production only on Saturday nights; Song covers meaning; no discount applied yet (set the "regular price"); album art, distribution and PR campaign are "price on request"; files unlock only when the balance is paid; 7 day auto-complete; remote orders refund in full until first delivery.
+0. **Payments are in demo mode in production (needs the owner).** `wrangler secret list` is empty, so there is no `PAYSTACK_SECRET_KEY` (and no email key). The simulated provider is active: `POST /api/payments/demo/<reference>` marks a payment paid with no money moving, and both existing production payments are `provider = demo`. Before taking real bookings the owner must set `PAYSTACK_SECRET_KEY` (and `RESEND_API_KEY` for email) with `wrangler secret put`, then the demo endpoints disable themselves.
+1. **Engine round 3 review: done, no blocking engine defects.** Read the payment, refund, status transition and housekeeping paths, probed reports, CSV and overview with mixed bookings, and ran money invariants (paid equals payments, refunded equals refunds, no overpay, no unapplied successful payment) on a local database and read-only on production: all hold. Non-blocking notes: a successful provider charge whose amount differs from the expected one is marked failed and neither refunded nor flagged (`confirmPayment`); provider refunds run before the database write in `refundBooking` and `refundClaimed`; `cancel` reads the refund share before the status write, so a delivery landing in that instant could still be refunded in full; the CSV prints 12:00pm where the site prints 12:00noon.
+2. **Browser checks not yet run:** Mixing and mastering Standard and Express end to end, Song cover, staff approval and payment of the EP request, 30 MB upload with a killed network, revision requests to the limit, keyboard and screen reader pass, a weekday session completed to payment, the Deliveries tabs with data.
+3. **Final whole-app check** with a fresh critic, then verify the brand first-load logo bytes (target about 60 KB or less at 1x/2x/3x).
+4. **Report to the owner** the assumptions in `handoff/LEDGER.md` (A1 to A16), plus item 0: Mixing and mastering Standard 100,000 and Express 170,000; Full production only on Saturday nights; Song covers meaning; no discount applied yet (set the "regular price"); album art, distribution and PR campaign are "price on request"; files unlock only when the balance is paid; 7 day auto-complete; remote orders refund in full until first delivery.
 
 ## Working notes
 
