@@ -7,10 +7,13 @@ import { HoldToConfirm, TactileLink } from "../components/kitchen";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { dateTime, hrs, lagosToday, longDate, naira, payState, shortDate, statusLabel, statusTone, t12 } from "../lib/format";
+import { BookingFiles, FilesPage, ReadyForYou, UploadCard, useClientFiles } from "./account-files";
+import { dueLabel } from "../lib/files";
 
 const ITEMS: NavEntry[] = [
-  { to: "/account", label: "Overview", icon: "grid", end: true },
+  { to: "/account", label: "Home", icon: "grid", end: true },
   { to: "/account/bookings", label: "Bookings", icon: "calendar" },
+  { to: "/account/files", label: "Files", icon: "music" },
   { to: "/account/payments", label: "Payments", icon: "receipt" },
   { to: "/account/profile", label: "Profile", icon: "user" },
 ];
@@ -25,7 +28,8 @@ function useOverview() {
 }
 
 const ACTIVE = ["pending", "approved", "confirmed"];
-const upcoming = (b: any[]) => b.filter((x) => ACTIVE.includes(x.status) && x.date >= lagosToday()).sort((a, b) => (a.date + String(a.start_min).padStart(4, "0")).localeCompare(b.date + String(b.start_min).padStart(4, "0")));
+const remote = (x: any) => x.scheduling === "project";
+const upcoming = (b: any[]) => b.filter((x) => ACTIVE.includes(x.status) && (remote(x) ? x.status !== "confirmed" : x.date >= lagosToday())).sort((a, b) => (a.date + String(a.start_min).padStart(4, "0")).localeCompare(b.date + String(b.start_min).padStart(4, "0")));
 const PAY_KIND: Record<string, string> = { full: "Full payment", deposit: "Deposit", balance: "Balance", manual: "Paid at the studio" };
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -47,10 +51,10 @@ function BookingRow({ b }: { b: any }) {
   return (
     <Link to={`/account/bookings/${b.id}`} className="card row between gap16 wrapflex" style={{ padding: 18 }}>
       <div className="row gap16">
-        <div style={{ width: 56, textAlign: "center" }}><div className="mono faint">{shortDate(b.date).split(" ")[0]}</div><b style={{ fontSize: 24 }}>{b.date.slice(8)}</b></div>
-        <div><b>{b.package_name}</b><div className="small muted">{b.service_name} · {b.room_name} · {t12(b.start_min)} to {t12(b.end_min)}</div></div>
+        <div style={{ width: 56, textAlign: "center" }}><div className="mono faint">{shortDate(remote(b) && b.due_date ? b.due_date : b.date).split(" ")[0]}</div><b style={{ fontSize: 24 }}>{(remote(b) && b.due_date ? b.due_date : b.date).slice(8)}</b></div>
+        <div><b>{b.package_name}</b><div className="small muted">{remote(b) ? `${b.service_name} · Remote order${b.due_date ? ` · due ${shortDate(b.due_date)}` : ""}` : `${b.service_name} · ${b.room_name} · ${t12(b.start_min)} to ${t12(b.end_min)}`}</div></div>
       </div>
-      <div className="row gap8 wrapflex">{b.pendingRequest && <Tag tone="warning">Request pending</Tag>}{["confirmed", "completed"].includes(b.status) && b.balance_kobo > 0 && <Tag tone="warning">{naira(b.balance_kobo)} due</Tag>}<Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag><Icon name="arrow" size={18} /></div>
+      <div className="row gap8 wrapflex">{b.pendingRequest && <Tag tone="warning">Request pending</Tag>}{["confirmed", "completed"].includes(b.status) && b.balance_kobo > 0 && <Tag tone="warning">{naira(b.balance_kobo)} due</Tag>}{b.delivered_final_at && <Tag tone="success">Finished</Tag>}<Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag><Icon name="arrow" size={18} /></div>
     </Link>
   );
 }
@@ -109,7 +113,8 @@ export function AccountHome() {
 export function AccountBookings() {
   const [d] = useOverview();
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
-  const list = d ? (tab === "upcoming" ? upcoming(d.bookings) : d.bookings.filter((b) => !upcoming(d.bookings).includes(b))) : [];
+  const live = (b: any) => upcoming([b]).length > 0 || (remote(b) && b.status === "confirmed" && !b.delivered_final_at);
+  const list = d ? (tab === "upcoming" ? d.bookings.filter(live) : d.bookings.filter((b) => !live(b))) : [];
   return (
     <Shell title="My bookings">
       <div className="seg" style={{ alignSelf: "flex-start" }}><button className={tab === "upcoming" ? "on" : ""} onClick={() => setTab("upcoming")}>Upcoming</button><button className={tab === "past" ? "on" : ""} onClick={() => setTab("past")}>Past and cancelled</button></div>

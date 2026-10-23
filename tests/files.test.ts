@@ -171,6 +171,10 @@ describe("canDownload", () => {
     expect(check({ staff: true, owner: false, delivered: false, balanceKobo: 9_999_999 })).toBe("ok");
     expect(check({ staff: true, owner: false, direction: "upload" })).toBe("ok");
   });
+  it("serves nothing to clients from a cancelled or rejected booking, but still serves staff", () => {
+    expect(check({ closed: true, released: true })).toBe("missing");
+    expect(check({ closed: true, staff: true, owner: false })).toBe("ok");
+  });
   it("lets the client take back their own uploads whatever the balance", () => {
     expect(check({ direction: "upload", delivered: false, balanceKobo: 9_999_999 })).toBe("ok");
   });

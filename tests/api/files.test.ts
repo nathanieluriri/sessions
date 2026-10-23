@@ -394,7 +394,11 @@ describe("delivery and the payment gate", () => {
     expect(await sha(await bytesOf(staffCopy))).toBe(bytes);
     expect((await maker.client.get(`${STAFF}/bookings/${order.id}/files`)).body.deliveries[0].locked).toBe(false);
 
-    const released = await maker.client.post(`${STAFF}/files/${file.id}/release`, { released: true });
+    const refused = await maker.client.post(`${STAFF}/files/${file.id}/release`, { released: true });
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toMatch(/record payments/);
+    expect((await alice.client.get(`${CLIENT}/files/${file.id}/download`)).status).toBe(403);
+    const released = await boss.post(`${STAFF}/files/${file.id}/release`, { released: true });
     expect(released.body).toMatchObject({ id: file.id, released: true });
     const open = await alice.client.get(`${CLIENT}/files/${file.id}/download?inline=1`);
     expect(open.status).toBe(200);
@@ -1174,7 +1178,7 @@ describe("round two fixes", () => {
     expect(a.body.error).toBe("Pay the balance to open your files before you approve.");
     expect((await alice.client.post(`${CLIENT}/bookings/${order.id}/revisions`, { note: "change it" })).status).toBe(400);
     expect((await alice.client.get(`${CLIENT}/bookings/${order.id}`)).body.revisions).toMatchObject({ canApprove: false, canRequest: false });
-    await maker.client.post(`${STAFF}/files/${f.id}/release`, { released: true });
+    await boss.post(`${STAFF}/files/${f.id}/release`, { released: true });
     expect((await alice.client.get(`${CLIENT}/bookings/${order.id}`)).body.revisions).toMatchObject({ canApprove: true, canRequest: true });
     expect((await alice.client.post(`${CLIENT}/bookings/${order.id}/revisions`, { note: "change it" })).status).toBe(200);
   });
@@ -1232,5 +1236,73 @@ describe("round two fixes", () => {
     const none = await bare.get(`${CLIENT}/files/${kept.id}/download`);
     expect(none.status).toBe(400);
     expect(none.body.code).toBe("storage_unavailable");
+  });
+});
+
+describe("round three fixes", () => {
+  it("lets only owners and staff who record payments open files before payment", async () => {
+    const order = await mine();
+    const [a, b] = [await stage(order.id), await stage(order.id, "b.mp3")];
+    const early = await deliver(maker.client, order.id, [{ fileId: a.id, title: "Early" }], { released: true });
+    expect(early.status).toBe(403);
+    expect((await row(a.id)).delivered_at).toBeNull();
+    const cashier = await h.newStaff("custom", ["deliver_files", "record_payments"]);
+    const ok = await deliver(cashier.client, order.id, [{ fileId: a.id, title: "Early" }], { released: true });
+    expect(ok.status).toBe(200);
+    expect((await alice.client.get(`${CLIENT}/files/${a.id}/download`)).status).toBe(200);
+    expect((await maker.client.post(`${STAFF}/files/${a.id}/release`, { released: false })).status).toBe(200);
+    expect((await alice.client.get(`${CLIENT}/files/${a.id}/download`)).status).toBe(403);
+    expect((await deliver(maker.client, order.id, [{ fileId: b.id, title: "Locked" }])).status).toBe(200);
+  });
+
+  it("keeps an order with a pending change request from being completed, by anyone", async () => {
+    const order = await mine({ paid: 10_000_000, limit: 3 });
+    const f = await stage(order.id);
+    await deliver(maker.client, order.id, [{ fileId: f.id, title: "Mix" }]);
+    await h.env.DB.prepare("INSERT INTO change_requests (id, booking_id, user_id, kind, reason, status) VALUES (?, ?, ?, 'cancel', 'x', 'pending')").bind(crypto.randomUUID(), order.id, alice.user.id).run();
+    const mine409 = await alice.client.post(`${CLIENT}/bookings/${order.id}/approve`);
+    expect(mine409.status).toBe(409);
+    expect(mine409.body.error).toMatch(/pending request/);
+    const staff409 = await maker.client.post(`${STAFF}/bookings/${order.id}/finalize`);
+    expect(staff409.status).toBe(409);
+    expect(staff409.body.error).toMatch(/Decide the pending/);
+    await h.env.DB.prepare("UPDATE booking_files SET delivered_at = ? WHERE booking_id = ?").bind(ago(9 * 86_400_000), order.id).run();
+    await filesService.housekeeping(h.env);
+    expect((await booking(order.id)).delivered_final_at).toBeNull();
+    const row0 = (await maker.client.get(`${STAFF}/deliveries?tab=delivered`)).body.rows.find((r: any) => r.id === order.id);
+    expect(row0.pending_request).toBe("cancel");
+  });
+
+  it("lets staff decline a request on an order that completed anyway", async () => {
+    const order = await mine({ status: "completed", final: true, scheduling: "flex" });
+    const id = crypto.randomUUID();
+    await h.env.DB.prepare("INSERT INTO change_requests (id, booking_id, user_id, kind, reason, status) VALUES (?, ?, ?, 'cancel', 'x', 'pending')").bind(id, order.id, alice.user.id).run();
+    expect((await boss.post(`${STAFF}/requests/${id}`, { approve: true })).status).toBe(200);
+    expect((await h.sql("SELECT status FROM change_requests WHERE id = ?", id))[0].status).toBe("declined");
+    expect((await booking(order.id)).status).toBe("completed");
+  });
+
+  it("sends the ready email once when a form is saved twice at the same time", async () => {
+    const order = await makeBooking({ email: "", userId: null });
+    const f = await stage(order.id);
+    await deliver(maker.client, order.id, [{ fileId: f.id, title: "Twice" }]);
+    const d = { people: 1, artist_name: "W", contact_phone: "+234 803 000 0000", notes: "", contact_email: "double.save@example.com" };
+    await Promise.all([desk.client.put(`${STAFF}/bookings/${order.id}/details`, d), desk.client.put(`${STAFF}/bookings/${order.id}/details`, d)]);
+    expect(await outbox("double.save@example.com", `%ready · ${order.ref}`)).toHaveLength(1);
+  });
+
+  it("stops serving deliveries of a cancelled booking, and emails both addresses when they differ", async () => {
+    const order = await mine({ paid: 10_000_000 });
+    await h.env.DB.prepare("UPDATE bookings SET contact_email = 'typed.by.staff@example.com' WHERE id = ?").bind(order.id).run();
+    const f = await stage(order.id);
+    await deliver(maker.client, order.id, [{ fileId: f.id, title: "Both" }], { released: false });
+    expect(await outbox("typed.by.staff@example.com", `%ready · ${order.ref}`)).toHaveLength(1);
+    expect(await outbox(alice.email, `%ready · ${order.ref}`)).toHaveLength(1);
+    expect((await alice.client.get(`${CLIENT}/files/${f.id}/download`)).status).toBe(200);
+    for (const status of ["cancelled", "rejected"]) {
+      await h.env.DB.prepare("UPDATE bookings SET status = ? WHERE id = ?").bind(status, order.id).run();
+      expect((await alice.client.get(`${CLIENT}/files/${f.id}/download`)).status).toBe(404);
+      expect((await maker.client.get(`${STAFF}/files/${f.id}/download`)).status).toBe(200);
+    }
   });
 });

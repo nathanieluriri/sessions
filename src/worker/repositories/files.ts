@@ -13,6 +13,7 @@ export interface FileRow {
 export interface RevisionRow { id: string; booking_id: string; user_id: string; note: string; status: "open" | "done"; created_at: string; resolved_at: string | null; resolved_by: string | null }
 export interface PartRow { partNumber: number; etag: string; size: number }
 export type QueueRow = BookingRow & {
+  pending_request: "cancel" | "reschedule" | null;
   delivered: number; staged: number; uploads: number; uploads_new: number; last_delivered_at: string | null;
   rev_id: string | null; rev_note: string | null; rev_created_at: string | null;
 };
@@ -99,6 +100,10 @@ export const filesRepo = {
     a.id, a.actorId, a.actorLabel, a.action, a.target, a.detail, a.since)).meta.changes === 1,
   releasedCount: async (db: D1Database, bookingId: string) =>
     (await first<{ n: number }>(db, `SELECT COUNT(*) n FROM booking_files f WHERE f.booking_id = ? AND ${PUBLISHED} AND f.released = 1`, bookingId))?.n ?? 0,
+  pendingRequest: (db: D1Database, bookingId: string) => first<{ kind: string }>(db, "SELECT kind FROM change_requests WHERE booking_id = ? AND status = 'pending' LIMIT 1", bookingId),
+  /** Claims the right to tell the client about their deliveries: only one caller gets true, so a double save sends one email. */
+  claimNotified: async (db: D1Database, bookingId: string) => (await run(db, `UPDATE bookings SET delivery_notified_at = ${NOW} WHERE id = ? AND delivery_notified_at IS NULL`, bookingId)).meta.changes === 1,
+  unclaimNotified: (db: D1Database, bookingId: string) => run(db, "UPDATE bookings SET delivery_notified_at = NULL WHERE id = ?", bookingId),
   markNotified: (db: D1Database, bookingId: string) => run(db, `UPDATE bookings SET delivery_notified_at = ${NOW} WHERE id = ?`, bookingId),
   published: (db: D1Database, bookingId: string) => all<FileRow>(db, `SELECT f.* FROM booking_files f WHERE f.booking_id = ? AND ${PUBLISHED} ORDER BY f.delivered_at, f.title`, bookingId),
   /** Bookings of this client with published work they were never told about (delivered before they had an email or account). */
@@ -108,6 +113,7 @@ export const filesRepo = {
   settled: (db: D1Database, before: string, limit: number) => all<BookingRow>(db,
     `SELECT b.* FROM bookings b WHERE b.status IN ('confirmed', 'completed') AND b.delivered_final_at IS NULL AND b.total_kobo - (b.amount_paid_kobo - b.refunded_kobo) <= 0
        AND NOT EXISTS (SELECT 1 FROM revision_requests r WHERE r.booking_id = b.id AND r.status = 'open')
+       AND NOT EXISTS (SELECT 1 FROM change_requests c WHERE c.booking_id = b.id AND c.status = 'pending')
        AND EXISTS (SELECT 1 FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED})
        AND (SELECT MAX(f.delivered_at) FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED}) <= ? ORDER BY b.created_at LIMIT ?`, before, limit),
   setReleased: async (db: D1Database, id: string, released: boolean) =>
@@ -156,6 +162,7 @@ export const filesRepo = {
     `SELECT b.*, ${count(PUBLISHED)} delivered, ${count("f.direction = 'delivery' AND f.state = 'ready' AND f.delivered_at IS NULL")} staged,
        ${count("f.direction = 'upload' AND f.state = 'ready'")} uploads, ${count(UNSEEN)} uploads_new,
        (SELECT MAX(f.delivered_at) FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED}) last_delivered_at,
+       (SELECT c.kind FROM change_requests c WHERE c.booking_id = b.id AND c.status = 'pending' LIMIT 1) pending_request,
        r.id rev_id, r.note rev_note, r.created_at rev_created_at
      ${QUEUE_FROM} WHERE ${TABS[tab]}
      ORDER BY ${tab === "delivered" ? "last_delivered_at DESC" : `b.due_date IS NULL, b.due_date, ${AGE[tab]}`} LIMIT ?`, limit),

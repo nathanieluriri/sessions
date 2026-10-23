@@ -145,6 +145,34 @@ export async function uploadFile(base: string, bookingId: string, job: Job, sign
   return withRetry(() => api<PortalFile>(`${base}/files/${job.id}/complete`, { body: {} }), signal);
 }
 
+export const dueLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+
+export interface StateLine { text: string; sub?: string; tone: "" | "success" | "warning" }
+
+/** Where the job is, in one sentence. Null when the booking has no job yet (waiting for approval or payment, cancelled). */
+export function stateLine(
+  b: { status: string; scheduling: string; date: string; due_date: string | null; balance_kobo: number },
+  c: { deliveries: Pick<PortalFile, "locked">[]; uploads: unknown[] },
+  r: { final: boolean; open: unknown | null },
+  today: string,
+): StateLine | null {
+  if (!["confirmed", "completed"].includes(b.status)) return null;
+  if (r.final) return { text: "Approved and finished", sub: "Your files stay here to download.", tone: "success" };
+  if (r.open) return { text: "Revision requested, the studio is on it", sub: "The updated version appears here when it is ready.", tone: "warning" };
+  if (c.deliveries.length) {
+    return c.deliveries.some((f) => !f.locked)
+      ? { text: "Delivered, take a look", sub: "Download it, then approve it or ask for a revision.", tone: "success" }
+      : { text: "Delivered, your files are waiting", sub: "Pay the balance to open them.", tone: "warning" };
+  }
+  const due = b.due_date ? `, due ${dueLabel(b.due_date)}` : "";
+  if (b.scheduling === "project") {
+    return c.uploads.length
+      ? { text: `In production${due}`, sub: "You can keep adding files below.", tone: "" }
+      : { text: "Waiting for your files", sub: "Upload your stems, references or lyrics so the studio can start.", tone: "warning" };
+  }
+  return b.date >= today ? { text: `Session on ${dueLabel(b.date)}`, sub: "Finished work is delivered here after the session.", tone: "" } : { text: `In production${due}`, sub: "Finished work is delivered here.", tone: "" };
+}
+
 export const discardUpload = (base: string, id: string) => api(`${base}/files/${id}`, { method: "DELETE" }).catch(() => {});
 
 export const downloadUrl = (base: string, id: string, inline = false) => `/api${base}/files/${id}/download${inline ? "?inline=1" : ""}`;

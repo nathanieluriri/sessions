@@ -131,12 +131,14 @@ type Told = { notified: boolean; reason?: string; notified_via?: "email" | "outb
 
 async function tellClient(env: Env, b: BookingRow, mail: { subject: string; text: string }, notice: { title: string; body: string }): Promise<Told> {
   const account = b.user_id ? await usersRepo.byId(env.DB, b.user_id) : null;
-  const to = b.contact_email || account?.email || "";
-  if (!to && !account) return { notified: false, reason: "no_contact" };
-  const status = await sendEmail(env, to, mail.subject, mail.text);
+  const to = [...new Set([b.contact_email, account?.email ?? ""].filter(Boolean).map((e) => e.toLowerCase()))];
+  if (!to.length && !account) return { notified: false, reason: "no_contact" };
+  const statuses = [];
+  for (const address of to) statuses.push(await sendEmail(env, address, mail.subject, mail.text));
   await notifyUser(env, b.user_id, notice.title, notice.body, b.id);
-  if (status === "failed") return { notified: false, reason: "send_failed" };
-  return { notified: true, notified_via: status === "logged" ? "outbox" : status === "sent" ? "email" : "app" };
+  const status = statuses.find((x) => x === "sent") ?? statuses.find((x) => x === "logged");
+  if (!status) return { notified: false, reason: "send_failed" };
+  return { notified: true, notified_via: status === "logged" ? "outbox" : "email" };
 }
 
 /** Sends the "your files are ready" email for these published files and remembers that the client was told. */
@@ -157,17 +159,30 @@ async function catchUp(env: Env, b: BookingRow) {
   const fresh = (await bookingsRepo.byId(env.DB, b.id))!;
   if (fresh.delivery_notified_at || (!fresh.user_id && !fresh.contact_email)) return;
   const rows = await filesRepo.published(env.DB, fresh.id);
-  if (rows.length) await announce(env, fresh, rows, { note: "", released: rows.every((f) => f.released === 1), final: isFinal(fresh) });
+  if (!rows.length || !(await filesRepo.claimNotified(env.DB, fresh.id))) return;
+  const told = await announce(env, fresh, rows, { note: "", released: rows.every((f) => f.released === 1), final: isFinal(fresh) });
+  if (!told.notified) await filesRepo.unclaimNotified(env.DB, fresh.id);
 }
 
 /** Marks the order complete. Safe to repeat: a second call changes nothing and tells nobody. `actor` is null for the automatic completion. */
+/** Opening files before the balance is paid is a money decision: owners and staff who record payments only. */
+function assertMayRelease(u: SessionUser) {
+  if (!isOwner(u) && !hasPermission(u, "record_payments")) throw forbidden("Releasing files before payment needs the record payments permission. Files unlock by themselves once the balance is paid.");
+}
+
 async function closeOrder(env: Env, actor: SessionUser | null, b: BookingRow, side: Side | "auto") {
   if (isFinal(b)) return { ok: true, final: true, changed: false };
   if (!DELIVER_STATUSES.includes(b.status)) throw badRequest("Only confirmed bookings can be completed.");
   if ((await filesRepo.publishedCount(env.DB, b.id)) === 0) throw badRequest("Nothing has been delivered yet.");
+  if (side !== "auto" && (await filesRepo.pendingRequest(env.DB, b.id))) {
+    throw conflict(side === "client" ? "You have a pending request, wait for the studio's reply." : "Decide the pending cancellation or reschedule request first.");
+  }
   if (side === "client") await assertOpened(env, b, "approve");
   const [done] = await env.DB.batch([filesRepo.finish(env.DB, b.id, new Date().toISOString(), null), filesRepo.closeOpen(env.DB, b.id, actor?.id ?? null)]);
-  if (done.meta.changes !== 1) return { ok: true, final: true, changed: false };
+  if (done.meta.changes !== 1) {
+    if (isFinal((await bookingsRepo.byId(env.DB, b.id))!)) return { ok: true, final: true, changed: false };
+    throw conflict("The order changed while you were closing it. Refresh the page and try again.");
+  }
   const fresh = (await bookingsRepo.byId(env.DB, b.id))!;
   await audit(env.DB, actor, side === "client" ? "Approved delivery" : side === "staff" ? "Completed order" : "Completed order automatically", b.ref, side === "auto" ? `No reply within ${AUTO_COMPLETE_DAYS} days of the last delivery` : b.package_name);
   await safely(async () => {
@@ -329,6 +344,7 @@ export const filesService = {
   /** Staff switch: lets the client download this delivery before the balance is paid, or locks it again. */
   async setReleased(env: Env, user: SessionUser, fileId: string, released: boolean) {
     const { f, b } = await fileFor(env, user, "staff", fileId);
+    if (released) assertMayRelease(user);
     if (f.direction !== "delivery" || f.state !== "ready") throw badRequest("Only finished deliveries can be released.");
     await filesRepo.setReleased(env.DB, f.id, released);
     await audit(env.DB, user, released ? "Released file before payment" : "Locked file until paid", b.ref, f.title || f.name);
@@ -338,6 +354,7 @@ export const filesService = {
   /** Publishes staged deliveries as one batch and tells the client once. */
   async deliver(env: Env, user: SessionUser, bookingId: string, input: DeliverInput) {
     const b = await bookingFor(env, user, "staff", bookingId);
+    if (input.released) assertMayRelease(user);
     assertOpen(b, "staff");
     const ids = input.items.map((i) => i.fileId);
     if (new Set(ids).size !== ids.length) throw badRequest("Each file can only be listed once.");
@@ -423,7 +440,7 @@ export const filesService = {
   /** Streams a file after the one access rule. Ranges, inline play and plain downloads all pass through here. */
   async download(env: Env, user: SessionUser, side: Side, fileId: string, q: { range: string | null; ifRange: string | null; inline: boolean; head: boolean }) {
     const { f, b } = await fileFor(env, user, side, fileId);
-    const verdict = canDownload({ staff: side === "staff", owner: b.user_id === user.id, direction: f.direction, state: f.state, delivered: !!f.delivered_at, released: !!f.released, balanceKobo: balanceOf(b) });
+    const verdict = canDownload({ staff: side === "staff", owner: b.user_id === user.id, direction: f.direction, state: f.state, delivered: !!f.delivered_at, released: !!f.released, balanceKobo: balanceOf(b), closed: b.status === "cancelled" || b.status === "rejected" });
     if (verdict === "locked") throw new AppError(403, `This file unlocks when the remaining ${naira(balanceOf(b))} is paid.`, "locked");
     if (verdict === "missing") throw notFound();
     if (!env.MEDIA) throw new AppError(400, "File storage is not set up on this deployment yet.", "storage_unavailable");
@@ -477,7 +494,7 @@ export const filesService = {
       tab, counts,
       rows: rows.map((r) => ({
         id: r.id, ref: r.ref, artist_name: r.artist_name, service_name: r.service_name, package_name: r.package_name, status: r.status, scheduling: r.scheduling, date: r.date,
-        due_date: r.due_date, overdue: !!r.due_date && r.due_date < today && !isFinal(r) && r.delivered === 0, balance_kobo: balanceOf(r), total_kobo: r.total_kobo, revision_limit: r.revision_limit,
+        due_date: r.due_date, pending_request: r.pending_request, overdue: !!r.due_date && r.due_date < today && !isFinal(r) && r.delivered === 0, balance_kobo: balanceOf(r), total_kobo: r.total_kobo, revision_limit: r.revision_limit,
         revisions_used: r.revisions_used, final: isFinal(r), created_at: r.created_at, last_delivered_at: r.last_delivered_at,
         counts: { delivered: r.delivered, staged: r.staged, uploads: r.uploads, uploads_new: r.uploads_new },
         open_revision: r.rev_id ? { id: r.rev_id, note: r.rev_note, created_at: r.rev_created_at } : null,

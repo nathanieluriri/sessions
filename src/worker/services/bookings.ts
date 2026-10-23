@@ -465,16 +465,16 @@ export const bookingService = {
     const r = await changeRequestsRepo.byId(env.DB, requestId);
     if (!r || r.status !== "pending") throw notFound("Request not found.");
     const b = await loadBooking(env, r.booking_id);
-    assertOpen(b);
-    if (approve) {
+    const yes = approve && !b.delivered_final_at;
+    if (yes) {
       if (r.kind === "reschedule") await this.reschedule(env, actor, b.id, r.new_date!, r.new_start_min!, true);
       else await this.cancel(env, actor, b.id, "Cancelled at client request");
     } else {
-      await notifyUser(env, b.user_id, "Request declined", `Your ${r.kind} request for ${b.ref} was declined. Your booking stays as it is.`);
+      await notifyUser(env, b.user_id, "Request declined", `Your ${r.kind} request for ${b.ref} was declined. ${b.delivered_final_at ? "The order is already complete." : "Your booking stays as it is."}`);
       await sendEmail(env, b.contact_email, `Your ${r.kind} request · ${b.ref}`, `Hi ${b.contact_name},\n\nYour ${r.kind} request for ${b.ref} was declined. Your booking stays on ${when(b)}.`);
     }
-    await changeRequestsRepo.decide(env.DB, requestId, approve ? "approved" : "declined", actor.id);
-    await audit(env.DB, actor, `${approve ? "Approved" : "Declined"} ${r.kind} request`, b.ref);
+    await changeRequestsRepo.decide(env.DB, requestId, yes ? "approved" : "declined", actor.id);
+    await audit(env.DB, actor, `${yes ? "Approved" : "Declined"} ${r.kind} request`, b.ref, approve && !yes ? "Order was already complete" : "");
   },
 
   async approve(env: Env, actor: SessionUser, id: string, note: string) {

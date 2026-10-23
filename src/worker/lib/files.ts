@@ -104,6 +104,8 @@ export interface DownloadCheck {
   delivered: boolean;
   released: boolean;
   balanceKobo: number;
+  /** The booking was cancelled or rejected: clients get no deliveries from it, whatever was released. */
+  closed?: boolean;
 }
 
 /** The one rule behind every download, inline play and range request. "missing" is shown as a 404, "locked" as a 403. */
@@ -112,6 +114,6 @@ export function canDownload(c: DownloadCheck): "ok" | "locked" | "missing" {
   if (c.staff) return "ok";
   if (!c.owner) return "missing";
   if (c.direction === "upload") return "ok";
-  if (!c.delivered) return "missing";
+  if (!c.delivered || c.closed) return "missing";
   return c.released || c.balanceKobo <= 0 ? "ok" : "locked";
 }

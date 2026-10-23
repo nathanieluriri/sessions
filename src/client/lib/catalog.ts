@@ -7,14 +7,17 @@ export interface Service {
 }
 export interface Package {
   id: string; slug: string; name: string; description: string; category: "session" | "post"; duration_min: number; price_kobo: number; includes: string[];
-  featured: number; active: number; service_category: string; room_id: string | null; pricing: "fixed" | "quote"; deposit_percent: number | null; requires_approval: number; price_note: string;
+  featured: number; active: number; sort: number; service_category: string; room_id: string | null; pricing: "fixed" | "quote"; deposit_percent: number | null; requires_approval: number; price_note: string;
+  service_slug: string; scheduling: Scheduling; slot_kind: "day" | "night"; unit: string; compare_at_kobo: number | null; turnaround_days: number | null; revision_limit: number; tracks: number | null;
 }
+export type Scheduling = "flex" | "slot" | "day" | "project";
+export interface SessionSlot { id: string; kind: "day" | "night"; label: string; weekday: number | null; start_min: number; end_min: number; sort: number; active: number }
 export interface Room { id: string; slug: string; name: string; kind: string; description: string; image_url: string; capacity: number; hourly_kobo: number; features: string[]; active: number }
 export interface Category { slug: string; name: string; blurb: string; sort: number }
-export interface Extra { slug: string; name: string; price_kobo: number; category: string }
+export interface Extra { slug: string; name: string; price_kobo: number; category: string; service_slug: string; pricing: "fixed" | "quote"; description: string }
 export interface Catalog {
-  services: Service[]; packages: Package[]; rooms: Room[]; categories: Category[]; extras: Extra[];
-  rules: { holdMin: number; extraHourKobo: number; maxPeople: number; buffer: number; depositPercent: number; requireApproval: boolean; paymentWindowHours: number };
+  services: Service[]; packages: Package[]; rooms: Room[]; categories: Category[]; extras: Extra[]; sessions: SessionSlot[];
+  rules: { holdMin: number; extraHourKobo: number; maxPeople: number; buffer: number; depositPercent: number; requireApproval: boolean; paymentWindowHours: number; minNotice: number; bookAhead: number };
   hours: { weekday: number; is_open: number; open_min: number; close_min: number }[];
 }
 export interface Policy { slug: string; title: string; body: string; kind: "booking" | "legal"; updated_at: string }
@@ -46,8 +49,6 @@ export function useContent() {
   return c;
 }
 
-/** Packages that can be booked for a service: same category, fixed price, linked to a room. */
-export const packagesFor = (cat: Catalog, category: string) => cat.packages.filter((p) => p.service_category === category);
 export const roomOf = (cat: Catalog, p?: Package) => cat.rooms.find((r) => r.id === p?.room_id);
 export const depositOf = (cat: Catalog, p: Package, total: number) => {
   const pct = p.deposit_percent ?? cat.rules.depositPercent;

@@ -13,7 +13,7 @@ export const PERMISSIONS = {
   edit_content: "Edit website pages, portfolio, team, FAQs, policies, SEO and analytics",
   view_audit: "See the audit log and email outbox",
   manage_staff: "Add staff and change their access",
-  deliver_files: "Upload finished work to clients and download the files clients send",
+  deliver_files: "Upload finished work to clients and download the files clients send (releasing files before payment also needs record payments)",
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
