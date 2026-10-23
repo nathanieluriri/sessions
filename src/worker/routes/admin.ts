@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
-import { requirePermission, requireStaff } from "../middleware/auth";
+import { requireFrontDesk, requirePermission, requireStaff } from "../middleware/auth";
 import { body, date, minute, required, text, email } from "../lib/validate";
 import { bookingService } from "../services/bookings";
 import { availabilitySettingsService, catalogService, clientService, contentService, dashboardService, enquiryService, reportService, staffService } from "../services/admin";
@@ -11,6 +11,7 @@ import { catalogRepo } from "../repositories/catalog";
 import { contentRepo, settingsRepo } from "../repositories/settings";
 import { run } from "../repositories/db";
 import { audit } from "../services/audit";
+import { forStaff } from "../lib/redact";
 import { draftFields } from "./booking";
 import { badRequest, forbidden } from "../lib/errors";
 import { uuid } from "../lib/crypto";
@@ -24,7 +25,7 @@ const actor = (c: Context<AppEnv>) => c.get("user")!;
 const ok = { ok: true };
 
 r.get("/overview", async (c) => {
-  const data = await dashboardService.overview(c.env);
+  const data = await dashboardService.overview(c.env, actor(c));
   if (!isOwner(actor(c))) return c.json({ ...data, report: can(actor(c), "view_reports") ? data.report : null });
   const content = await contentRepo.content(c.env.DB);
   const setup = {
@@ -42,7 +43,7 @@ r.get("/calendar", requirePermission("view_calendar"), async (c) => {
 });
 r.get("/bookings", requirePermission("view_calendar"), async (c) =>
   c.json((await bookingsRepo.list(c.env.DB, { q: c.req.query("q") || undefined, status: c.req.query("status") || undefined, from: c.req.query("from") || undefined, room: c.req.query("room") || undefined }))
-    .map((b) => ({ ...b, pay_token: undefined }))));
+    .map((b) => forStaff(b, actor(c)))));
 r.get("/bookings/:id", requirePermission("view_calendar"), async (c) => c.json(await bookingService.detailForStaff(c.env, actor(c), c.req.param("id"))));
 r.post("/bookings", requirePermission("manage_bookings"), async (c) => {
   const b = await body(c, z.object({
@@ -103,8 +104,8 @@ r.post("/requests/:id", requirePermission("manage_bookings"), async (c) => {
   await bookingService.decideRequest(c.env, actor(c), c.req.param("id"), b.approve);
   return c.json(ok);
 });
-r.get("/clients", requirePermission("view_calendar"), async (c) => c.json(await clientService.list(c.env, c.req.query("q") || null)));
-r.get("/clients/history", requirePermission("view_calendar"), async (c) => c.json(await clientService.history(c.env, c.req.query("key") ?? "")));
+r.get("/clients", requirePermission("view_calendar"), requireFrontDesk, async (c) => c.json(await clientService.list(c.env, c.req.query("q") || null)));
+r.get("/clients/history", requirePermission("view_calendar"), requireFrontDesk, async (c) => c.json(await clientService.history(c.env, c.req.query("key") ?? "")));
 
 // Availability
 r.get("/availability", requirePermission("view_calendar"), async (c) => c.json(await availabilitySettingsService.get(c.env)));
@@ -136,10 +137,13 @@ r.get("/catalog", requirePermission("edit_packages"), async (c) => {
 });
 const packageSchema = z.object({
   id: z.string().optional(), name: required("Name", 80), description: required("Description", 400), category: z.enum(["session", "post"]),
-  durationMin: z.number().int().min(30).max(1440), priceKobo: z.number().int().min(0), includes: z.array(text(80)).max(8), featured: z.boolean(), active: z.boolean(),
+  durationMin: z.number().int().min(0).max(1440), priceKobo: z.number().int().min(0), includes: z.array(text(120)).max(8), featured: z.boolean(), active: z.boolean(),
   serviceCategory: required("Category", 40), roomId: z.string().max(64).nullable(), pricing: z.enum(["fixed", "quote"]), depositPercent: z.number().int().min(0).max(100).nullable(),
   requiresApproval: z.boolean(), priceNote: text(120).default(""),
-});
+  serviceSlug: text(60).default(""), scheduling: z.enum(["flex", "slot", "day", "project"]).default("flex"), slotKind: z.enum(["day", "night"]).default("day"), unit: text(40).default("per session"),
+  compareAtKobo: z.number().int().min(0).nullable().default(null), turnaroundDays: z.number().int().min(1).max(90).nullable().default(null),
+  revisionLimit: z.number().int().min(0).max(20).default(0), tracks: z.number().int().min(1).max(100).nullable().default(null),
+}).refine((p) => p.pricing === "quote" || p.scheduling === "project" || p.durationMin >= 30, { message: "Duration must be at least 30 minutes.", path: ["durationMin"] });
 r.post("/packages", requirePermission("edit_packages"), async (c) => c.json({ id: await catalogService.savePackage(c.env, actor(c), await body(c, packageSchema)) }));
 r.delete("/packages/:id", requirePermission("edit_packages"), async (c) => { await catalogService.deletePackage(c.env, actor(c), c.req.param("id")); return c.json(ok); });
 r.put("/rules", requirePermission("edit_packages"), async (c) => {
@@ -222,7 +226,7 @@ r.get("/reports", requirePermission("view_reports"), async (c) => {
 });
 r.get("/reports.csv", requirePermission("view_reports"), async (c) => {
   const today = studioNow().date;
-  const csv = await reportService.csv(c.env, c.req.query("from") ?? `${today.slice(0, 7)}-01`, c.req.query("to") ?? addDays(today, 90));
+  const csv = await reportService.csv(c.env, actor(c), c.req.query("from") ?? `${today.slice(0, 7)}-01`, c.req.query("to") ?? addDays(today, 90));
   return c.body(csv, 200, { "Content-Type": "text/csv", "Content-Disposition": `attachment; filename="psych-records-bookings.csv"` });
 });
 r.get("/staff", requirePermission("manage_staff"), async (c) => c.json(await staffService.list(c.env)));

@@ -14,6 +14,7 @@ import { newReference, paymentProvider, refundBooking } from "./payments";
 import { notifyStaff, notifyUser, sendEmail } from "./notifications";
 import { balanceOf, emails, paidNet, payLink, when } from "./emails";
 import { audit } from "./audit";
+import { forStaff } from "../lib/redact";
 
 export interface DraftInput {
   serviceSlug: string; packageId: string; date: string; start: number; extraHours: number; extras: string[]; people: number;
@@ -330,7 +331,7 @@ export const bookingService = {
     ]);
     const money = staffCanSeeMoney(user);
     return {
-      booking: { ...b, extras: JSON.parse(b.extras), paid_kobo: paidNet(b), balance_kobo: balanceOf(b) }, payments: money ? payments : null, pendingRequest: pending, due: dueNow(b),
+      booking: { ...forStaff(b, user), extras: JSON.parse(b.extras), paid_kobo: paidNet(b), balance_kobo: balanceOf(b) }, payments: money ? payments : null, pendingRequest: pending, due: dueNow(b),
       payLink: money ? payLink(env, b) : null,
       history: history.filter((h) => h.id !== b.id).map((h) => ({ id: h.id, ref: h.ref, date: h.date, start_min: h.start_min, package_name: h.package_name, status: h.status, total_kobo: h.total_kobo })),
     };

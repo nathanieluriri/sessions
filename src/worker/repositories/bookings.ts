@@ -11,6 +11,8 @@ export interface BookingRow {
   status: BookingStatus; source: string; created_by: string | null; pay_token: string | null; expires_at: string | null;
   decided_by: string | null; decided_at: string | null; decision_note: string; cancel_reason: string; rescheduled_at: string | null;
   reminder_sent_at: string | null; policy_version: number; reschedules_used: number; created_at: string; updated_at: string;
+  scheduling: "flex" | "slot" | "day" | "project"; slot_kind: string; slot_label: string; due_date: string | null;
+  revision_limit: number; revisions_used: number; delivered_final_at: string | null;
 }
 export interface PaymentRow {
   id: string; reference: string; hold_id: string | null; booking_id: string | null; user_id: string | null; amount_kobo: number;

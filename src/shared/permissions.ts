@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   edit_content: "Edit website pages, portfolio, team, FAQs, policies, SEO and analytics",
   view_audit: "See the audit log and email outbox",
   manage_staff: "Add staff and change their access",
+  deliver_files: "Upload finished work to clients and download the files clients send",
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -22,6 +23,7 @@ export const LEVELS = {
   coo: { label: "COO", defaults: [] as Permission[] },
   accountant: { label: "Accountant", defaults: ["view_calendar", "record_payments", "verify_payments", "view_payments", "view_reports"] as Permission[] },
   receptionist: { label: "Receptionist", defaults: ["view_calendar", "manage_bookings", "update_booking_details", "verify_payments", "assist_clients"] as Permission[] },
+  producer: { label: "Producer or engineer", defaults: ["view_calendar", "deliver_files"] as Permission[] },
   developer: { label: "Developer", defaults: ["edit_content", "toggle_booking_categories", "view_audit", "manage_staff"] as Permission[] },
   custom: { label: "Staff", defaults: [] as Permission[] },
 } as const;
@@ -36,6 +38,11 @@ interface Access { id?: string; role: string; level?: string; permissions: strin
 export const isOwner = (u: Access) => u.role === "ceo" || (u.role === "admin" && u.level === "coo");
 
 export const hasPermission = (u: Access, p: Permission) => isOwner(u) || (u.role === "admin" && u.permissions.includes(p));
+
+const FRONT_DESK: Permission[] = ["manage_bookings", "update_booking_details", "assist_clients", "record_payments"];
+
+/** Client email and phone are for the front desk. Producers deliver through the portal and never see how to reach a client. */
+export const canSeeContacts = (u: Access) => isOwner(u) || FRONT_DESK.some((p) => hasPermission(u, p));
 
 /** Why `actor` may not set `target` to `next`, or null when allowed. `target` is null for a new account. */
 export function staffChangeBlocked(actor: Access, target: Access | null, next: { level: Level; permissions: string[] }): string | null {

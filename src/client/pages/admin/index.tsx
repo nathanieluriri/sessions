@@ -19,7 +19,7 @@ const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "", to: "/admin", label: "Overview", title: "Overview", icon: "grid", end: true },
   { key: "calendar", to: "/admin/calendar", label: "Calendar", title: "Calendar", icon: "calendar", perm: "view_calendar" },
   { key: "bookings", to: "/admin/bookings", label: "Bookings", title: "Bookings", icon: "list", perm: "view_calendar" },
-  { key: "clients", to: "/admin/clients", label: "Clients", title: "Clients and history", icon: "users", perm: "view_calendar" },
+  { key: "clients", to: "/admin/clients", label: "Clients", title: "Clients and history", icon: "users", perm: "view_calendar", any: ["manage_bookings", "update_booking_details", "assist_clients", "record_payments"] },
   { key: "availability", to: "/admin/availability", label: "Availability", title: "Availability", icon: "clock", perm: "edit_availability" },
   { key: "catalogue", to: "/admin/catalogue", label: "Services and pricing", title: "Services, packages and rooms", icon: "music", perm: "edit_packages" },
   { key: "enquiries", to: "/admin/enquiries", label: "Enquiries", title: "Enquiries and quotes", icon: "chat", perm: "assist_clients" },
@@ -31,7 +31,7 @@ const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "staff", to: "/admin/staff", label: "Staff", title: "Staff and permissions", icon: "shield", perm: "manage_staff" },
   { key: "audit", to: "/admin/audit", label: "Audit log", title: "Audit log and email outbox", icon: "receipt", perm: "view_audit" },
 ];
-const allowed = (u: User | null, s: Access) => (s.perm ? can(u, s.perm) : true);
+const allowed = (u: User | null, s: Access) => (s.perm ? can(u, s.perm) : true) && (s.any ? s.any.some((p) => can(u, p)) : true);
 
 export function Admin() {
   const { section = "" } = useParams();

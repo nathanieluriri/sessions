@@ -8,20 +8,24 @@ import { hashPassword, randomToken, uuid } from "../lib/crypto";
 import { addDays, studioNow, prettyDate, label12 } from "../lib/time";
 import { naira } from "../lib/money";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
-import { LEVELS, PERMISSIONS, staffChangeBlocked, type Level, type Permission } from "../../shared/permissions";
+import { LEVELS, PERMISSIONS, canSeeContacts, hasPermission, staffChangeBlocked, type Level, type Permission } from "../../shared/permissions";
 import { audit } from "./audit";
 import { notifyStaff, sendEmail } from "./notifications";
 import { toSessionUser } from "./auth";
+import { forStaff } from "../lib/redact";
 import { balanceOf, paidNet } from "./emails";
 
 export interface PackageInput {
   id?: string; name: string; description: string; category: "session" | "post"; durationMin: number; priceKobo: number; includes: string[]; featured: boolean; active: boolean;
   serviceCategory: string; roomId: string | null; pricing: "fixed" | "quote"; depositPercent: number | null; requiresApproval: boolean; priceNote: string;
+  serviceSlug: string; scheduling: "flex" | "slot" | "day" | "project"; slotKind: "day" | "night"; unit: string; compareAtKobo: number | null;
+  turnaroundDays: number | null; revisionLimit: number; tracks: number | null;
 }
 
 export const catalogService = {
   async savePackage(env: Env, actor: SessionUser, p: PackageInput) {
-    if (p.pricing === "fixed" && !p.roomId) throw badRequest("Choose the room this package books.");
+    if (p.pricing === "fixed" && p.scheduling !== "project" && !p.roomId) throw badRequest("Choose the room this package books.");
+    if (p.compareAtKobo !== null && p.compareAtKobo <= p.priceKobo) throw badRequest("The regular price must be higher than the price, or left empty.");
     if (p.roomId && !(await catalogRepo.roomById(env.DB, p.roomId))) throw badRequest("That room does not exist.");
     const id = p.id ?? uuid();
     const before = p.id ? await catalogRepo.packageById(env.DB, p.id) : null;
@@ -30,6 +34,8 @@ export const catalogService = {
       id, slug: before?.slug ?? `${p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${id.slice(0, 4)}`, name: p.name, description: p.description,
       category: p.category, duration_min: p.durationMin, price_kobo: p.pricing === "quote" ? 0 : p.priceKobo, includes: p.includes, featured: p.featured, active: p.active,
       service_category: p.serviceCategory, room_id: p.roomId, pricing: p.pricing, deposit_percent: p.depositPercent, requires_approval: p.requiresApproval ? 1 : 0, price_note: p.priceNote,
+      service_slug: p.serviceSlug, scheduling: p.scheduling, slot_kind: p.slotKind, unit: p.unit, compare_at_kobo: p.compareAtKobo,
+      turnaround_days: p.turnaroundDays, revision_limit: p.revisionLimit, tracks: p.tracks,
     });
     const changes = [
       before && before.price_kobo !== p.priceKobo ? `Price ${naira(before.price_kobo)} → ${naira(p.priceKobo)} (new bookings only)` : "",
@@ -199,17 +205,18 @@ export const reportService = {
       byRoom: byRoom.map((r) => ({ ...r, utilisation: openMinutes ? Math.round((r.minutes / openMinutes) * 100) : 0 })),
     };
   },
-  async csv(env: Env, from: string, to: string) {
+  async csv(env: Env, user: SessionUser, from: string, to: string) {
     const rows = await bookingsRepo.list(env.DB, { from, to });
+    const contacts = canSeeContacts(user);
     const esc = (v: unknown) => `"${String(v).replace(/"/g, '""')}"`;
     return ["Reference,Date,Start,End,Room,Client,Email,Phone,Service,Package,Status,Source,Total (NGN),Paid (NGN),Balance (NGN)",
-      ...rows.map((b) => [b.ref, b.date, label12(b.start_min), label12(b.end_min), b.room_name, b.contact_name, b.contact_email, b.contact_phone, b.service_name, b.package_name,
+      ...rows.map((b) => [b.ref, b.date, label12(b.start_min), label12(b.end_min), b.room_name, b.contact_name, contacts ? b.contact_email : "", contacts ? b.contact_phone : "", b.service_name, b.package_name,
         b.status, b.source, b.total_kobo / 100, paidNet(b) / 100, ["confirmed", "completed"].includes(b.status) ? balanceOf(b) / 100 : 0].map(esc).join(","))].join("\n");
   },
 };
 
 export const dashboardService = {
-  async overview(env: Env) {
+  async overview(env: Env, user: SessionUser) {
     const today = studioNow().date;
     const monthStart = `${today.slice(0, 7)}-01`;
     const [todays, requests, report, enquiries, approvals] = await Promise.all([
@@ -217,7 +224,7 @@ export const dashboardService = {
       reportService.overview(env, monthStart, addDays(monthStart, 30)), enquiriesRepo.list(env.DB), bookingsRepo.list(env.DB, { status: "pending" }),
     ]);
     return {
-      today, todays: todays.filter((b) => ["confirmed", "completed", "no_show", "approved"].includes(b.status)).sort((a, b) => a.start_min - b.start_min),
+      today, todays: hasPermission(user, "view_calendar") ? todays.filter((b) => ["confirmed", "completed", "no_show", "approved"].includes(b.status)).sort((a, b) => a.start_min - b.start_min).map((b) => forStaff(b, user)) : [],
       requests, approvals: approvals.map((b) => ({ id: b.id, ref: b.ref, date: b.date, start_min: b.start_min, end_min: b.end_min, artist_name: b.artist_name, package_name: b.package_name, room_name: b.room_name, total_kobo: b.total_kobo, expires_at: b.expires_at })),
       report, newEnquiries: enquiries.filter((e) => e.status === "new").length,
     };
