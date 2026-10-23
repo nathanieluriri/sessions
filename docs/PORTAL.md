@@ -13,7 +13,7 @@ How finished work reaches the artist, how artists send files to the studio, and 
 
 ## Payment gate and release switch
 
-A delivery is downloadable only when the booking balance is zero, or when staff switched **Release before payment** on for that file. A locked file stays locked for plain downloads, audio preview and partial (range) requests alike; the artist sees a locked badge and the amount to pay. Staff with the permission can always download. Refunds that bring a balance back lock the files again unless released.
+A delivery is downloadable only when the booking balance is zero, or when the owner, or staff who can record payments, switched **Release before payment** on for that file. Producers with only the delivery permission cannot. A locked file stays locked for plain downloads, audio preview and partial (range) requests alike; the artist sees a locked badge and the amount to pay. Staff with the permission can always download. Refunds that bring a balance back lock the files again unless released. Delivery is blocked while the client has a pending cancel or reschedule request, and producers cannot put phone numbers or email addresses in delivery titles or notes. Auto-complete waits until the session itself has ended.
 
 ## Revisions
 

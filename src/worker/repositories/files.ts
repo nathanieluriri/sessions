@@ -110,12 +110,13 @@ export const filesRepo = {
   unnotifiedForUser: (db: D1Database, userId: string) => all<BookingRow>(db,
     `SELECT b.* FROM bookings b WHERE b.user_id = ? AND b.delivery_notified_at IS NULL AND EXISTS (SELECT 1 FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED})`, userId),
   /** Delivered, paid, no open revision, and the newest delivery is old enough: these complete by themselves. */
-  settled: (db: D1Database, before: string, limit: number) => all<BookingRow>(db,
+  settled: (db: D1Database, before: string, localMinute: number, limit: number) => all<BookingRow>(db,
     `SELECT b.* FROM bookings b WHERE b.status IN ('confirmed', 'completed') AND b.delivered_final_at IS NULL AND b.total_kobo - (b.amount_paid_kobo - b.refunded_kobo) <= 0
+       AND (b.scheduling = 'project' OR CAST(strftime('%s', b.date) AS INTEGER) / 60 + b.end_min <= ?)
        AND NOT EXISTS (SELECT 1 FROM revision_requests r WHERE r.booking_id = b.id AND r.status = 'open')
        AND NOT EXISTS (SELECT 1 FROM change_requests c WHERE c.booking_id = b.id AND c.status = 'pending')
        AND EXISTS (SELECT 1 FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED})
-       AND (SELECT MAX(f.delivered_at) FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED}) <= ? ORDER BY b.created_at LIMIT ?`, before, limit),
+       AND (SELECT MAX(f.delivered_at) FROM booking_files f WHERE f.booking_id = b.id AND ${PUBLISHED}) <= ? ORDER BY b.created_at LIMIT ?`, localMinute, before, limit),
   setReleased: async (db: D1Database, id: string, released: boolean) =>
     (await run(db, "UPDATE booking_files SET released = ? WHERE id = ? AND direction = 'delivery' AND state = 'ready'", released ? 1 : 0, id)).meta.changes === 1,
 

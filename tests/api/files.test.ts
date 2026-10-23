@@ -1306,3 +1306,53 @@ describe("round three fixes", () => {
     }
   });
 });
+
+describe("round four fixes", () => {
+  const openRequest = (bookingId: string) => h.env.DB.prepare("INSERT INTO change_requests (id, booking_id, user_id, kind, reason, status) VALUES (?, ?, ?, 'cancel', 'x', 'pending')").bind(crypto.randomUUID(), bookingId, alice.user.id).run();
+
+  it("refuses every delivery, final or not, while a client's cancel or reschedule request waits", async () => {
+    const order = await mine({ paid: 10_000_000 });
+    const f = await stage(order.id);
+    await openRequest(order.id);
+    for (const final of [false, true]) {
+      const r = await deliver(maker.client, order.id, [{ fileId: f.id, title: "Mix" }], { final });
+      expect(r.status).toBe(409);
+      expect(r.body.error).toMatch(/Decide the pending/);
+    }
+    expect((await row(f.id)).delivered_at).toBeNull();
+    expect((await booking(order.id)).delivered_final_at).toBeNull();
+  });
+
+  it("keeps contact details out of delivery titles and notes for staff who cannot see client contacts", async () => {
+    const order = await mine();
+    const f = await stage(order.id);
+    for (const note of ["call me on 0803 555 1234", "text +234 803 555 1234", "mail me: dj@example.com"]) {
+      const r = await deliver(maker.client, order.id, [{ fileId: f.id, title: "Mix" }], { note });
+      expect(r.status).toBe(400);
+    }
+    expect((await deliver(maker.client, order.id, [{ fileId: f.id, title: "dj@example.com" }])).status).toBe(400);
+    expect((await row(f.id)).delivered_at).toBeNull();
+    expect((await deliver(maker.client, order.id, [{ fileId: f.id, title: "Mix v2" }], { note: "Bumped the vocals by 2 dB, 24-bit 48000 Hz" })).status).toBe(200);
+    const g = await stage(order.id, "other.mp3", 5000, 3);
+    expect((await deliver(boss, order.id, [{ fileId: g.id, title: "Mix" }], { note: "Call me on 0803 555 1234" })).status).toBe(200);
+  });
+
+  it("does not auto-complete a paid session booking until the session has ended", async () => {
+    const make = async (date: string, start: number, end: number, scheduling: string) => {
+      const order = await mine({ paid: 10_000_000, scheduling });
+      await h.env.DB.prepare("UPDATE bookings SET date = ?, start_min = ?, end_min = ? WHERE id = ?").bind(date, start, end, order.id).run();
+      const f = await stage(order.id);
+      await deliver(maker.client, order.id, [{ fileId: f.id, title: "Early" }]);
+      await h.env.DB.prepare("UPDATE booking_files SET delivered_at = ? WHERE booking_id = ?").bind(ago(9 * 86_400_000), order.id).run();
+      return order;
+    };
+    const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+    const future = await make(day(21), 600, 720, "slot");
+    const overnight = await make(day(1), 1380, 1740, "slot");
+    const past = await make(day(-9), 600, 720, "slot");
+    const overnightPast = await make(day(-9), 1380, 1740, "slot");
+    await filesService.housekeeping(h.env);
+    for (const o of [future, overnight]) expect((await booking(o.id)).delivered_final_at, o.ref).toBeNull();
+    for (const o of [past, overnightPast]) expect((await booking(o.id)).delivered_final_at, o.ref).toBeTruthy();
+  });
+});

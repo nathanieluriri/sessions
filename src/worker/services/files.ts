@@ -164,12 +164,20 @@ async function catchUp(env: Env, b: BookingRow) {
   if (!told.notified) await filesRepo.unclaimNotified(env.DB, fresh.id);
 }
 
-/** Marks the order complete. Safe to repeat: a second call changes nothing and tells nobody. `actor` is null for the automatic completion. */
 /** Opening files before the balance is paid is a money decision: owners and staff who record payments only. */
 function assertMayRelease(u: SessionUser) {
   if (!isOwner(u) && !hasPermission(u, "record_payments")) throw forbidden("Releasing files before payment needs the record payments permission. Files unlock by themselves once the balance is paid.");
 }
 
+const CONTACT = /[^\s@]+@[^\s@]+\.[^\s@]+|(?:\+|\b)\d(?:[\s().-]?\d){8,}/;
+
+/** Delivery text goes into the client email, so staff who cannot see client contacts may not put their own in it. */
+function assertNoContacts(u: SessionUser, ...texts: string[]) {
+  if (isOwner(u) || hasPermission(u, "record_payments")) return;
+  if (texts.some((t) => CONTACT.test(t))) throw badRequest("Phone numbers and email addresses cannot go in delivery titles or notes. Clients reply through the portal.");
+}
+
+/** Marks the order complete. Safe to repeat: a second call changes nothing and tells nobody. `actor` is null for the automatic completion. */
 async function closeOrder(env: Env, actor: SessionUser | null, b: BookingRow, side: Side | "auto") {
   if (isFinal(b)) return { ok: true, final: true, changed: false };
   if (!DELIVER_STATUSES.includes(b.status)) throw badRequest("Only confirmed bookings can be completed.");
@@ -356,6 +364,8 @@ export const filesService = {
     const b = await bookingFor(env, user, "staff", bookingId);
     if (input.released) assertMayRelease(user);
     assertOpen(b, "staff");
+    if (await filesRepo.pendingRequest(env.DB, b.id)) throw conflict("Decide the pending cancellation or reschedule request before delivering.");
+    assertNoContacts(user, input.note, ...input.items.map((i) => i.title));
     const ids = input.items.map((i) => i.fileId);
     if (new Set(ids).size !== ids.length) throw badRequest("Each file can only be listed once.");
     const found = await filesRepo.byIds(env.DB, b.id, ids);
@@ -535,7 +545,7 @@ export const filesService = {
   /** Cron: aborts uploads nobody finished and retries the R2 delete of removed files. Staged deliveries that were never published stay. */
   async housekeeping(env: Env) {
     const before = new Date(Date.now() - AUTO_COMPLETE_DAYS * 86_400_000).toISOString();
-    for (const b of await filesRepo.settled(env.DB, before, SWEEP_BATCH)) await safely(() => closeOrder(env, null, b, "auto"), undefined);
+    for (const b of await filesRepo.settled(env.DB, before, Math.floor(Date.now() / 60_000) + 60, SWEEP_BATCH)) await safely(() => closeOrder(env, null, b, "auto"), undefined);
     if (!env.MEDIA) return;
     const stale = await filesRepo.stale(env.DB, new Date(Date.now() - STALE_UPLOAD_MS).toISOString(), SWEEP_BATCH);
     for (const f of stale) {
