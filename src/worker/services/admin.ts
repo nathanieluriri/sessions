@@ -5,7 +5,7 @@ import { usersRepo } from "../repositories/users";
 import { enquiriesRepo, reportsRepo, auditRepo, outboxRepo, clientsRepo } from "../repositories/misc";
 import { bookingsRepo, paymentsRepo, changeRequestsRepo } from "../repositories/bookings";
 import { hashPassword, randomToken, uuid } from "../lib/crypto";
-import { addDays, studioNow, prettyDate, label12 } from "../lib/time";
+import { addDays, daysBetween, studioNow, prettyDate, label12, endsNextDay, weekdayName } from "../lib/time";
 import { naira } from "../lib/money";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { LEVELS, PERMISSIONS, canSeeContacts, hasPermission, staffChangeBlocked, type Level, type Permission } from "../../shared/permissions";
@@ -79,8 +79,12 @@ export const availabilitySettingsService = {
   },
   async addBlock(env: Env, actor: SessionUser, b: { date: string; start: number; end: number; reason: string; roomId: string | null }) {
     if (b.end <= b.start) throw badRequest("End must be after start.");
-    const clashes = (await bookingsRepo.list(env.DB, { from: b.date, to: b.date }))
-      .filter((x) => ["pending", "approved", "confirmed"].includes(x.status) && (!b.roomId || x.room_id === b.roomId) && x.start_min < b.end && x.end_min > b.start);
+    // A session that ran past midnight from the evening before still holds the early hours of this date.
+    const clashes = (await bookingsRepo.list(env.DB, { from: addDays(b.date, -1), to: b.date }))
+      .filter((x) => {
+        const shift = daysBetween(b.date, x.date) * 1440;
+        return ["pending", "approved", "confirmed"].includes(x.status) && x.scheduling !== "project" && (!b.roomId || x.room_id === b.roomId) && x.start_min + shift < b.end && x.end_min + shift > b.start;
+      });
     if (clashes.length) throw conflict(`Booking ${clashes[0].ref} is inside this time. Reschedule or cancel it first.`);
     await settingsRepo.addBlock(env.DB, { id: uuid(), date: b.date, start_min: b.start, end_min: b.end, reason: b.reason, created_by: actor.id, room_id: b.roomId });
     const room = b.roomId ? (await catalogRepo.roomById(env.DB, b.roomId))?.name : "All rooms";
@@ -202,15 +206,18 @@ export const reportService = {
       utilisation: capacity ? Math.round(((totals?.minutes ?? 0) / capacity) * 100) : 0,
       repeatClients: repeat?.clients ? Math.round(((repeat.repeaters ?? 0) / repeat.clients) * 100) : 0,
       popular, weeks, byCategory,
-      byRoom: byRoom.map((r) => ({ ...r, utilisation: openMinutes ? Math.round((r.minutes / openMinutes) * 100) : 0 })),
+      byRoom: byRoom.map((r) => ({ ...r, room_name: r.room_name || "Remote orders", utilisation: openMinutes ? Math.round((r.minutes / openMinutes) * 100) : 0 })),
     };
   },
   async csv(env: Env, user: SessionUser, from: string, to: string) {
     const rows = await bookingsRepo.list(env.DB, { from, to });
     const contacts = canSeeContacts(user);
     const esc = (v: unknown) => `"${String(v).replace(/"/g, '""')}"`;
+    // Remote orders have no session time. An end after midnight names the day it falls on, as in the emails.
+    const clock = (b: { scheduling: string; date: string }, m: number, end = false) =>
+      b.scheduling === "project" ? "" : end && endsNextDay(m) ? `${label12(m)} (${weekdayName(addDays(b.date, 1))})` : label12(m);
     return ["Reference,Date,Start,End,Room,Client,Email,Phone,Service,Package,Status,Source,Total (NGN),Paid (NGN),Balance (NGN)",
-      ...rows.map((b) => [b.ref, b.date, label12(b.start_min), label12(b.end_min), b.room_name, b.contact_name, contacts ? b.contact_email : "", contacts ? b.contact_phone : "", b.service_name, b.package_name,
+      ...rows.map((b) => [b.ref, b.date, clock(b, b.start_min), clock(b, b.end_min, true), b.room_name || "Remote orders", b.contact_name, contacts ? b.contact_email : "", contacts ? b.contact_phone : "", b.service_name, b.package_name,
         b.status, b.source, b.total_kobo / 100, paidNet(b) / 100, ["confirmed", "completed"].includes(b.status) ? balanceOf(b) / 100 : 0].map(esc).join(","))].join("\n");
   },
 };
@@ -219,14 +226,14 @@ export const dashboardService = {
   async overview(env: Env, user: SessionUser) {
     const today = studioNow().date;
     const monthStart = `${today.slice(0, 7)}-01`;
-    const [todays, requests, report, enquiries, approvals] = await Promise.all([
+    const [todays, requests, report, enquiries, approvals, projects] = await Promise.all([
       bookingsRepo.list(env.DB, { from: today, to: today }), changeRequestsRepo.pending(env.DB),
-      reportService.overview(env, monthStart, addDays(monthStart, 30)), enquiriesRepo.list(env.DB), bookingsRepo.list(env.DB, { status: "pending" }),
+      reportService.overview(env, monthStart, addDays(monthStart, 30)), enquiriesRepo.list(env.DB), bookingsRepo.list(env.DB, { status: "pending" }), bookingsRepo.openOrders(env.DB),
     ]);
     return {
-      today, todays: hasPermission(user, "view_calendar") ? todays.filter((b) => ["confirmed", "completed", "no_show", "approved"].includes(b.status)).sort((a, b) => a.start_min - b.start_min).map((b) => forStaff(b, user)) : [],
-      requests, approvals: approvals.map((b) => ({ id: b.id, ref: b.ref, date: b.date, start_min: b.start_min, end_min: b.end_min, artist_name: b.artist_name, package_name: b.package_name, room_name: b.room_name, total_kobo: b.total_kobo, expires_at: b.expires_at })),
-      report, newEnquiries: enquiries.filter((e) => e.status === "new").length,
+      today, todays: hasPermission(user, "view_calendar") ? todays.filter((b) => b.scheduling !== "project" && ["confirmed", "completed", "no_show", "approved"].includes(b.status)).sort((a, b) => a.start_min - b.start_min).map((b) => forStaff(b, user)) : [],
+      requests, approvals: approvals.map((b) => ({ id: b.id, ref: b.ref, date: b.date, start_min: b.start_min, end_min: b.end_min, scheduling: b.scheduling, artist_name: b.artist_name, package_name: b.package_name, room_name: b.room_name, total_kobo: b.total_kobo, expires_at: b.expires_at })),
+      report, newEnquiries: enquiries.filter((e) => e.status === "new").length, projects: hasPermission(user, "view_calendar") ? projects : 0,
     };
   },
   payments: async (env: Env) => ({ payments: await paymentsRepo.list(env.DB), outstanding: await reportsRepo.outstanding(env.DB) }),

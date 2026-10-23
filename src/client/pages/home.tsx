@@ -109,7 +109,7 @@ function Ribbon({ items }: { items: string[] }) {
   return (
     <section className="ribbon" data-tone="dark" aria-label="What we make">
       <div className="rbar" />
-      <div className="rtrack"><div className="rrow">{[...items, ...items].map((t, i) => <span key={i} aria-hidden={i >= items.length}><Mark tone="white" size={22} />{t}</span>)}</div></div>
+      <div className="rtrack"><div className="rrow">{[...items, ...items].map((t, i) => <span key={i} aria-hidden={i >= items.length}><Mark tone="white" size={30} lazy />{t}</span>)}</div></div>
     </section>
   );
 }

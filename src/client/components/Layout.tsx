@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Icon, Mark, Socials } from "./brand";
+import { Icon, Lockup, Mark, Socials } from "./brand";
 import { useAuth } from "../lib/auth";
 import { TactileAnchor, TactileLink } from "./kitchen";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
@@ -86,7 +86,7 @@ export function Nav() {
     <>
       <header className={`nav ${enter ? "enter" : ""}`} style={late ? ({ "--nd": "2.2s" } as CSSProperties) : undefined}>
         <div className="navin">
-          <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home" onClick={landing ? jumpTo("") : undefined}><Mark tone="neon" size={30} /><span>Psych Records</span></Link>
+          <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home" onClick={landing ? jumpTo("") : undefined}><Mark tone="neon" size={40} /><span>Psych Records</span></Link>
           <div className="npill nlinks" ref={links} onMouseLeave={leave}>
             <span className={`nglide nhover ${hov.on ? "on" : ""}`} style={glideStyle(hov)} aria-hidden />
             <span className={`nglide ${act.on ? "on" : ""}`} style={glideStyle(act)} aria-hidden />
@@ -144,7 +144,7 @@ export function Footer() {
       <div className="wrap">
         <div className="fgrid">
           <div className="fbrand">
-            <Link to="/" className="flogo"><Mark tone="neon" size={36} /><span>Psych Records</span></Link>
+            <Link to="/" className="flogo"><Lockup width={340} /></Link>
             <p>{c.footer_blurb}</p>
           </div>
           <FootLinks title="Explore" links={[["/services", "Services"], ["/studio", "Studio and facilities"], ["/portfolio", "Portfolio"], ["/packages", "Pricing and packages"], ["/about", "About us"]]} />

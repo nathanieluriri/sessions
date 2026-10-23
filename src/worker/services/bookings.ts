@@ -6,10 +6,10 @@ import { settingsRepo } from "../repositories/settings";
 import { usersRepo } from "../repositories/users";
 import { stmt } from "../repositories/db";
 import { randomToken, safeEqual, uuid } from "../lib/crypto";
-import { addDays, daysBetween, isoIn, label12, minutesUntil, studioNow, weekday } from "../lib/time";
+import { addDays, daysBetween, isDate, isoIn, minutesUntil, prettyDate, studioNow, timeRange, weekday } from "../lib/time";
 import { naira } from "../lib/money";
 import { badRequest, conflict, forbidden, notFound, AppError } from "../lib/errors";
-import { loadRules } from "./availability";
+import { loadRules, windowFor } from "./availability";
 import { newReference, paymentProvider, refundBooking } from "./payments";
 import { notifyStaff, notifyUser, sendEmail } from "./notifications";
 import { balanceOf, emails, paidNet, payLink, when } from "./emails";
@@ -23,8 +23,10 @@ export interface DraftInput {
 
 export interface Draft extends DraftInput {
   serviceName: string; category: string; packageName: string; packagePrice: number; duration: number; roomId: string; roomName: string;
-  extrasList: { slug: string; name: string; price: number }[]; extraHourPrice: number; extraHoursPrice: number; total: number;
+  extrasList: { slug: string; name: string; price: number; quote?: boolean }[]; extraHourPrice: number; extraHoursPrice: number; total: number;
   depositPercent: number; deposit: number; requiresApproval: boolean; policyVersion: number;
+  scheduling: BookingRow["scheduling"]; slotKind: "" | "day" | "night"; slotLabel: string; unit: string; turnaroundDays: number | null;
+  revisionLimit: number; dueDate: string | null; tracks: number | null;
 }
 
 type Rules = Awaited<ReturnType<typeof loadRules>>;
@@ -34,34 +36,59 @@ type Plan = "deposit" | "full" | "balance";
 export const depositFor = (total: number, percent: number) => (percent > 0 && percent < 100 ? Math.round((total * percent) / 1_000_000) * 10_000 : total);
 export const refundShare = (minutesBefore: number) => (minutesBefore >= 72 * 60 ? 1 : minutesBefore >= 24 * 60 ? 0.5 : 0);
 
-/** Requests and approvals hold their slot for a window, but never past the session start. */
-const windowEnd = (hours: number, b: { date: string; start_min: number }) =>
-  new Date(Math.min(Date.now() + hours * 3_600_000, Date.now() + minutesUntil(b.date, b.start_min) * 60_000)).toISOString();
+/** Sessions count back from their start. A remote order has no start, so it refunds in full until the studio publishes its first delivery. */
+async function refundShareOf(env: Env, b: BookingRow) {
+  if (b.scheduling !== "project") return refundShare(minutesUntil(b.date, b.start_min));
+  return (await bookingsRepo.deliveredCount(env.DB, b.id)) ? 0 : 1;
+}
+
+/** Requests and approvals hold their slot for a window, but never past the session start (remote orders have none). */
+const windowEnd = (hours: number, b: { date: string; start_min: number; scheduling?: string }) =>
+  new Date(Math.min(Date.now() + hours * 3_600_000, b.scheduling === "project" ? Infinity : Date.now() + minutesUntil(b.date, b.start_min) * 60_000)).toISOString();
 
 export async function priceDraft(env: Env, input: DraftInput, rules?: Rules): Promise<Draft> {
-  const [svc, pkg, extras, r] = await Promise.all([
+  const [svc, pkg, extras, r, sessions] = await Promise.all([
     catalogRepo.serviceBySlug(env.DB, input.serviceSlug), catalogRepo.packageById(env.DB, input.packageId), catalogRepo.extras(env.DB), rules ?? loadRules(env),
+    catalogRepo.sessionSlots(env.DB),
   ]);
   if (!svc) throw badRequest("Choose a service.");
   if (!pkg || !pkg.active) throw badRequest("This package is no longer available.");
   if (pkg.pricing === "quote") throw badRequest("This package is priced by quote. Send a quote request instead.");
-  if (pkg.service_category !== svc.category) throw badRequest("Pick a package that fits this service.");
-  const room = pkg.room_id ? await catalogRepo.roomById(env.DB, pkg.room_id) : null;
-  if (!room || !room.active) throw badRequest("This package is not linked to an open room yet.");
-  const maxPeople = room.capacity || r.maxPeople;
-  if (input.people < 1 || input.people > maxPeople) throw badRequest(`${room.name} takes up to ${maxPeople} people.`);
-  const extrasList = extras.filter((e) => input.extras.includes(e.slug) && (!e.category || e.category === svc.category)).map((e) => ({ slug: e.slug, name: e.name, price: e.price_kobo }));
-  const extraHourPrice = room.hourly_kobo || r.extraHourKobo;
+  if (pkg.service_category !== svc.category || (pkg.service_slug && pkg.service_slug !== svc.slug)) throw badRequest("Pick a package that fits this service.");
+  const mode = pkg.scheduling;
+  const remote = mode === "project";
+  const room = remote ? null : pkg.room_id ? await catalogRepo.roomById(env.DB, pkg.room_id) : null;
+  if (!remote && (!room || !room.active)) throw badRequest("This package is not linked to an open room yet.");
+  const maxPeople = room ? room.capacity || r.maxPeople : 200;
+  if (input.people < 1 || input.people > maxPeople) throw badRequest(room ? `${room.name} takes up to ${maxPeople} people.` : "Enter between 1 and 200 people.");
+  if (mode !== "flex" && input.extraHours) throw badRequest("Extra hours are not available on this package.");
+  const date = remote ? studioNow().date : input.date;
+  if (!isDate(date)) throw badRequest("Pick a date.");
+  let start = remote ? 0 : input.start, duration = remote ? 0 : pkg.duration_min + input.extraHours * 60, slotLabel = "";
+  if (mode === "slot" || mode === "day") {
+    const w = windowFor(sessions, pkg, date, input.start);
+    if (!w) throw badRequest(mode === "slot" ? "Pick one of the open sessions." : "Pick an open day to start.");
+    start = w.start;
+    duration = w.end - w.start;
+    slotLabel = w.label;
+  }
+  const extrasList = extras
+    .filter((e) => input.extras.includes(e.slug) && (!e.category || e.category === svc.category) && (!e.service_slug || e.service_slug === svc.slug))
+    .map((e) => (e.pricing === "quote" ? { slug: e.slug, name: e.name, price: 0, quote: true } : { slug: e.slug, name: e.name, price: e.price_kobo }));
+  const extraHourPrice = mode === "flex" ? room?.hourly_kobo || r.extraHourKobo : 0;
   const extraHoursPrice = input.extraHours * extraHourPrice;
   const total = pkg.price_kobo + extraHoursPrice + extrasList.reduce((s, e) => s + e.price, 0);
   const depositPercent = pkg.deposit_percent ?? r.depositPercent;
   return {
-    ...input, serviceName: svc.name, category: svc.category, packageName: pkg.name, packagePrice: pkg.price_kobo, duration: pkg.duration_min + input.extraHours * 60,
-    roomId: room.id, roomName: room.name, extrasList, extraHourPrice, extraHoursPrice, total, depositPercent, deposit: depositFor(total, depositPercent),
+    ...input, date, start, duration, extras: extrasList.map((e) => e.slug), serviceName: svc.name, category: svc.category, packageName: pkg.name, packagePrice: pkg.price_kobo,
+    roomId: room?.id ?? "", roomName: room?.name ?? "", extrasList, extraHourPrice, extraHoursPrice, total, depositPercent, deposit: depositFor(total, depositPercent),
     requiresApproval: !!pkg.requires_approval || r.requireApproval, policyVersion: r.policyVersion,
+    scheduling: mode, slotKind: mode === "slot" || mode === "day" ? pkg.slot_kind : "", slotLabel, unit: pkg.unit, turnaroundDays: pkg.turnaround_days,
+    revisionLimit: pkg.revision_limit, dueDate: pkg.turnaround_days ? addDays(date, pkg.turnaround_days) : null, tracks: pkg.tracks,
   };
 }
 
+// Holds made before the catalog change carry no scheduling fields.
 function fromDraft(d: Draft, x: { id: string; userId: string | null; holdId: string | null; status: BookingStatus; source: string; createdBy: string | null; expiresAt: string | null }): NewBooking {
   return {
     ...x, roomId: d.roomId, roomName: d.roomName, category: d.category, serviceName: d.serviceName, packageId: d.packageId, packageName: d.packageName,
@@ -69,6 +96,7 @@ function fromDraft(d: Draft, x: { id: string; userId: string | null; holdId: str
     extras: JSON.stringify([...d.extrasList, ...(d.extraHours ? [{ slug: "extra-hours", name: `Extra time (${d.extraHours} hr)`, price: d.extraHoursPrice }] : [])]),
     people: d.people, artistName: d.artistName, contactName: d.contactName, contactEmail: d.contactEmail, contactPhone: d.contactPhone,
     project: d.project ?? "", notes: d.notes ?? "", links: d.links ?? "", payToken: randomToken(18), policyVersion: d.policyVersion,
+    scheduling: d.scheduling ?? "flex", slotKind: d.slotKind ?? "", slotLabel: d.slotLabel ?? "", dueDate: d.dueDate ?? null, revisionLimit: d.revisionLimit ?? 0,
   };
 }
 
@@ -77,6 +105,7 @@ export const summary = (b: BookingRow) => ({
   id: b.id, ref: b.ref, status: b.status, service_name: b.service_name, package_name: b.package_name, package_price_kobo: b.package_price_kobo,
   room_name: b.room_name, date: b.date, start_min: b.start_min, end_min: b.end_min, extras: JSON.parse(b.extras), total_kobo: b.total_kobo,
   deposit_kobo: b.deposit_kobo, paid_kobo: paidNet(b), balance_kobo: balanceOf(b), expires_at: b.expires_at,
+  scheduling: b.scheduling, slot_label: b.slot_label, due_date: b.due_date,
 });
 
 /** The amount the client can pay now and whether a smaller deposit is on offer. */
@@ -109,11 +138,47 @@ function checkHours(hours: { is_open: number; open_min: number; close_min: numbe
   if (!hours?.is_open || start < hours.open_min || end > hours.close_min) throw badRequest("That time is outside opening hours.");
 }
 
+/** Flex bookings must sit inside opening hours. Fixed sessions set their own times, so only a closed weekday rules them out. Remote orders have no time. */
+async function checkOpen(env: Env, mode: BookingRow["scheduling"], date: string, start: number, end: number) {
+  if (mode === "project") return;
+  const hours = await settingsRepo.hoursFor(env.DB, weekday(date));
+  if (mode === "flex") checkHours(hours, start, end);
+  else if (!hours?.is_open) throw badRequest("The studio is closed that day.");
+}
+
+/** Notice period and booking horizon apply to clients. Staff can book at short notice but never into the past. */
+function checkLead(rules: Rules, date: string, start: number, client: boolean) {
+  if (minutesUntil(date, start) < (client ? rules.minNotice : 1)) throw badRequest("That time is too soon to book.");
+  if (client && daysBetween(studioNow().date, date) > rules.bookAhead) throw badRequest("That date is too far ahead to book.");
+}
+
+/** Where a booking lands when it moves: only a time its own mode allows, with the end that goes with it. */
+async function moveTarget(env: Env, b: BookingRow, date: string, start: number) {
+  if (b.scheduling === "project") throw badRequest("Remote orders have no session time to move.");
+  if (!isDate(date)) throw badRequest("Pick a new date and time.");
+  if (b.scheduling === "flex") {
+    const end = start + (b.end_min - b.start_min);
+    await checkOpen(env, "flex", date, start, end);
+    return { start, end, label: "" };
+  }
+  const w = windowFor(await catalogRepo.sessionSlots(env.DB), { scheduling: b.scheduling, slot_kind: b.slot_kind === "night" ? "night" : "day" }, date, start);
+  if (!w) throw badRequest(b.scheduling === "slot" ? "Pick one of the open sessions." : "Pick an open day to start.");
+  await checkOpen(env, b.scheduling, date, w.start, w.end);
+  return { start: w.start, end: w.end, label: w.label };
+}
+
 async function loadBooking(env: Env, id: string) {
   const b = await bookingsRepo.byId(env.DB, id);
   if (!b) throw notFound("Booking not found.");
   return b;
 }
+
+/** Add-ons without a price yet, for the staff who have to quote them. */
+const quoteLine = (b: BookingRow) => {
+  const names = (JSON.parse(b.extras) as { name: string; quote?: boolean }[]).filter((e) => e.quote).map((e) => e.name);
+  return names.length ? `\nAdd-ons to quote: ${names.join(", ")}` : "";
+};
+const placeOf = (b: BookingRow) => (b.scheduling === "project" ? "as a remote order" : `in ${b.room_name}`);
 
 export const bookingService = {
   priceDraft,
@@ -123,12 +188,13 @@ export const bookingService = {
     const rules = await loadRules(env);
     const draft = await priceDraft(env, input, rules);
     if (!(await catalogRepo.categoryBySlug(env.DB, draft.category))?.bookable) throw badRequest("This service is not booked online right now. Send a quote request instead.");
-    const hours = await settingsRepo.hoursFor(env.DB, weekday(draft.date));
     const end = draft.start + draft.duration;
-    checkHours(hours, draft.start, end);
-    if ((draft.start - hours!.open_min) % rules.step !== 0) throw badRequest("Invalid start time.");
-    if (minutesUntil(draft.date, draft.start) < rules.minNotice) throw badRequest("That time is too soon to book.");
-    if (daysBetween(studioNow().date, draft.date) > rules.bookAhead) throw badRequest("That date is too far ahead to book.");
+    await checkOpen(env, draft.scheduling, draft.date, draft.start, end);
+    if (draft.scheduling === "flex") {
+      const hours = await settingsRepo.hoursFor(env.DB, weekday(draft.date));
+      if ((draft.start - hours!.open_min) % rules.step !== 0) throw badRequest("Invalid start time.");
+    }
+    if (draft.scheduling !== "project") checkLead(rules, draft.date, draft.start, true);
     const id = uuid();
     const expiresAt = isoIn(rules.holdMin);
     const ok = await bookingsRepo.createHoldIfFree(env.DB, { id, date: draft.date, start: draft.start, end, expiresAt, draft: JSON.stringify(draft), userId: user?.id ?? null, roomId: draft.roomId }, rules.buffer, new Date().toISOString());
@@ -167,13 +233,13 @@ export const bookingService = {
     const { hold, draft } = await this.activeHold(env, user, holdId);
     if (!draft.requiresApproval) throw badRequest("This booking can be paid straight away.");
     const rules = await loadRules(env);
-    const b = fromDraft(draft, { id: uuid(), userId: user.id, holdId: hold.id, status: "pending", source: "online", createdBy: null, expiresAt: windowEnd(rules.requestExpiryHours, { date: hold.date, start_min: hold.start_min }) });
+    const b = fromDraft(draft, { id: uuid(), userId: user.id, holdId: hold.id, status: "pending", source: "online", createdBy: null, expiresAt: windowEnd(rules.requestExpiryHours, { date: hold.date, start_min: hold.start_min, scheduling: draft.scheduling }) });
     await env.DB.batch([bookingsRepo.insertFromHold(env.DB, b), stmt(env.DB, "UPDATE holds SET status = 'converted' WHERE id = ?", hold.id)]);
     const booking = (await bookingsRepo.byHold(env.DB, hold.id))!;
     if (booking.id === b.id) {
       await mail(env, booking, emails.requestReceived(env, booking), "Request received");
       await notifyStaff(env, "manage_bookings", `Booking request · ${booking.artist_name} · ${booking.ref}`,
-        `${booking.contact_name} asked for ${booking.package_name} in ${booking.room_name}.\nWhen: ${when(booking)}\nEstimated total: ${naira(booking.total_kobo)}\nProject: ${booking.project || "None given"}\nApprove or decline it in the dashboard: ${env.APP_URL}/admin/bookings?open=${booking.id}`);
+        `${booking.contact_name} asked for ${booking.package_name} ${placeOf(booking)}.\nWhen: ${when(booking)}\nEstimated total: ${naira(booking.total_kobo)}${quoteLine(booking)}\nProject: ${booking.project || "None given"}\nApprove or decline it in the dashboard: ${env.APP_URL}/admin/bookings?open=${booking.id}`);
       await audit(env.DB, user, "Requested booking", booking.ref, `${booking.package_name}, ${when(booking)}`);
     }
     return booking;
@@ -208,7 +274,13 @@ export const bookingService = {
     const rules = await loadRules(env);
     const now = new Date().toISOString();
     const roomId = hold.room_id ?? draft.roomId;
-    const stillOurs = hold.status === "converted" || (await bookingsRepo.isFree(env.DB, { date: hold.date, start: hold.start_min, end: hold.end_min, roomId }, rules.buffer, now, "", hold.id));
+    const remote = draft.scheduling === "project";
+    if (remote) {
+      // The order is placed when it is paid, which can be the day after the hold was made.
+      draft.date = studioNow().date;
+      draft.dueDate = draft.turnaroundDays ? addDays(draft.date, draft.turnaroundDays) : null;
+    }
+    const stillOurs = remote || hold.status === "converted" || (await bookingsRepo.isFree(env.DB, { date: hold.date, start: hold.start_min, end: hold.end_min, roomId }, rules.buffer, now, "", hold.id));
     const markApplied = stmt(env.DB, "UPDATE payments SET status = 'success', verified_via = ?, channel = ?, paid_at = ? WHERE reference = ? AND verified_via IS NULL", via, channel, now, payment.reference);
 
     if (!stillOurs) {
@@ -221,7 +293,7 @@ export const bookingService = {
           paymentsRepo.addRefunded(env.DB, payment.id, payment.amount_kobo),
         ]);
         const u = payment.user_id ? await usersRepo.byId(env.DB, payment.user_id) : null;
-        if (u) await sendEmail(env, u.email, "Payment refunded", `Hi ${u.name},\n\nThe slot on ${when({ date: hold.date, start_min: hold.start_min, end_min: hold.end_min })} was taken after your hold expired. ${naira(payment.amount_kobo)} is on its way back to you.`);
+        if (u) await sendEmail(env, u.email, "Payment refunded", `Hi ${u.name},\n\nThe slot on ${when({ date: hold.date, start_min: hold.start_min, end_min: hold.end_min, scheduling: draft.scheduling })} was taken after your hold expired. ${naira(payment.amount_kobo)} is on its way back to you.`);
         await notifyUser(env, payment.user_id, "Payment refunded", `The slot was taken after your hold expired. ${naira(payment.amount_kobo)} is on its way back.`);
         await audit(env.DB, null, "Auto refund", payment.reference, "Hold expired and the slot was taken");
       }
@@ -240,7 +312,7 @@ export const bookingService = {
     if (booking.id === b.id) {
       await mail(env, booking, emails.confirmed(env, booking), "Booking confirmed");
       await notifyStaff(env, "manage_bookings", `New booking · ${booking.artist_name} · ${booking.ref}`,
-        `New booking ${booking.ref} in ${booking.room_name}\nClient: ${booking.contact_name} (${booking.contact_email}, ${booking.contact_phone})\nWhen: ${when(booking)}\nPackage: ${booking.service_name} · ${booking.package_name}\nPaid: ${naira(payment.amount_kobo)} of ${naira(booking.total_kobo)} (${payment.kind}) · verified via ${via}`);
+        `New booking ${booking.ref} ${placeOf(booking)}\nClient: ${booking.contact_name} (${booking.contact_email}, ${booking.contact_phone})\nWhen: ${when(booking)}\nPackage: ${booking.service_name} · ${booking.package_name}\nPaid: ${naira(payment.amount_kobo)} of ${naira(booking.total_kobo)} (${payment.kind}) · verified via ${via}${quoteLine(booking)}`);
       await audit(env.DB, null, "Booking confirmed", booking.ref, `${payment.kind} payment ${payment.reference} verified via ${via}`);
     } else if (res[2].meta.changes === 1) {
       await mail(env, booking, emails.paymentReceived(env, booking, payment.amount_kobo), "Payment received");
@@ -316,11 +388,11 @@ export const bookingService = {
   async detailForClient(env: Env, user: SessionUser, id: string) {
     const b = await loadBooking(env, id);
     if (b.user_id !== user.id) throw notFound();
-    const [payments, pending] = await Promise.all([paymentsRepo.forBooking(env.DB, id), changeRequestsRepo.pendingForBooking(env.DB, id)]);
+    const [payments, pending, share] = await Promise.all([paymentsRepo.forBooking(env.DB, id), changeRequestsRepo.pendingForBooking(env.DB, id), refundShareOf(env, b)]);
     const mins = minutesUntil(b.date, b.start_min);
     return {
       booking: { ...b, pay_token: undefined, extras: JSON.parse(b.extras), paid_kobo: paidNet(b), balance_kobo: balanceOf(b) }, payments, pendingRequest: pending, due: dueNow(b),
-      policy: { freeReschedule: b.status === "confirmed" && mins >= 48 * 60 && b.reschedules_used < 1, refundShare: refundShare(mins), refundAmount: Math.round(paidNet(b) * refundShare(mins)) },
+      policy: { freeReschedule: b.scheduling !== "project" && b.status === "confirmed" && mins >= 48 * 60 && b.reschedules_used < 1, refundShare: share, refundAmount: Math.round(paidNet(b) * share) },
     };
   },
 
@@ -342,15 +414,21 @@ export const bookingService = {
     if (b.user_id !== user.id) throw notFound();
     if (b.status !== "confirmed") throw badRequest("Only confirmed bookings can be changed. Withdraw a request instead.");
     if (await changeRequestsRepo.pendingForBooking(env.DB, bookingId)) throw conflict("You already have a request waiting for the studio.");
+    let target = "";
     if (input.kind === "reschedule") {
+      if (b.scheduling === "project") throw badRequest("Remote orders have no session time to move.");
       if (!input.newDate || input.newStart == null) throw badRequest("Pick a new date and time.");
       const rules = await loadRules(env);
-      const free = await bookingsRepo.isFree(env.DB, { date: input.newDate, start: input.newStart, end: input.newStart + (b.end_min - b.start_min), roomId: b.room_id ?? "" }, rules.buffer, new Date().toISOString(), b.id);
+      const t = await moveTarget(env, b, input.newDate, input.newStart);
+      if (input.newDate === b.date && t.start === b.start_min) throw badRequest("That is already your session time.");
+      checkLead(rules, input.newDate, t.start, true);
+      const free = await bookingsRepo.isFree(env.DB, { date: input.newDate, start: t.start, end: t.end, roomId: b.room_id ?? "" }, rules.buffer, new Date().toISOString(), b.id);
       if (!free) throw conflict("That time is no longer free.");
+      target = `${prettyDate(input.newDate)}, ${timeRange(input.newDate, t.start, t.end)}`;
     }
     await changeRequestsRepo.create(env.DB, { id: uuid(), booking_id: b.id, user_id: user.id, kind: input.kind, new_date: input.newDate ?? null, new_start_min: input.newStart ?? null, reason: input.reason });
     await notifyStaff(env, "manage_bookings", `${input.kind === "cancel" ? "Cancellation" : "Reschedule"} request · ${b.ref}`,
-      `${b.contact_name} asked to ${input.kind === "cancel" ? "cancel" : `move to ${input.newDate} ${label12(input.newStart!)}`} booking ${b.ref} (${when(b)}).\nReason: ${input.reason || "None given"}`);
+      `${b.contact_name} asked to ${input.kind === "cancel" ? "cancel" : `move to ${target}`} booking ${b.ref} (${when(b)}).\nReason: ${input.reason || "None given"}`);
     await audit(env.DB, user, `Requested ${input.kind}`, b.ref, input.reason);
   },
 
@@ -382,7 +460,7 @@ export const bookingService = {
   async approve(env: Env, actor: SessionUser, id: string, note: string) {
     const b = await loadBooking(env, id);
     if (b.status !== "pending") throw badRequest("Only requests waiting for approval can be approved.");
-    if (minutesUntil(b.date, b.start_min) <= 0) throw badRequest("This session time has passed.");
+    if (b.scheduling !== "project" && minutesUntil(b.date, b.start_min) <= 0) throw badRequest("This session time has passed.");
     const rules = await loadRules(env);
     await bookingsRepo.decide(env.DB, b.id, { status: "approved", by: actor.id, note, expiresAt: windowEnd(rules.paymentWindowHours, b) });
     const fresh = await loadBooking(env, id);
@@ -412,6 +490,7 @@ export const bookingService = {
 
   async setOutcome(env: Env, actor: SessionUser, id: string, outcome: "completed" | "no_show") {
     const b = await loadBooking(env, id);
+    if (b.scheduling === "project") throw badRequest("A remote order is completed when its final delivery is approved or finalized.");
     if (!["confirmed", "completed", "no_show"].includes(b.status)) throw badRequest("Only confirmed sessions can be marked.");
     if (minutesUntil(b.date, b.start_min) > 0) throw badRequest("You can mark a session once it has started.");
     await bookingsRepo.setStatus(env.DB, b.id, outcome);
@@ -422,11 +501,12 @@ export const bookingService = {
     const b = await loadBooking(env, bookingId);
     if (!["confirmed", "approved", "pending"].includes(b.status)) throw badRequest("Only upcoming bookings can be moved.");
     const rules = await loadRules(env);
-    const duration = b.end_min - b.start_min;
-    checkHours(await settingsRepo.hoursFor(env.DB, weekday(date)), start, start + duration);
-    if (!(await bookingsRepo.isFree(env.DB, { date, start, end: start + duration, roomId: b.room_id ?? "" }, rules.buffer, new Date().toISOString(), b.id))) throw conflict("That time is not free.");
+    const t = await moveTarget(env, b, date, start);
+    checkLead(rules, date, t.start, false);
+    const dueDate = b.due_date ? addDays(b.due_date, daysBetween(b.date, date)) : null;
     const before = when(b);
-    await bookingsRepo.move(env.DB, b.id, date, start, start + duration, fromRequest);
+    const moved = await bookingsRepo.move(env.DB, { id: b.id, roomId: b.room_id ?? "", date, start: t.start, end: t.end, slotLabel: t.label, dueDate }, rules.buffer, new Date().toISOString(), fromRequest);
+    if (!moved) throw conflict("That time is not free.");
     const fresh = await loadBooking(env, bookingId);
     const after = when(fresh);
     await mail(env, fresh, emails.moved(env, fresh, before, after), "Session rescheduled");
@@ -436,7 +516,7 @@ export const bookingService = {
   async cancel(env: Env, actor: SessionUser, bookingId: string, reason: string, overrideShare?: number) {
     const b = await loadBooking(env, bookingId);
     if (!["pending", "approved", "confirmed"].includes(b.status)) throw badRequest("This booking cannot be cancelled.");
-    const share = overrideShare ?? refundShare(minutesUntil(b.date, b.start_min));
+    const share = overrideShare ?? (await refundShareOf(env, b));
     const amount = Math.round(paidNet(b) * share);
     await bookingsRepo.setStatus(env.DB, b.id, "cancelled", { cancelReason: reason, expiresAt: null });
     const manual = amount > 0 ? await refundBooking(env, b, amount, reason) : 0;
@@ -500,11 +580,11 @@ export const bookingService = {
   async createManual(env: Env, actor: SessionUser, input: DraftInput & { status: "confirmed" | "approved"; source: string; ignoreHours: boolean; notify: boolean; payment: { amount: number; method: string; note: string } | null }) {
     const rules = await loadRules(env);
     const draft = await priceDraft(env, input, rules);
-    if (!input.ignoreHours) checkHours(await settingsRepo.hoursFor(env.DB, weekday(draft.date)), draft.start, draft.start + draft.duration);
+    if (!input.ignoreHours) await checkOpen(env, draft.scheduling, draft.date, draft.start, draft.start + draft.duration);
     const user = input.contactEmail ? await usersRepo.byEmail(env.DB, input.contactEmail) : null;
     const b = fromDraft(draft, {
       id: uuid(), userId: user?.role === "client" ? user.id : null, holdId: null, status: input.status, source: input.source, createdBy: actor.id,
-      expiresAt: input.status === "approved" ? windowEnd(rules.paymentWindowHours, { date: draft.date, start_min: draft.start }) : null,
+      expiresAt: input.status === "approved" ? windowEnd(rules.paymentWindowHours, { date: draft.date, start_min: draft.start, scheduling: draft.scheduling }) : null,
     });
     if (!(await bookingsRepo.insertIfFree(env.DB, b, rules.buffer, new Date().toISOString()))) throw conflict("That time clashes with a booking, hold or blocked time in this room.");
     if (input.payment && input.payment.amount > 0) await this.recordPayment(env, actor, b.id, input.payment, false);
@@ -514,21 +594,25 @@ export const bookingService = {
     return fresh;
   },
 
+  /** Sessions only: remote orders have no time. A session that ran past midnight on the day before `from` is included, with its real end above 1440. */
   async calendar(env: Env, from: string, to: string, room?: string) {
+    const eve = addDays(from, -1);
     const [bookings, holds, blocks] = await Promise.all([
-      bookingsRepo.list(env.DB, { from, to, room }), bookingsRepo.holdsBetween(env.DB, from, to, new Date().toISOString()), settingsRepo.blocks(env.DB, from),
+      bookingsRepo.list(env.DB, { from: eve, to, room }), bookingsRepo.holdsBetween(env.DB, eve, to, new Date().toISOString()), settingsRepo.blocks(env.DB, from),
     ]);
+    const visible = (x: { date: string; end_min: number }) => x.date >= from || x.end_min > 1440;
     return {
-      bookings: bookings.filter((b) => !["cancelled", "rejected"].includes(b.status)).map((b) => ({
+      bookings: bookings.filter((b) => b.scheduling !== "project" && visible(b) && !["cancelled", "rejected"].includes(b.status)).map((b) => ({
         id: b.id, ref: b.ref, date: b.date, start: b.start_min, end: b.end_min, title: b.artist_name, subtitle: `${b.package_name} · ${b.room_name}`, status: b.status, room: b.room_id,
+        scheduling: b.scheduling, label: b.slot_label,
       })),
-      holds: holds.filter((h) => !room || h.room_id === room).map((h) => ({ id: h.id, date: h.date, start: h.start_min, end: h.end_min, expiresAt: h.expires_at, room: h.room_id })),
+      holds: holds.filter((h) => h.room_id && visible(h) && (!room || h.room_id === room)).map((h) => ({ id: h.id, date: h.date, start: h.start_min, end: h.end_min, expiresAt: h.expires_at, room: h.room_id })),
       blocks: blocks.filter((x) => x.date <= to && (!room || !x.room_id || x.room_id === room)).map((x) => ({ id: x.id, date: x.date, start: x.start_min, end: x.end_min, reason: x.reason, room: x.room_name ?? "All rooms" })),
     };
   },
 
-  async housekeeping(env: Env) {
-    const now = new Date().toISOString();
+  async housekeeping(env: Env, at = new Date()) {
+    const now = at.toISOString();
     await bookingsRepo.releaseExpired(env.DB, now);
     await paymentsRepo.failPendingForExpiredHolds(env.DB, now);
     for (const b of await bookingsRepo.expiring(env.DB, now)) {
@@ -538,13 +622,13 @@ export const bookingService = {
       await audit(env.DB, null, "Released booking", b.ref, pending ? "Request expired before a decision" : "Not paid within the payment window");
     }
     const rules = await loadRules(env);
-    const today = studioNow().date;
+    const { date: today, minute } = studioNow(at);
     for (const b of await bookingsRepo.dueReminders(env.DB, today, addDays(today, 2))) {
-      const mins = minutesUntil(b.date, b.start_min);
+      const mins = minutesUntil(b.date, b.start_min, at);
       if (mins <= 0 || mins > rules.reminderHours * 60) continue;
       await mail(env, b, emails.reminder(env, b), "Session reminder");
       await bookingsRepo.markReminded(env.DB, b.id);
     }
-    await bookingsRepo.markCompleted(env.DB, today);
+    await bookingsRepo.markCompleted(env.DB, today, minute);
   },
 };

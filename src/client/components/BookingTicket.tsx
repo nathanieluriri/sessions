@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { Mark } from "./brand";
 import { Barcode, ScrambleText, Ticket, TicketPattern } from "./kitchen";
 import { hrs } from "../lib/format";
 
@@ -11,7 +12,7 @@ export function BookingTicket({ kind, date, start, duration, artist, people, ref
     <Ticket className={className} style={style} paper={paper} ink={ink} stubHeight="23%" label={`${kind} session ticket, ${reference}`}
       body={
         <div className="tkt-body">
-          <div className="tkt-micro"><span>Psych Records · {room}</span><span>Lagos · NG</span></div>
+          <div className="tkt-micro"><span className="tkt-brand"><Mark tone="ink" size={24} /><span>Psych Records · {room}</span></span><span>Lagos · NG</span></div>
           <div className="tkt-art"><TicketPattern /></div>
           <div>
             <h3 className="tkt-title">{kind}<br />Session</h3>

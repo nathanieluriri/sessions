@@ -4,3 +4,4 @@ dist
 .dev.vars
 demo/*.webm
 test-results
+__pycache__/

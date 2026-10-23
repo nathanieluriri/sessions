@@ -4,6 +4,7 @@ import type { AppEnv } from "../env";
 import { requireFrontDesk, requirePermission, requireStaff } from "../middleware/auth";
 import { body, date, minute, required, text, email } from "../lib/validate";
 import { bookingService } from "../services/bookings";
+import { filesService } from "../services/files";
 import { availabilitySettingsService, catalogService, clientService, contentService, dashboardService, enquiryService, reportService, staffService } from "../services/admin";
 import { collectionFor, collectionsService } from "../services/collections";
 import { bookingsRepo } from "../repositories/bookings";
@@ -56,12 +57,15 @@ r.post("/bookings", requirePermission("manage_bookings"), async (c) => {
   return c.json({ id: booking.id, ref: booking.ref });
 });
 r.put("/bookings/:id/details", requirePermission("update_booking_details"), async (c) => {
-  const b = await body(c, z.object({ people: z.number().int().min(1).max(200), artist_name: required("Artist name"), contact_phone: required("Phone", 40), notes: text(2000), project: text(2000).default(""), reference_links: text(1000).default("") }));
+  const { contact_email, ...b } = await body(c, z.object({
+    people: z.number().int().min(1).max(200), artist_name: required("Artist name"), contact_phone: required("Phone", 40), notes: text(2000), project: text(2000).default(""), reference_links: text(1000).default(""),
+    contact_email: z.union([email, z.literal("")]).optional(),
+  }));
   const bk = await bookingsRepo.byId(c.env.DB, c.req.param("id"));
   if (!bk) throw badRequest("Booking not found.");
   await bookingsRepo.updateDetails(c.env.DB, bk.id, b);
   await audit(c.env.DB, actor(c), "Updated booking details", bk.ref);
-  return c.json(ok);
+  return c.json(contact_email ? { ...ok, ...(await filesService.setContactEmail(c.env, actor(c), bk, contact_email)) } : ok);
 });
 r.post("/bookings/:id/reschedule", requirePermission("manage_bookings"), async (c) => {
   const b = await body(c, z.object({ date, start: minute }));

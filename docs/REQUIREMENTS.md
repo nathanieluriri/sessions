@@ -29,7 +29,7 @@ How this build meets the Website Requirements Document for Psych Records Enterta
 
 ## Before launch
 
-1. Replace sample content: team, equipment, portfolio, testimonials, photos, contact details and the logo (send the official logo files to the developer).
+1. Replace sample content: team, equipment, portfolio, testimonials, photos and contact details.
 2. Approve or edit the booking policies, privacy policy and terms.
 3. Add the Paystack live key and the Resend key, and connect the domain ([operations guide](OPERATIONS.md)).
 4. Turn on analytics and search indexing.

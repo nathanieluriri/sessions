@@ -471,7 +471,7 @@ export function BookRequested() {
   return (
     <><Nav />
       <div className="wrap stack gap24 donepage">
-        <Mark size={64} />
+        <Mark tone="ink" size={72} />
         <span className="tag warning" style={{ alignSelf: "center" }}>Awaiting approval</span>
         <h1 className="h2">Request sent.</h1>
         <p className="muted" style={{ maxWidth: 560 }}>{b ? `Booking ${b.ref} for ${longDate(b.date)}, ${t12(b.start_min)} in ${b.room_name} is with the studio. We hold the time until they reply, usually within 24 hours, and email you a payment link once it is approved.` : "Your request is with the studio. We email you a payment link once it is approved."}</p>
@@ -550,7 +550,7 @@ export function BookVerify() {
   if (state !== "checking") return (
     <><Nav />
       <div className="wrap stack gap24 donepage">
-        <Mark size={72} />
+        <Mark tone="ink" size={72} />
         {state === "failed" && <><h1 className="h2">Payment did not go through</h1><p className="muted">You have not been charged. If this was a new booking the slot was released and your details are saved, so you can try again.</p><TactileLink to="/book/time" size="lg">Pick a time <Icon name="arrow" size={18} /></TactileLink></>}
         {state === "refunded" && <><h1 className="h2">This payment was refunded</h1><p className="muted">The slot was taken, or the booking had closed, before your payment arrived. Your payment is being refunded in full.</p><TactileLink to="/book" size="lg">Book another time</TactileLink></>}
       </div>
@@ -571,10 +571,10 @@ export function BookVerify() {
           </div>
         )}
         <ReceiptPrinter stage={stage} labels={{ processing: "Verifying with Paystack", printing: "Printing your receipt", complete: "Payment verified" }}
-          header={<><Mark tone="neon" size={30} /><span className="pr-ref">{ref}</span></>}
+          header={<><Mark tone="neon" size={36} /><span className="pr-ref">{ref}</span></>}
           screen={<div className="pr-row"><div><p>{booking?.package_name ?? "Your booking"}</p><p className="dim">{booking ? `${shortDate(booking.date)} · ${t12(booking.start_min)}` : "Checking"}</p></div><div className="right"><p className="dim">Paid</p><strong>{booking ? naira(booking.paid_kobo) : "…"}</strong></div></div>}>
           {booking && <>
-            <div className="rc-logo"><Mark tone="ink" size={44} /></div>
+            <div className="rc-logo"><Mark tone="ink" size={48} /></div>
             <p className="rc-head" style={{ textAlign: "center" }}>{name}</p>
             {site?.content.studio_address && <p className="rc-dim" style={{ textAlign: "center" }}>{site.content.studio_address}</p>}
             <hr className="rc-hr" />
@@ -657,7 +657,7 @@ export function PayBooking() {
       window.location.assign(r.authorizationUrl);
     } catch (e: any) { setError(e.message); setBusy(false); }
   };
-  if (error && !data) return <><Nav /><div className="wrap stack gap16 donepage"><Mark size={64} /><h1 className="h2">We could not open this payment.</h1><p className="muted">{error} Contact the studio if you think this is a mistake.</p><TactileLink to="/contact" size="lg">Contact the studio</TactileLink></div></>;
+  if (error && !data) return <><Nav /><div className="wrap stack gap16 donepage"><Mark tone="ink" size={72} /><h1 className="h2">We could not open this payment.</h1><p className="muted">{error} Contact the studio if you think this is a mistake.</p><TactileLink to="/contact" size="lg">Contact the studio</TactileLink></div></>;
   if (!data) return <><Nav /><Loading /></>;
   const b = data.booking, due = data.due;
   const amount = plan === "deposit" && due.deposit ? due.deposit : due.full;

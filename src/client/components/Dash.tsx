@@ -16,7 +16,7 @@ export function DashShell({ items, dark, title, action, children }: { items: Nav
   return (
     <div className="dash">
       <aside className={`side ${dark ? "dark" : ""}`}>
-        <Link to="/" className="brandmark"><Mark tone={dark ? "neon" : "ink"} /> Psych Records</Link>
+        <Link to="/" className="brandmark"><Mark tone={dark ? "neon" : "ink"} size={36} /> Psych Records</Link>
         <nav className="stack gap4">
           {items.map((i) => (
             <NavLink key={i.to} to={i.to} end={i.end} className={cls(i.locked)} title={i.locked ? "You do not have access" : undefined}>

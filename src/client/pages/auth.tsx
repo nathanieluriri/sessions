@@ -11,7 +11,7 @@ function AuthShell({ photo, quote, by, title, sub, children }: { photo: string; 
   return (
     <div className="authsplit">
       <div className="authphoto" style={{ backgroundImage: `url(${photo})` }}>
-        <Link to="/" className="brandmark" style={{ top: 32, left: 32, color: "#fff" }}><Mark tone="neon" /> Psych Records</Link>
+        <Link to="/" className="brandmark" style={{ top: 32, left: 32, color: "#fff" }}><Mark tone="neon" size={40} /> Psych Records</Link>
         <div style={{ left: 32, right: 32, bottom: 40 }} className="stack gap16">
           <Waveform className="authwave" step={10} />
           <p style={{ fontSize: 26, lineHeight: 1.2, letterSpacing: "-.02em", fontWeight: 500, maxWidth: 460 }}>“{quote}”</p>

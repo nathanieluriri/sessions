@@ -37,7 +37,7 @@ src/
   shared/                 permission list shared by the Worker and the app
   client/                 React app (Vite): pages, admin, components and styles
 migrations/               D1 schema and seed data
-scripts/                  seed generator and demo recorder
+scripts/                  seed generator, demo recorder and logo asset builder
 tests/                    unit tests
 docs/                     admin guide, operations and requirements coverage
 ```
@@ -65,7 +65,7 @@ To seed a different password, run `SEED_PASSWORD='...' npm run db:seed:sql` befo
 
 Without a Paystack key the app uses a simulated Paystack checkout that still goes through server verification. Without a Resend key emails are only written to the outbox (Audit log, Email outbox in the dashboard).
 
-The seed content (rooms, equipment, team, portfolio, testimonials, contact details and the logo mark) is sample content to replace before launch. The dashboard's launch checklist lists what is left.
+The seed content (rooms, equipment, team, portfolio, testimonials and contact details) is sample content to replace before launch. The dashboard's launch checklist lists what is left.
 
 ## Deploy to Cloudflare
 
@@ -79,6 +79,14 @@ See [docs/OPERATIONS.md](docs/OPERATIONS.md) for the full steps, secrets, custom
 6. In Paystack set the webhook URL to `https://<your-domain>/api/payments/webhook`.
 
 The cron trigger (every 5 minutes) releases expired holds, requests and unpaid approvals, sends session reminders and marks past sessions completed.
+
+## Logo assets
+
+The logo images in `src/client/public` (the emblem and lockup WebP sets in `brand/`, the share image `brand/og.png`, the favicon set and the app icons) are generated from the two files the studio supplied, a tiger head SVG and the full lockup SVG, which are not kept in the repo. To rebuild them, with Python, Pillow and numpy installed:
+
+```
+python3 scripts/make-brand.py path/to/tiger-head.svg path/to/lockup.svg
+```
 
 ## Demo video
 

@@ -24,8 +24,13 @@ export async function sitemap(env: Env, origin: string) {
   return new Response(xml, { headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
 }
 
-export async function media(env: Env, key: string) {
-  const obj = env.MEDIA ? await env.MEDIA.get(key) : null;
+/** Admin image uploads are the only public objects. Portal files share the bucket but are served only by the gated download routes. */
+const PUBLIC_KEY = /^\d{4}-\d{2}\/[0-9a-f-]{36}\.(?:jpg|png|webp|gif)$/;
+
+export async function media(env: Env, path: string) {
+  let key = "";
+  try { key = decodeURIComponent(path); } catch { /* a malformed escape matches nothing */ }
+  const obj = env.MEDIA && PUBLIC_KEY.test(key) ? await env.MEDIA.get(key) : null;
   if (!obj) return new Response("Not found", { status: 404 });
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
@@ -52,12 +57,14 @@ export async function page(request: Request, env: Env) {
     const s = await catalogRepo.serviceBySlug(env.DB, service[1]);
     if (s) { title = `${s.name} | ${name}`; description = s.description; image = s.image_url; }
   }
+  const brandImage = !image;
+  if (brandImage) image = "/brand/og.png";
   if (image.startsWith("/")) image = url.origin + image;
   const hidden = content.seo_indexing !== "1" || PRIVATE_PREFIXES.some((p) => path === p || path.startsWith(p.endsWith("/") ? p : `${p}/`));
   const social = [content.social_instagram, content.social_tiktok, content.social_youtube, content.social_x].filter((s) => s && !/^https?:\/\/(www\.)?[a-z]+\.com\/?$/.test(s));
   const business = {
     "@context": "https://schema.org", "@type": "LocalBusiness", name, url: url.origin, description: content.seo_description || undefined,
-    telephone: content.contact_phone || undefined, email: content.contact_email || undefined, image: image || undefined,
+    telephone: content.contact_phone || undefined, email: content.contact_email || undefined, image, logo: `${url.origin}/icon-512.png`,
     address: content.studio_address ? { "@type": "PostalAddress", streetAddress: content.studio_address, addressCountry: "NG" } : undefined,
     openingHoursSpecification: hours.filter((h) => h.is_open).map((h) => ({ "@type": "OpeningHoursSpecification", dayOfWeek: DAYS[h.weekday], opens: hhmm(h.open_min), closes: hhmm(h.close_min) })),
     sameAs: social.length ? social : undefined,
@@ -67,7 +74,8 @@ export async function page(request: Request, env: Env) {
     `<link rel="canonical" href="${esc(url.origin + path)}">`,
     `<meta property="og:type" content="website"><meta property="og:site_name" content="${esc(name)}"><meta property="og:title" content="${esc(title)}">`,
     `<meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(url.origin + path)}">`,
-    image ? `<meta property="og:image" content="${esc(image)}"><meta name="twitter:card" content="summary_large_image">` : `<meta name="twitter:card" content="summary">`,
+    `<meta property="og:image" content="${esc(image)}"><meta name="twitter:card" content="summary_large_image">`,
+    brandImage ? `<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="${esc(name)}">` : "",
     hidden ? `<meta name="robots" content="noindex, nofollow">` : "",
     content.gsc_verification ? `<meta name="google-site-verification" content="${esc(content.gsc_verification)}">` : "",
     path === "/" || path === "/contact" ? `<script type="application/ld+json">${JSON.stringify(business).replace(/</g, "\\u003c")}</script>` : "",

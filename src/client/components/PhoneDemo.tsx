@@ -45,7 +45,7 @@ export function PhoneDemo({ data, screen, className, style }: { data: DemoData; 
         <div className="pstatus"><b>9:41</b><span><i className="sig" /><i className="wifi" /><i className="bat" /></span></div>
 
         <div className={`pv ${at(0)}`}>
-          <div className="pbar"><Mark tone="ink" size={26} /><b>Psych Records</b><span className="pav">AE</span></div>
+          <div className="pbar"><Mark tone="ink" size={28} /><b>Psych Records</b><span className="pav">AE</span></div>
           <p className="phi">Hi Amaka,</p>
           <h4 className="ptitle">What are we making today?</h4>
           <div className="ptiles">
@@ -94,7 +94,7 @@ export function PhoneDemo({ data, screen, className, style }: { data: DemoData; 
           <h4 className="ptitle">You're booked!</h4>
           <p className="psub">Your ticket is in your inbox.</p>
           <div className="pticket">
-            <div className="pt-top"><span>Psych Records</span><span>{data.room}</span></div>
+            <div className="pt-top"><span className="pt-brand"><Mark size={16} />Psych Records</span><span>{data.room}</span></div>
             <b>{data.service}</b>
             <div className="pt-grid"><div><span>Date</span><b>{data.day}</b></div><div><span>Start</span><b>{data.time}</b></div></div>
             <div className="pt-stub"><div><span>Ref</span><b>{data.reference}</b></div><i className="pt-code" /></div>

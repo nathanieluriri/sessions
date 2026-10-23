@@ -54,7 +54,7 @@ function Checklist({ setup }: { setup: Record<string, boolean> }) {
     [setup.email, "Turn on email delivery", "Add a Resend API key so booking emails reach clients. Until then they are logged in the outbox.", "/admin/audit"],
     [setup.domain, "Connect your domain", "Point your own domain at the site so links and emails use it.", ""],
     [setup.contact, "Check contact details", "Replace the sample phone, email, address and WhatsApp number.", "/admin/website"],
-    [false, "Replace sample content", "Swap the sample team, equipment, portfolio, testimonials and photos for real ones, and send the official logo.", "/admin/website"],
+    [false, "Replace sample content", "Swap the sample team, equipment, portfolio, testimonials and photos for real ones.", "/admin/website"],
     [setup.analytics, "Add analytics", "Paste a Cloudflare Web Analytics token or a Google Analytics ID.", "/admin/website"],
     [setup.indexing, "Allow search engines", "Turn on indexing once everything above is done.", "/admin/website"],
   ];
