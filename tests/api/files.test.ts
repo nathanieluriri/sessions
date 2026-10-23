@@ -428,14 +428,14 @@ describe("delivery and the payment gate", () => {
         await res.arrayBuffer();
       }
     }
-    const form = new FormData();
-    form.set("file", new File([noise(3000, 1)], "cover.png", { type: "image/png" }));
-    const saved = await boss.call("POST", `${STAFF}/uploads`, { raw: form });
-    expect(saved.status).toBe(200);
-    const shown = await worker.fetch!(new Request(`https://test.local${saved.body.url}`) as never, h.env, h.ctx);
+    const image = `2026-10/${crypto.randomUUID()}.png`;
+    await h.env.MEDIA!.put(image, noise(3000, 1), { httpMetadata: { contentType: "image/png" } });
+    const shown = await worker.fetch!(new Request(`https://test.local/media/${image}`) as never, h.env, h.ctx);
     expect(shown.status).toBe(200);
     expect(shown.headers.get("content-type")).toBe("image/png");
     await shown.arrayBuffer();
+    const broken = await worker.fetch!(new Request("https://test.local/media/%E0%A4%A") as never, h.env, h.ctx);
+    expect(broken.status).toBe(404);
   }, 60000);
 
   it("does not unlock a delivery again when a refund brings the balance back", async () => {

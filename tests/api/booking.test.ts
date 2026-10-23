@@ -19,7 +19,7 @@ beforeAll(async () => {
     { name: "Studio snacks", price_kobo: 500_000, category: "music" }, { name: "Stem pack", price_kobo: 1_000_000, category: "music", service_slug: "mixing-mastering" },
     { name: "Rush masters", category: "music", service_slug: "mixing-mastering", pricing: "quote" }, { name: "Exclusive concierge", price_kobo: 1_234_500, category: "exclusive" },
   ]) {
-    const r = await boss.post("/api/admin/collections/extras", { price_kobo: 0, category: "", service_slug: "", pricing: "fixed", description: "", active: 1, ...e });
+    const r = await boss.post("/api/admin/collections/extras", { price_kobo: 0, service_slug: "", pricing: "fixed", description: "", active: 1, ...e });
     if (r.status !== 200) throw new Error(`extra ${e.name} failed: ${JSON.stringify(r.body)}`);
   }
 }, 120000);
@@ -29,7 +29,8 @@ afterEach(() => vi.useRealTimers());
 // Every test books its own week, so slots never collide between tests.
 const used: Record<number, number> = {};
 const fresh = (weekday: number) => nextWeekday(weekday, 8 + 7 * (used[weekday] = (used[weekday] ?? -1) + 1));
-const monday = () => fresh(1);
+let turn = 0;
+const monday = () => fresh(1 + (turn++ % 5));
 const saturday = () => fresh(6);
 
 const who = { artistName: "Kemi B", contactName: "Kemi Balogun", contactEmail: "kemi@example.com", contactPhone: "+234 805 111 2233" };
