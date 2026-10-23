@@ -135,7 +135,7 @@ export function UploadQueue({ items, notes, onRetry, onCancel, onDismiss }: { it
                 <button type="button" className="linkbtn" onClick={() => (failed ? onDismiss(x.key) : onCancel(x.key))} aria-label={`${failed ? "Remove" : "Cancel"} ${x.name}`}>{failed ? "Remove" : "Cancel"}</button>
               </div>
             </div>
-            <div className="bar" role="progressbar" aria-label={`Uploading ${x.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={failed ? pct : x.state === "queued" ? 0 : pct}><i style={{ width: `${pct}%` }} /></div>
+            <div className="pbar" role="progressbar" aria-label={`Uploading ${x.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={failed ? pct : x.state === "queued" ? 0 : pct}><i style={{ width: `${pct}%` }} /></div>
             {x.error && <div className="uperr" role="alert">{x.error}</div>}
           </div>
         );

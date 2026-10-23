@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Icon, Mark } from "./brand";
 import { roleLabel, useAuth } from "../lib/auth";
 import { addDays, initials, lagosToday, shortDate, t12 } from "../lib/format";
+import { windowLabel } from "../lib/booking";
 import { api } from "../lib/api";
 import { Tactile } from "./kitchen";
 
@@ -61,17 +62,18 @@ export const Stat = ({ label, value, note }: { label: string; value: ReactNode; 
 
 export const Empty = ({ children }: { children: ReactNode }) => <div className="panel muted" style={{ textAlign: "center" }}>{children}</div>;
 
-export function SlotPicker({ duration, room, value, onChange, days: count = 21, from }: { duration: number; room?: string | null; value: { date: string; start: number } | null; onChange: (v: { date: string; start: number }) => void; days?: number; from?: string }) {
+export function SlotPicker({ duration, room, packageId, value, onChange, days: count = 21, from }: { duration: number; room?: string | null; packageId?: string | null; value: { date: string; start: number } | null; onChange: (v: { date: string; start: number }) => void; days?: number; from?: string }) {
   const today = lagosToday();
   const days = Array.from({ length: count }, (_, i) => addDays(from ?? today, from ? i : i + 1));
   const [date, setDate] = useState(value?.date ?? days[0]);
-  const [slots, setSlots] = useState<{ start: number; available: boolean }[] | null>(null);
-  useEffect(() => { setSlots(null); api(`/availability/day?date=${date}&duration=${duration}&room=${room ?? ""}`).then((r) => setSlots(r.slots)); }, [date, duration, room]);
+  const [slots, setSlots] = useState<{ start: number; end?: number; label?: string; available: boolean }[] | null>(null);
+  const scope = packageId ? `package=${packageId}` : `duration=${duration}&room=${room ?? ""}`;
+  useEffect(() => { setSlots(null); api(`/availability/day?date=${date}&${scope}`).then((r) => setSlots(r.slots)).catch(() => setSlots([])); }, [date, scope]);
   return (
     <div className="stack gap12">
       <div className="daypick">{days.map((d) => <button key={d} type="button" className={d === date ? "on" : ""} onClick={() => setDate(d)}>{shortDate(d)}</button>)}</div>
-      {!slots ? <span className="muted small">Loading times…</span> : slots.length === 0 ? <span className="muted small">Closed or fully booked on this day.</span> : (
-        <div className="slotpick">{slots.map((s) => <button key={s.start} type="button" disabled={!s.available} className={value?.date === date && value.start === s.start ? "on" : ""} onClick={() => onChange({ date, start: s.start })}>{t12(s.start)}</button>)}</div>
+      {!slots ? <span className="muted small">Loading times…</span> : slots.length === 0 ? <span className="muted small">No open times on this day.</span> : (
+        <div className="slotpick">{slots.map((s) => <button key={s.start} type="button" disabled={!s.available} className={value?.date === date && value.start === s.start ? "on" : ""} onClick={() => onChange({ date, start: s.start })}>{s.end != null ? windowLabel(date, s.start, s.end) : t12(s.start)}</button>)}</div>
       )}
     </div>
   );

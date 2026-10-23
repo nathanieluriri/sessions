@@ -9,54 +9,56 @@ import { PhoneDemo, type DemoData } from "../components/PhoneDemo";
 import { Swirl } from "../components/Swirl";
 import { Intro, introPending } from "../components/Intro";
 import { CardArt, Eq, LineArt, Pixels, Sticker } from "../components/art";
-import { HERO_PHOTO, depositOf, roomOf, useCatalog, useContent, type Catalog, type Package, type Service, type Site } from "../lib/catalog";
-import { addDays, hrs, initials, lagosToday, naira, shortDate, t12 } from "../lib/format";
+import { HERO_PHOTO, depositOf, needsApproval, roomOf, useCatalog, useContent, type Catalog, type Package, type Service, type Site } from "../lib/catalog";
+import { addDays, initials, lagosToday, naira, shortDate, t12 } from "../lib/format";
+import { featuredPackages, fixedPackages, revisionLabel, deliveryLabel, savings, windowLabel, windowsOn } from "../lib/booking";
 import { api } from "../lib/api";
 import { clamp, prefersStill, useInView, useReveal, useScrollFrame } from "../lib/motion";
 import { useStartBooking } from "./public";
 import { WorkCard } from "./portfolio";
 
-interface OpenDay { date: string; slots: { start: number; available: boolean }[] }
+interface OpenDay { date: string; slots: { id: string; label: string; start: number; end: number; available: boolean }[] }
 
-const SHOWCASE = ["vocal-recording", "beat-production", "mixing", "music-videos", "video-podcast", "podcast-recording", "artist-portraits", "social-content"];
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const demoPackage = (cat: Catalog | null) => cat?.packages.find((p) => p.scheduling === "slot" && p.slot_kind === "day" && p.pricing === "fixed" && p.active);
 
 function useOpenDay(cat: Catalog | null) {
   const [day, setDay] = useState<OpenDay | null>(null);
-  const room = cat ? roomOf(cat, cat.packages.find((p) => p.slug === "2-hour"))?.id ?? "" : null;
+  const pkg = demoPackage(cat)?.id ?? (cat ? "" : null);
   useEffect(() => {
-    if (room === null) return;
+    if (!pkg) return;
     let live = true;
     (async () => {
       for (let i = 1; i <= 14 && live; i++) {
         const date = addDays(lagosToday(), i);
-        const r = await api<{ slots: OpenDay["slots"] }>(`/availability/day?date=${date}&duration=120&room=${room}`).catch(() => null);
+        const r = await api<{ slots: OpenDay["slots"] }>(`/availability/day?date=${date}&package=${pkg}`).catch(() => null);
         const slots = r?.slots ?? [];
-        if (slots.some((s) => s.available && s.start >= 720)) { if (live) setDay({ date, slots }); return; }
+        if (slots.some((s) => s.available)) { if (live) setDay({ date, slots }); return; }
       }
     })();
     return () => { live = false; };
-  }, [room]);
+  }, [pkg]);
   return day;
 }
 
+const bookableServices = (cat: Catalog) => [...cat.categories].sort((a, b) => a.sort - b.sort).flatMap((c) => cat.services.filter((x) => x.category === c.slug && fixedPackages(cat, x).length > 0));
+
 function demoData(cat: Catalog | null, day: OpenDay | null): DemoData {
-  const pkg = cat?.packages.find((p) => p.slug === "2-hour");
-  const price = pkg?.price_kobo ?? 4_500_000;
-  const deposit = cat && pkg ? depositOf(cat, pkg, price) : price / 2;
+  const pkg = demoPackage(cat);
+  const svc = cat?.services.find((s) => pkg && (pkg.service_slug ? s.slug === pkg.service_slug : s.category === pkg.service_category));
+  const price = pkg?.price_kobo ?? 0;
+  const deposit = cat && pkg ? depositOf(cat, pkg, price) : price;
   const date = day?.date ?? addDays(lagosToday(), 2);
-  const starts = [600, 720, 840, 960, 1080];
-  const free = (m: number) => day?.slots.find((s) => s.start === m)?.available ?? m !== 840;
-  const slotIndex = Math.max(1, starts.findIndex((m, k) => k >= 1 && free(m)));
+  const wins = day?.slots ?? (cat ? windowsOn(cat.sessions, "day", date).map((s) => ({ id: s.id, label: s.label, start: s.start_min, end: s.end_min, available: true })) : []);
+  const slotIndex = Math.max(0, wins.findIndex((w) => w.available));
   const days = [-1, 0, 1, 2, 3].map((n) => { const d = addDays(date, n), w = new Date(`${d}T00:00:00Z`).getUTCDay(); return { wd: WEEKDAY[w], d: String(Number(d.slice(8))) }; });
   const yymm = lagosToday().slice(2, 4) + lagosToday().slice(5, 7);
+  const tiles = cat ? bookableServices(cat).slice(0, 4).map((x) => x.name) : [];
   return {
-    service: cat?.services.find((s) => s.slug === "vocal-recording")?.name ?? "Vocal recording",
-    pkg: pkg?.name ?? "2-Hour Session", room: (cat && roomOf(cat, pkg)?.name) ?? "Studio A",
-    price: naira(price), deposit: naira(deposit), balance: naira(price - deposit),
+    service: svc?.name ?? "Recording", pkg: pkg?.name ?? "Recording session", room: (cat && roomOf(cat, pkg)?.name) ?? "Studio A",
+    price: naira(price), deposit: deposit < price ? naira(deposit) : null, balance: naira(price - deposit), tiles: [...tiles, "", "", "", ""].slice(0, 4),
     day: shortDate(date).replace(",", ""), days, dayIndex: 1,
-    slots: starts.map((m) => ({ label: `${t12(m)} to ${t12(m + 120)}`, booked: !free(m) })),
-    slotIndex, time: t12(starts[slotIndex]), reference: `PR-${yymm}-0042`,
+    slots: wins.map((w) => ({ label: windowLabel(date, w.start, w.end), booked: !w.available })), slotIndex, time: wins[slotIndex] ? t12(wins[slotIndex].start) : "", reference: `PR-${yymm}-0042`,
   };
 }
 
@@ -114,12 +116,12 @@ function Ribbon({ items }: { items: string[] }) {
   );
 }
 
-function Values({ rooms }: { rooms: number }) {
+function Values({ rooms, daily }: { rooms: number; daily: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const cards = [
-    { art: "streaks", line: "crew", title: "Crew included", body: "Every booking comes with an engineer, producer or technician who knows the room." },
-    { art: "glitch", line: "live", title: "Live availability", body: "Real open times for every room, updated the moment someone books.", light: true },
-    { art: "spectrum", line: "deposit", title: "Deposit or pay in full", body: "Hold your slot with a deposit and clear the balance before you arrive." },
+    { art: "streaks", line: "crew", title: "Crew included", body: "Recording sessions come with an engineer at the desk who knows the room." },
+    { art: "glitch", line: "live", title: "Fixed session times", body: `${daily ? `${daily} recording sessions every day` : "Recording sessions every day"}, with live availability that updates the moment someone books.`, light: true },
+    { art: "spectrum", line: "deposit", title: "Delivered in your portal", body: "Beats, mixes and finished tracks arrive in your portal, never by email." },
     { art: "chrome", line: "rooms", title: `${rooms} rooms, one crew`, body: "A recording room, a production suite, a podcast set and a video and photo stage." },
   ];
   useEffect(() => {
@@ -177,10 +179,10 @@ function Values({ rooms }: { rooms: number }) {
 }
 
 const STEPS: [string, string, string][] = [
-  ["mic", "Pick what you’re making", "Vocals, beats, music videos, podcasts or a photo shoot. Every booking comes with crew."],
-  ["calendar", "Take a live slot", "Real open times for each room. Your slot is held for you while you check out."],
-  ["card", "Pay a deposit or in full", "Card, bank transfer or USSD through Paystack. The booking confirms the moment the payment is verified."],
-  ["receipt", "Walk in and create", "Your ticket and receipt land in your inbox, with a reminder the day before. The crew is ready when you arrive."],
+  ["mic", "Pick what you’re making", "Recording, beats, mixing and mastering, full production, or an EP or album."],
+  ["calendar", "Choose a session", "Pick one of the open session times. It is held for you while you check out. Remote orders skip the calendar."],
+  ["card", "Pay securely", "Card, bank transfer or USSD through Paystack. The booking confirms the moment the payment is verified."],
+  ["receipt", "Walk in or collect online", "Your ticket and receipt land in your inbox. Remote orders are delivered in your portal."],
 ];
 
 function Steps({ demo, photo }: { demo: DemoData; photo: string }) {
@@ -227,8 +229,8 @@ function Showcase({ cat }: { cat: Catalog }) {
   const moved = useRef(false);
   const settle = useRef(0);
   const [boxRef, inView] = useInView<HTMLElement>(0.35);
-  const chosen = SHOWCASE.map((s) => cat.services.find((x) => x.slug === s)).filter(Boolean) as Service[];
-  const services = chosen.length >= 4 ? chosen : cat.services.slice(0, 8);
+  const chosen = bookableServices(cat).slice(0, 8);
+  const services: Service[] = chosen.length >= 4 ? chosen : cat.services.slice(0, 8);
   const n = services.length;
   const [active, setActive] = useState(n);
   const [held, setHeld] = useState(false);
@@ -293,7 +295,7 @@ function Showcase({ cat }: { cat: Catalog }) {
       <div className="wrap lhead center">
         <Badge>What we do</Badge>
         <h2 className="ltitle" data-split><Split text="Made for every kind" /><br /><Heading lead="of" accent="project." from={4} /></h2>
-        <p className="lsub" data-reveal>Records, music videos, podcasts and shoots. Four rooms, one crew, your vision.</p>
+        <p className="lsub" data-reveal>Recording, beats, mixing and mastering, full production, and premium EP and album offers.</p>
       </div>
       <div className="ctrack" ref={track} onScroll={onScroll} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
         onClickCapture={(e) => { if (moved.current) { e.preventDefault(); e.stopPropagation(); moved.current = false; } }} onDragStart={(e) => e.preventDefault()}>
@@ -413,33 +415,35 @@ function Work({ site }: { site: Site }) {
 
 function Plans({ cat }: { cat: Catalog }) {
   const start = useStartBooking();
-  const featured = ["half-day", "video-podcast-2-hour", "photo-session-2-hour"].map((s) => cat.packages.find((p) => p.slug === s)).filter(Boolean) as Package[];
-  const book = (p: Package) => start({ serviceSlug: cat.services.find((s) => s.category === p.service_category)?.slug, packageId: p.id });
+  const featured = featuredPackages(cat);
+  const serviceOf = (p: Package) => cat.services.find((s) => (p.service_slug ? s.slug === p.service_slug : s.category === p.service_category));
   const variants: TactileVariant[] = ["neon", "yellow", "coral"];
   return (
     <section className="lsec plans2" id="pricing" data-tone="dark" data-nav="pricing">
       <div className="wrap lhead center">
         <Badge>Packages</Badge>
         <h2 className="ltitle" data-split><Heading lead="Your next project starts" accent="here." /></h2>
-        <p className="lsub" data-reveal>Pick a package. Pay a deposit to hold it and the balance before you arrive.</p>
+        <p className="lsub" data-reveal>Clear prices for every package, locked when you book.</p>
       </div>
       <div className="wrap">
-        <div className="pcards">
+        <div className="pcards" style={{ "--n": Math.max(1, featured.length) } as CSSProperties}>
           {featured.map((p, i) => {
-            const deposit = depositOf(cat, p, p.price_kobo), hot = !!p.featured;
+            const deposit = depositOf(cat, p, p.price_kobo), hot = !!p.featured, sv = savings(p), approval = needsApproval(cat, p);
+            const meta = [approval ? "Needs studio approval" : deposit < p.price_kobo ? `${naira(deposit)} deposit to book` : "Paid in full when you book", deliveryLabel(p.turnaround_days), revisionLabel(p.revision_limit)].filter(Boolean);
             return (
               <article key={p.id} className={`pcard ${hot ? "hot" : ""}`} data-reveal style={{ transitionDelay: `${i * 90}ms` }}>
-                {hot && <span className="ptag">Most booked</span>}
+                {hot && <span className="ptag">Featured</span>}
                 <h3>{p.name}</h3>
-                <b className="pprice">{naira(p.price_kobo)}</b>
-                <span className="pmeta">{deposit < p.price_kobo ? `${naira(deposit)} deposit to book` : "Paid in full when you book"} · {hrs(p.duration_min)}</span>
+                <b className="pprice">{naira(p.price_kobo)}{p.unit && <span className="punit"> {p.unit}</span>}</b>
+                {sv && <span className="pmeta"><s>{naira(sv.regular)}</s> · Save {naira(sv.kobo)} ({sv.percent}%)</span>}
+                <span className="pmeta">{meta.join(" · ")}</span>
                 <ul>{p.includes.map((x) => <li key={x}><Eq />{x}</li>)}</ul>
-                <Tactile variant={variants[i % 3]} size="lg" block onClick={() => book(p)}>Book {p.name}</Tactile>
+                <Tactile variant={variants[i % 3]} size="lg" block onClick={() => start({ serviceSlug: serviceOf(p)?.slug, packageId: p.id })}>{approval ? "Request" : "Book"} {p.name}</Tactile>
               </article>
             );
           })}
         </div>
-        <div className="lmore" data-reveal><TactileLink to="/packages" variant="light" size="lg">Learn more <Icon name="northeast" size={16} /></TactileLink></div>
+        <div className="lmore" data-reveal><TactileLink to="/packages" variant="light" size="lg">See all pricing <Icon name="northeast" size={16} /></TactileLink></div>
       </div>
     </section>
   );
@@ -475,7 +479,7 @@ function Final() {
         <div className="fcard" data-reveal>
           <div className="fcopy">
             <h2 className="ltitle" data-split><Split text="Ready to create?" /><br /><span className="neon"><Split text="Book your session." from={3} /></span></h2>
-            <p>Live availability, a deposit to hold your slot and a crew ready when you arrive.</p>
+            <p>Fixed session times, live availability and a crew ready when you arrive.</p>
             <div className="fbtns"><TactileLink to="/book" variant="neon" size="lg">Book a session <Icon name="northeast" size={16} /></TactileLink><TactileLink to="/quote" variant="light" size="lg">Request a quote</TactileLink></div>
           </div>
           <Sticker kind="headphones" className="fsticker" />
@@ -502,10 +506,10 @@ export function Home() {
       {intro && <Intro onDone={done} />}
       <div className="landing" ref={root}>
         <Hero play={!intro && !!site} badge={badge} demo={demo} title={c.hero_title ?? "Record, shoot and create"} accent={c.hero_accent ?? "under one roof."}
-          sub={c.hero_subtitle ?? "Music recording, video production, podcasts and photography. Check live availability, book a room, and pay a deposit or the full amount online."} />
-        <Ribbon items={["Vocal recording", "Beat production", "Mixing and mastering", "Music videos", "Video podcasts", "Artist portraits", "Voice-over", "Content days"]} />
+          sub={c.hero_subtitle ?? "Book recording sessions, beats, mixing and mastering online, with fixed session times and live availability."} />
+        <Ribbon items={cat ? cat.services.filter((s) => s.active).slice(0, 10).map((s) => s.name) : ["Recording", "Beat production", "Mixing and mastering", "Full production"]} />
         {cat && site && <>
-          <Values rooms={cat.rooms.length} />
+          <Values rooms={cat.rooms.length} daily={cat.sessions.filter((s) => s.active && s.kind === "day" && s.weekday == null).length} />
           <Steps demo={demo} photo={c.hero_image || HERO_PHOTO} />
           <Showcase cat={cat} />
           <Rooms cat={cat} />

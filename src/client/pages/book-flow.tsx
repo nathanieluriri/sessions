@@ -115,7 +115,7 @@ export function Shell({ at, title, sub, cat, d, hold, children, back, next, next
         <div className="stickybar">
           {backTo && <TactileLink to={backTo} variant="light" size="lg" className="stickyback" aria-label="Back">‹</TactileLink>}
           <div className="grow stickyinfo"><b>{pkg ? naira(total) : "Choose"}</b><div className="caption">{caption}</div></div>
-          <Btn arrow onClick={next} disabled={nextDisabled || busy}>{busy ? "Please wait…" : nextLabel}</Btn>
+          <Btn arrow onClick={next} disabled={nextDisabled || busy}>{busy ? "Please wait…" : (nextLabel ?? "").length > 16 ? "Continue" : nextLabel}</Btn>
         </div>
       )}
     </>
@@ -314,7 +314,7 @@ export function BookTime() {
           <div className="row gap16 wrapflex caption">
             <span className="row gap4"><i className="key" style={{ background: "var(--success)" }} />Open</span>
             {mode === "slot" && <span className="row gap4"><i className="key" style={{ background: "var(--coral)" }} />Few left</span>}
-            <span>Crossed out is fully booked{mode === "slot" ? ". Light numbers have no sessions." : "."}</span>
+            <span>Crossed out: fully booked{mode === "slot" ? ". Boxed: no sessions that day." : "."}</span>
           </div>
         </div>
         <div className="card stack gap16" ref={tilesRef} style={{ scrollMarginTop: 96 }}>
@@ -346,7 +346,7 @@ export function BookTime() {
                 {tiles.map((s) => {
                   const soon = tooSoon(s), open = s.available && !soon;
                   return (
-                    <button key={s.key} type="button" className={`stile ${d.start === s.start ? "on" : ""}`} disabled={!open} aria-pressed={d.start === s.start} onClick={() => up({ start: s.start })}>
+                    <button key={s.key} type="button" className={`sesstile ${d.start === s.start ? "on" : ""}`} disabled={!open} aria-pressed={d.start === s.start} onClick={() => up({ start: s.start })}>
                       <span className="grow stack"><b>{windowLabel(d.date!, s.start, s.end ?? s.start)}</b><span className="small muted">{s.label}</span></span>
                       <span className={`tag ${open ? "success" : ""}`}>{open ? "Open" : soon ? "Too soon" : "Booked"}</span>
                     </button>

@@ -4,7 +4,8 @@ import { Icon, Lockup, Mark, Socials } from "./brand";
 import { useAuth } from "../lib/auth";
 import { TactileAnchor, TactileLink } from "./kitchen";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
-import { hm } from "../lib/format";
+import { t12 } from "../lib/format";
+import { nightLines } from "../lib/booking";
 import { prefersStill } from "../lib/motion";
 import { introPending } from "./Intro";
 
@@ -12,18 +13,18 @@ import { introPending } from "./Intro";
 const LINKS: [string, string, string][] = [["/about", "About", "about"], ["/services", "Services", "services"], ["/studio", "Studio", "studio"], ["/portfolio", "Portfolio", "portfolio"], ["/packages", "Pricing", "pricing"], ["/contact", "Contact", "contact"]];
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/** Groups days with the same hours, e.g. "Mon to Sat · 10:00 to 22:00". */
-export function hoursSummary(hours: Catalog["hours"]) {
+/** Groups days with the same hours, e.g. "Mon to Sun · 10:00am to 7:00pm", then adds a line for each night session. */
+export function hoursSummary(hours: Catalog["hours"], sessions: Catalog["sessions"] = []) {
   const week = [1, 2, 3, 4, 5, 6, 0].map((d) => hours.find((h) => h.weekday === d)).filter(Boolean) as Catalog["hours"];
   const out: { days: string; time: string }[] = [];
   for (let i = 0; i < week.length;) {
     let j = i;
     const key = (h: Catalog["hours"][number]) => (h.is_open ? `${h.open_min}-${h.close_min}` : "closed");
     while (j + 1 < week.length && key(week[j + 1]) === key(week[i])) j++;
-    out.push({ days: i === j ? DAY[week[i].weekday] : `${DAY[week[i].weekday]} to ${DAY[week[j].weekday]}`, time: week[i].is_open ? `${hm(week[i].open_min)} to ${hm(week[i].close_min)}` : "Closed" });
+    out.push({ days: i === j ? DAY[week[i].weekday] : `${DAY[week[i].weekday]} to ${DAY[week[j].weekday]}`, time: week[i].is_open ? `${t12(week[i].open_min)} to ${t12(week[i].close_min)}` : "Closed" });
     i = j + 1;
   }
-  return out;
+  return [...out, ...nightLines(sessions)];
 }
 
 export function usePageTitle(title?: string) {
@@ -64,11 +65,26 @@ export function Nav() {
   const landing = loc.pathname === "/";
   const [enter] = useState(() => { const first = !navEntered; navEntered = true; return first; });
   const [late] = useState(() => landing && introPending());
+  const [veil, setVeil] = useState("");
   const home = user ? (user.role === "client" ? "/account" : "/admin") : "/login";
   const settle = () => setAct((g) => glideTo(g, links.current?.querySelector<HTMLElement>("a.active")));
   const hover = (el: HTMLElement) => setHov((g) => glideTo(g, el));
   const leave = () => setHov((g) => glideTo(g));
   useEffect(() => setOpen(false), [loc.pathname]);
+  useEffect(() => {
+    if (landing) { setVeil(""); return; }
+    let raf = 0;
+    const read = () => {
+      raf = 0;
+      if (window.scrollY < 8) { setVeil(""); return; }
+      const dark = Array.from(document.querySelectorAll(".footer, .darksec, .confpage")).some((el) => { const r = el.getBoundingClientRect(); return r.top <= 40 && r.bottom > 40; });
+      setVeil(dark ? "veil dark" : "veil");
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(read); };
+    read();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => { window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
+  }, [landing, loc.pathname]);
   useEffect(() => {
     settle();
     document.fonts?.ready.then(settle);
@@ -84,7 +100,7 @@ export function Nav() {
   const hoverProps = { onMouseEnter: (e: MouseEvent<HTMLElement>) => hover(e.currentTarget), onFocus: (e: { currentTarget: HTMLElement }) => hover(e.currentTarget), onBlur: leave };
   return (
     <>
-      <header className={`nav ${enter ? "enter" : ""}`} style={late ? ({ "--nd": "2.2s" } as CSSProperties) : undefined}>
+      <header className={`nav ${enter ? "enter" : ""} ${veil}`} style={late ? ({ "--nd": "2.2s" } as CSSProperties) : undefined}>
         <div className="navin">
           <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home" onClick={landing ? jumpTo("") : undefined}><Mark tone="neon" size={40} /><span>Psych Records</span></Link>
           <div className="npill nlinks" ref={links} onMouseLeave={leave}>
@@ -152,7 +168,7 @@ export function Footer() {
           <div className="fcol">
             <h4>Visit</h4>
             {c.studio_address && <p><Icon name="pin" size={16} />{c.studio_address}</p>}
-            {cat && hoursSummary(cat.hours).map((h) => <p key={h.days}><Icon name="clock" size={16} />{h.days} · {h.time}</p>)}
+            {cat && hoursSummary(cat.hours, cat.sessions).map((h) => <p key={h.days}><Icon name="clock" size={16} />{h.days} · {h.time}</p>)}
             {c.contact_phone && <a href={`tel:${c.contact_phone.replace(/\s/g, "")}`}><Icon name="phone" size={16} />{c.contact_phone}</a>}
             {c.contact_email && <a href={`mailto:${c.contact_email}`}><Icon name="mail" size={16} />{c.contact_email}</a>}
           </div>

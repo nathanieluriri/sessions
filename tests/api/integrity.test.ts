@@ -208,7 +208,9 @@ describe("staff bookings in the past", () => {
     const forcedSlot = await boss.post("/api/admin/bookings", manual(REC, yesterday, 600, { ignoreHours: true }));
     expect(forcedSlot.status).toBe(400);
     expect((await boss.post("/api/admin/bookings", manual(PODCAST, yesterday, 600))).status).toBe(400);
-    const forced = await boss.post("/api/admin/bookings", manual(PODCAST, yesterday, 600, { ignoreHours: true }));
+    expect((await boss.post("/api/admin/bookings", manual(PODCAST, yesterday, 600, { ignoreHours: true }))).status).toBe(400);
+    expect((await boss.post("/api/admin/bookings", manual(PODCAST, yesterday, 600, { pastOk: true }))).status).toBe(400);
+    const forced = await boss.post("/api/admin/bookings", manual(PODCAST, yesterday, 600, { ignoreHours: true, pastOk: true }));
     expect(forced.status).toBe(200);
   });
   it("still lets staff book a session that is under way or later today", async () => {
@@ -269,5 +271,159 @@ describe("copy", () => {
     expect(mail).not.toContain(") (");
     const beat = await book({ serviceSlug: "beat-production", packageId: "pkg_beat_production", ...who });
     expect(await mailTo(beat.email, "Order confirmed%")).toContain("Service: Beat production\n");
+  });
+});
+
+const REPEAT = [0, 1, 2];
+/** Every payment on a booking ends up counted or refunded, exactly once. */
+async function accounted(where: string, arg: string) {
+  const pays = await h.sql<{ amount_kobo: number; status: string; refunded_kobo: number }>(`SELECT amount_kobo, status, refunded_kobo FROM payments WHERE ${where} AND status IN ('success', 'refunded')`, arg);
+  return pays;
+}
+
+describe("every money movement happens once", () => {
+  for (const round of REPEAT) {
+    it(`counts one of two checkouts verified together and refunds the other (round ${round})`, async () => {
+      const date = fresh(2 + (round % 3));
+      const { client, email } = await h.newClient();
+      const hold = await client.post("/api/holds", draft(REC, date, 600, { contactEmail: email }));
+      const refs = [];
+      for (let i = 0; i < 2; i++) refs.push((await client.post("/api/checkout", { holdId: hold.body.holdId, plan: "full" })).body.reference);
+      for (const r of refs) await client.post(`/api/payments/demo/${r}`, { outcome: "success", channel: "card" });
+      const out = await Promise.all(refs.map((r) => client.get(`/api/payments/verify?reference=${r}`)));
+      expect(out.map((o) => o.body.status).sort()).toEqual(["confirmed", "refunded"]);
+      const bookings = await h.sql("SELECT * FROM bookings WHERE hold_id = ?", hold.body.holdId);
+      expect(bookings).toHaveLength(1);
+      expect(bookings[0]).toMatchObject({ amount_paid_kobo: 8_000_000, refunded_kobo: 0 });
+      const pays = await accounted("hold_id = ?", hold.body.holdId);
+      expect(pays.filter((p) => p.status === "refunded")).toHaveLength(1);
+      expect(pays.filter((p) => p.status === "success")).toHaveLength(1);
+      expect((await h.sql("SELECT amount_kobo FROM refunds WHERE booking_id = ?", bookings[0].id)).length).toBe(1);
+      expect(await h.sql("SELECT subject FROM email_outbox WHERE to_email = ? AND subject LIKE 'Payment refunded%'", email)).toHaveLength(1);
+    });
+  }
+  it("refunds a verified payment once when the same reference is verified many times at once", async () => {
+    const { client, email } = await h.newClient();
+    const hold = await client.post("/api/holds", draft(REC, fresh(1), 750, { contactEmail: email }));
+    const co = await client.post("/api/checkout", { holdId: hold.body.holdId, plan: "full" });
+    await client.post(`/api/payments/demo/${co.body.reference}`, { outcome: "success", channel: "card" });
+    await Promise.all([1, 2, 3, 4].map(() => client.get(`/api/payments/verify?reference=${co.body.reference}`)));
+    expect(await h.sql("SELECT id FROM bookings WHERE hold_id = ?", hold.body.holdId)).toHaveLength(1);
+    expect((await h.sql("SELECT amount_paid_kobo FROM bookings WHERE hold_id = ?", hold.body.holdId))[0].amount_paid_kobo).toBe(8_000_000);
+    expect(await h.sql("SELECT subject FROM email_outbox WHERE to_email = ? AND subject LIKE 'You%'", email)).toHaveLength(1);
+  });
+  for (const round of REPEAT) {
+    it(`cancels once when cancelled twice at the same moment (round ${round})`, async () => {
+      const { id, email } = await book(draft(REC, fresh(3), 600));
+      const out = await Promise.all([boss.post(`/api/admin/bookings/${id}/cancel`, { reason: "a" }), boss.post(`/api/admin/bookings/${id}/cancel`, { reason: "b" }), boss.post(`/api/admin/bookings/${id}/cancel`, { reason: "c" })]);
+      expect(out.map((o) => o.status).sort()).toEqual([200, 409, 409]);
+      expect(out.find((o) => o.status === 409)!.body.code).toBe("already_decided");
+      expect(await h.sql("SELECT amount_kobo FROM refunds WHERE booking_id = ?", id)).toHaveLength(1);
+      expect(await row(id)).toMatchObject({ status: "cancelled", refunded_kobo: 8_000_000 });
+      expect(await h.sql("SELECT subject FROM email_outbox WHERE to_email = ? AND subject LIKE 'Booking cancelled%'", email)).toHaveLength(1);
+    });
+    it(`acts on a change request once when two staff approve it together (round ${round})`, async () => {
+      const { id, client } = await book(draft(REC, fresh(4), 750));
+      await client.post(`/api/account/bookings/${id}/requests`, { kind: "cancel", reason: "x" });
+      const pending = (await boss.get("/api/admin/requests")).body.find((r: any) => r.booking_id === id);
+      const out = await Promise.all([boss.post(`/api/admin/requests/${pending.id}`, { approve: true }), boss.post(`/api/admin/requests/${pending.id}`, { approve: true })]);
+      expect(out.map((o) => o.status).sort()).toEqual([200, 409]);
+      expect(await h.sql("SELECT amount_kobo FROM refunds WHERE booking_id = ?", id)).toHaveLength(1);
+    });
+    it(`lets only one of two simultaneous approvals win with an already decided answer (round ${round})`, async () => {
+      const { client, email } = await h.newClient();
+      const hold = await client.post("/api/holds", draft(EP, fresh(5), 600, { contactEmail: email }));
+      const id = (await client.post("/api/requests", { holdId: hold.body.holdId })).body.booking.id;
+      const out = await Promise.all([boss.post(`/api/admin/bookings/${id}/approve`, { note: "" }), boss.post(`/api/admin/bookings/${id}/approve`, { note: "" })]);
+      expect(out.map((o) => o.status).sort()).toEqual([200, 409]);
+      const loser = out.find((o) => o.status === 409)!;
+      expect(loser.body.code).toBe("already_decided");
+      expect(loser.body.error).toMatch(/Already decided/);
+      expect(await h.sql("SELECT subject FROM email_outbox WHERE to_email = ? AND subject LIKE 'Approved%'", email)).toHaveLength(1);
+    });
+  }
+  it("hands a change request back when approving it fails", async () => {
+    const date = fresh(1), other = fresh(1);
+    const { id, client } = await book(draft(REC, date, 600));
+    await client.post(`/api/account/bookings/${id}/requests`, { kind: "reschedule", newDate: other, newStart: 750, reason: "" });
+    await h.client().post("/api/holds", draft(REC, other, 750));
+    const pending = (await boss.get("/api/admin/requests")).body.find((r: any) => r.booking_id === id);
+    expect((await boss.post(`/api/admin/requests/${pending.id}`, { approve: true })).status).toBe(409);
+    expect((await boss.get("/api/admin/requests")).body.some((r: any) => r.id === pending.id)).toBe(true);
+  });
+  for (const round of REPEAT) {
+    it(`never expires an approval that was paid while housekeeping ran (round ${round})`, async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 3; i++) ids.push((await boss.post("/api/admin/bookings", manual(REC, fresh(1 + i), 600, { status: "approved", contactEmail: `exp${round}${i}@example.com` }))).body.id);
+      const target = ids[2];
+      const pay = await boss.post(`/api/pay/${target}`, { plan: "full" });
+      await boss.post(`/api/payments/demo/${pay.body.reference}`, { outcome: "success", channel: "card" });
+      for (const id of ids) await h.sql("UPDATE bookings SET expires_at = ? WHERE id = ?", new Date(Date.now() - 1000).toISOString(), id);
+      const { bookingService } = await import("../../src/worker/services/bookings");
+      await Promise.all([bookingService.housekeeping(h.env), boss.get(`/api/payments/verify?reference=${pay.body.reference}`)]);
+      const b = await row(target);
+      const refunded = (await payment(pay.body.reference)).status === "refunded";
+      // Either the payment confirmed the booking and was kept, or housekeeping won and the payment was refunded in full. Never both, never neither.
+      if (b.status === "confirmed") expect([refunded, b.amount_paid_kobo]).toEqual([false, 8_000_000]);
+      else expect([b.status, refunded, b.amount_paid_kobo]).toEqual(["cancelled", true, 0]);
+      expect((await row(ids[0])).status).toBe("cancelled");
+    });
+  }
+  it("confirms an expired approval whose time is still free when its payment lands before the cron runs", async () => {
+    const id = (await boss.post("/api/admin/bookings", manual(REC, fresh(2), 870, { status: "approved", contactEmail: "late@example.com" }))).body.id;
+    const pay = await boss.post(`/api/pay/${id}`, { plan: "full" });
+    await h.sql("UPDATE bookings SET expires_at = ? WHERE id = ?", new Date(Date.now() - 1000).toISOString(), id);
+    expect((await h.payDemo(boss, pay.body.reference)).body.status).toBe("confirmed");
+    expect(await row(id)).toMatchObject({ status: "confirmed", amount_paid_kobo: 8_000_000 });
+  });
+  it("leaves a booking that already has money on it alone when it passes its expiry", async () => {
+    const id = (await boss.post("/api/admin/bookings", manual(REC, fresh(3), 870, { status: "approved" }))).body.id;
+    await h.sql("UPDATE bookings SET expires_at = ?, amount_paid_kobo = 1000 WHERE id = ?", new Date(Date.now() - 1000).toISOString(), id);
+    const { bookingService } = await import("../../src/worker/services/bookings");
+    await bookingService.housekeeping(h.env);
+    expect((await row(id)).status).toBe("approved");
+  });
+  it("caps staff payments at the balance, even when two are recorded at once", async () => {
+    const { id } = await book(draft(REC, fresh(4), 870));
+    expect((await boss.post(`/api/admin/bookings/${id}/payments`, { amount: 1, method: "cash", note: "" })).status).toBe(400);
+    const made = await boss.post("/api/admin/bookings", manual(REC, fresh(4), 870));
+    const over = await boss.post(`/api/admin/bookings/${made.body.id}/payments`, { amount: 50_000_000, method: "cash", note: "" });
+    expect(over.status).toBe(400);
+    expect(over.body.error).toMatch(/more than the ₦80,000 still owed/);
+    expect((await row(made.body.id)).amount_paid_kobo).toBe(0);
+    const two = await Promise.all([1, 2].map(() => boss.post(`/api/admin/bookings/${made.body.id}/payments`, { amount: 5_000_000, method: "transfer", note: "" })));
+    expect(two.map((r) => r.status).sort()).toEqual([200, 400]);
+    expect((await row(made.body.id)).amount_paid_kobo).toBe(5_000_000);
+    expect(await h.sql("SELECT id FROM payments WHERE booking_id = ?", made.body.id)).toHaveLength(1);
+    expect((await boss.post(`/api/admin/bookings/${made.body.id}/payments`, { amount: 3_000_000, method: "cash", note: "" })).status).toBe(200);
+    expect((await boss.post("/api/admin/bookings", manual(REC, fresh(4), 1020, { payment: { amount: 9_000_000, method: "cash", note: "" } }))).status).toBe(400);
+  });
+});
+
+describe("wording and rules from round three", () => {
+  it("says the preferred start date moved for a day booking", async () => {
+    const date = fresh(1), other = fresh(1);
+    const made = await boss.post("/api/admin/bookings", manual(EP, date, 600, { contactEmail: "moved@example.com" }));
+    expect((await boss.post(`/api/admin/bookings/${made.body.id}/reschedule`, { date: other, start: 600 })).status).toBe(200);
+    const mail = await mailTo("moved@example.com", "Your preferred start date has moved%");
+    expect(mail).toContain("The preferred start date for");
+    expect(mail).not.toContain("Your session");
+  });
+  it("leaves no full stop stuck to the pay link in a remote order email", async () => {
+    const r = await boss.post("/api/admin/bookings", { serviceSlug: "mixing-mastering", packageId: "pkg_mm_standard", ...who, contactEmail: "link@example.com", status: "confirmed", source: "phone", ignoreHours: false, notify: true, payment: null });
+    expect(r.status).toBe(200);
+    const mail = await mailTo("link@example.com", "Order confirmed%");
+    expect(mail).toContain("/pay/");
+    expect(mail).not.toMatch(/\/pay\/\S*\.(\s|$)/);
+  });
+  it("refuses a second free reschedule", async () => {
+    const { id, client } = await book(draft(REC, fresh(2), 600));
+    const other = fresh(2);
+    await client.post(`/api/account/bookings/${id}/requests`, { kind: "reschedule", newDate: other, newStart: 750, reason: "" });
+    const pending = (await boss.get("/api/admin/requests")).body.find((r: any) => r.booking_id === id);
+    expect((await boss.post(`/api/admin/requests/${pending.id}`, { approve: true })).status).toBe(200);
+    const again = await client.post(`/api/account/bookings/${id}/requests`, { kind: "reschedule", newDate: fresh(2), newStart: 600, reason: "" });
+    expect(again.status).toBe(400);
+    expect(again.body.error).toMatch(/free reschedule has been used.*cancellation/);
   });
 });

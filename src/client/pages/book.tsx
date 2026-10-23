@@ -199,6 +199,7 @@ export function BookVerify() {
   const [q] = useSearchParams();
   const ref = q.get("reference") ?? q.get("trxref") ?? "";
   const site = useContent();
+  const cat = useCatalog();
   const { user } = useAuth();
   const [state, setState] = useState<"checking" | "failed" | "refunded">("checking");
   const [booking, setBooking] = useState<any>(null);
@@ -230,36 +231,39 @@ export function BookVerify() {
     <><Nav />
       <div className="wrap stack gap24 donepage">
         <Mark tone="ink" size={72} />
-        {state === "failed" && <><h1 className="h2">Payment did not go through</h1><p className="muted">You have not been charged. If this was a new booking the slot was released and your details are saved, so you can try again.</p><TactileLink to="/book/time" size="lg">Pick a time <Icon name="arrow" size={18} /></TactileLink></>}
-        {state === "refunded" && <><h1 className="h2">This payment was refunded</h1><p className="muted">The slot was taken, or the booking had closed, before your payment arrived. Your payment is being refunded in full.</p><TactileLink to="/book" size="lg">Book another time</TactileLink></>}
+        {state === "failed" && <><h1 className="h2">Payment did not go through</h1><p className="muted">You have not been charged. If this was a new booking the slot was released and your details are saved, so you can try again.</p><TactileLink to="/book/review" size="lg">Try again <Icon name="arrow" size={18} /></TactileLink></>}
+        {state === "refunded" && <><h1 className="h2">This payment was refunded</h1><p className="muted">The slot was taken, or the booking had closed, before your payment arrived. Your payment is being refunded in full.</p><TactileLink to="/book" size="lg">Start again</TactileLink></>}
       </div>
     </>
   );
   const owner = !!user && user.role === "client";
+  const remote = booking?.scheduling === "project";
+  const unit = cat?.packages.find((x) => x.id === booking?.package_id)?.unit;
   return (
     <><Nav />
       <div className="wrap verify">
         <div className="stack gap12" style={{ alignItems: "center" }}>
           <h1 className="h2">{!done ? "Confirming your payment" : kind === "balance" ? "Balance paid. You’re all set." : booking.balance_kobo > 0 ? "You’re booked. Deposit received." : "You’re booked."}</h1>
-          <p className="muted" style={{ maxWidth: 560 }}>{done ? `Booking ${booking.ref} is ${statusLabel(booking.status).toLowerCase()}.${booking.balance_kobo > 0 ? ` ${naira(booking.balance_kobo)} is due before your session.` : ""} The receipt is in your inbox${owner ? " and your dashboard" : ""}.` : "Paystack has your payment. We verify it on our server before we confirm your booking."}</p>
+          <p className="muted" style={{ maxWidth: 560 }}>{done ? `Booking ${booking.ref} is ${statusLabel(booking.status).toLowerCase()}.${booking.balance_kobo > 0 ? ` ${naira(booking.balance_kobo)} is due ${remote ? "before your finished files are released" : "before your session"}.` : ""} The receipt is in your inbox${owner ? " and your dashboard" : ""}.` : "Paystack has your payment. We verify it on our server before we confirm your booking."}</p>
         </div>
         {done && owner && (
           <div className="row gap12 wrapflex" style={{ justifyContent: "center" }}>
-            <TactileLink to={`/book/confirmed/${booking.id}`} variant="neon" size="lg">See your ticket <Icon name="arrow" size={18} /></TactileLink>
+            <TactileLink to={`/book/confirmed/${booking.id}`} variant="neon" size="lg">{remote ? "See your order" : "See your ticket"} <Icon name="arrow" size={18} /></TactileLink>
             <TactileLink to={`/account/bookings/${booking.id}`} variant="light" size="lg">Go to my booking</TactileLink>
           </div>
         )}
         <ReceiptPrinter stage={stage} labels={{ processing: "Verifying with Paystack", printing: "Printing your receipt", complete: "Payment verified" }}
           header={<><Mark tone="neon" size={36} /><span className="pr-ref">{ref}</span></>}
-          screen={<div className="pr-row"><div><p>{booking?.package_name ?? "Your booking"}</p><p className="dim">{booking ? `${shortDate(booking.date)} · ${t12(booking.start_min)}` : "Checking"}</p></div><div className="right"><p className="dim">Paid</p><strong>{booking ? naira(booking.paid_kobo) : "…"}</strong></div></div>}>
+          screen={<div className="pr-row"><div><p>{booking?.package_name ?? "Your booking"}</p><p className="dim">{booking ? whenLine(booking) : "Checking"}</p></div><div className="right"><p className="dim">Paid</p><strong>{booking ? naira(booking.paid_kobo) : "…"}</strong></div></div>}>
           {booking && <>
             <div className="rc-logo"><Mark tone="ink" size={48} /></div>
             <p className="rc-head" style={{ textAlign: "center" }}>{name}</p>
             {site?.content.studio_address && <p className="rc-dim" style={{ textAlign: "center" }}>{site.content.studio_address}</p>}
             <hr className="rc-hr" />
             <div className="rc-row"><span className="rc-head">{booking.package_name}</span><span>{naira(booking.package_price_kobo)}</span></div>
-            <div className="rc-dim">{shortDate(booking.date)} · {t12(booking.start_min)} to {t12(booking.end_min)} · {booking.room_name}</div>
-            {booking.extras.map((e: any) => <div key={e.name} className="rc-row" style={{ marginTop: 8 }}><span className="rc-head">{e.name}</span><span>{naira(e.price)}</span></div>)}
+            {unit && <div className="rc-dim">{unit}</div>}
+            <div className="rc-dim">{whenLine(booking)}{booking.slot_label ? ` · ${booking.slot_label}` : ""}{booking.room_name ? ` · ${booking.room_name}` : ""}</div>
+            {booking.extras.map((e: any) => <div key={e.name} className="rc-row" style={{ marginTop: 8 }}><span className="rc-head">{e.name}</span><span>{e.quote ? "On request" : naira(e.price)}</span></div>)}
             <hr className="rc-hr" />
             <div className="rc-row rc-dim"><span>Total</span><span>{naira(booking.total_kobo)}</span></div>
             <div className="rc-row rc-dim"><span>Paid with</span><span>Paystack · {channel}</span></div>
@@ -268,7 +272,7 @@ export function BookVerify() {
             <hr className="rc-hr" />
             <Barcode />
             <p className="rc-note">Ref <ScrambleText>{booking.ref}</ScrambleText></p>
-            <p className="rc-note rc-dim">See you in {booking.room_name}.</p>
+            <p className="rc-note rc-dim">{remote ? "Your files are delivered in your portal." : `See you in ${booking.room_name}.`}</p>
           </>}
         </ReceiptPrinter>
       </div>
@@ -283,29 +287,37 @@ export function BookConfirmed({ id }: { id: string }) {
   useEffect(() => { api(`/account/bookings/${id}`).then(setData); }, [id]);
   const b = data?.booking;
   const name = site?.content.business_name ?? "Psych Records Entertainment";
+  const remote = b?.scheduling === "project";
   const ics = useMemo(() => {
-    if (!b) return "";
-    const dt = (m: number) => `${b.date.replace(/-/g, "")}T${String(Math.floor(m / 60)).padStart(2, "0")}${String(m % 60).padStart(2, "0")}00`;
-    return `data:text/calendar;charset=utf-8,${encodeURIComponent(`BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nDTSTART;TZID=Africa/Lagos:${dt(b.start_min)}\nDTEND;TZID=Africa/Lagos:${dt(b.end_min)}\nSUMMARY:${b.package_name} at ${name}\nLOCATION:${b.room_name}${site?.content.studio_address ? `, ${site.content.studio_address}` : ""}\nDESCRIPTION:Booking ${b.ref}\nEND:VEVENT\nEND:VCALENDAR`)}`;
-  }, [b, name, site]);
+    if (!b || remote) return "";
+    const dt = (day: number, m: number) => `${addDays(b.date, day).replace(/-/g, "")}T${String(Math.floor((m % 1440) / 60)).padStart(2, "0")}${String(m % 60).padStart(2, "0")}00`;
+    return `data:text/calendar;charset=utf-8,${encodeURIComponent(`BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nDTSTART;TZID=Africa/Lagos:${dt(0, b.start_min)}\nDTEND;TZID=Africa/Lagos:${dt(Math.floor(b.end_min / 1440), b.end_min)}\nSUMMARY:${b.package_name} at ${name}\nLOCATION:${b.room_name}${site?.content.studio_address ? `, ${site.content.studio_address}` : ""}\nDESCRIPTION:Booking ${b.ref}\nEND:VEVENT\nEND:VCALENDAR`)}`;
+  }, [b, name, site, remote]);
   if (!b) return <><Nav /><Loading /></>;
+  const facts: [string, string][] = remote
+    ? [["Reference", b.ref], ["Package", b.package_name], ["Ordered", shortDate(b.date)], ["Delivery", b.due_date ? `Due ${shortDate(b.due_date)}, in your portal` : "In your portal"], ["Paid", naira(b.paid_kobo)], ["Balance due", b.balance_kobo > 0 ? naira(b.balance_kobo) : "Nothing"]]
+    : [["Reference", b.ref], ["Package", b.package_name], ["Room", b.room_name], ["Date", shortDate(b.date)], [b.scheduling === "day" ? "Starts" : "Session", b.scheduling === "day" ? shortDate(b.date) : `${windowLabel(b.date, b.start_min, b.end_min)}${b.slot_label ? ` · ${b.slot_label}` : ""}`], ["Paid", naira(b.paid_kobo)], ["Balance due", b.balance_kobo > 0 ? naira(b.balance_kobo) : "Nothing"]];
   return (
     <div className="confpage">
       <Nav />
-      <div className="wrap grid cols-2" style={{ paddingTop: 72, paddingBottom: 120, alignItems: "center", gap: 64 }}>
+      <div className="wrap grid cols-2 confwrap" style={{ paddingTop: 72, paddingBottom: 120, alignItems: "center", gap: 64 }}>
         <div className="stack gap24">
-          <h1 className="display">You’re <span className="neon">booked.</span></h1>
-          <p style={{ fontSize: 18, opacity: .78 }}>Booking {b.ref} is confirmed. Your receipt is on its way to {b.contact_email} and saved in your dashboard.</p>
+          <h1 className="display">{remote ? "Order " : "You’re "}<span className="neon">{remote ? "placed." : "booked."}</span></h1>
+          <p style={{ fontSize: 18, opacity: .78 }}>{remote ? `Order ${b.ref} is confirmed. Upload your stems or references from your portal. Finished work arrives in your portal, never by email.` : `Booking ${b.ref} is confirmed. Your receipt is on its way to ${b.contact_email} and saved in your dashboard.`}</p>
           <div className="grid cols-2 confgrid">
-            {[["Reference", b.ref], ["Package", b.package_name], ["Room", b.room_name], ["Date", shortDate(b.date)], ["Start time", t12(b.start_min)], ["Duration", hrs(b.end_min - b.start_min)], ["Paid", naira(b.paid_kobo)], ["Balance due", b.balance_kobo > 0 ? naira(b.balance_kobo) : "Nothing"]].map(([k, v]) => (
+            {facts.map(([k, v]) => (
               <div key={k}><div className="mono" style={{ opacity: .55 }}>{k}</div><b style={{ fontWeight: 500 }}>{v}</b></div>
             ))}
           </div>
-          <div className="row gap12 wrapflex"><TactileLink to={`/account/bookings/${b.id}`} variant="neon" size="lg">Go to my booking <Icon name="arrow" size={18} /></TactileLink><TactileAnchor href={ics} download={`${b.ref}.ics`} variant="light" size="lg">Add to calendar</TactileAnchor></div>
+          <div className="row gap12 wrapflex">
+            {remote
+              ? <><TactileLink to={`/account/bookings/${b.id}#files`} variant="neon" size="lg">Upload your files <Icon name="arrow" size={18} /></TactileLink><TactileLink to={`/account/bookings/${b.id}`} variant="light" size="lg">Go to my order</TactileLink></>
+              : <><TactileLink to={`/account/bookings/${b.id}`} variant="neon" size="lg">Go to my booking <Icon name="arrow" size={18} /></TactileLink><TactileAnchor href={ics} download={`${b.ref}.ics`} variant="light" size="lg">Add to calendar</TactileAnchor></>}
+          </div>
         </div>
         <div className="conf-art">
           <div className="conf-photo" />
-          <div className="conf-ticket"><BookingTicket kind={b.service_name.split(" ")[0]} date={b.date} start={b.start_min} duration={b.end_min - b.start_min} artist={b.artist_name} people={b.people} reference={b.ref} room={b.room_name} /></div>
+          <div className="conf-ticket"><BookingTicket kind={b.service_name} scheduling={b.scheduling} date={b.date} start={b.start_min} end={b.end_min} duration={b.end_min - b.start_min} slotLabel={b.slot_label} dueDate={b.due_date} artist={b.artist_name} people={b.people} reference={b.ref} room={b.room_name || undefined} /></div>
           <Waveform className="confwave" />
         </div>
       </div>
@@ -349,7 +361,7 @@ export function PayBooking() {
           <h1 className="h1" style={{ fontSize: "clamp(30px,3.6vw,46px)" }}>{due.kind === "none" || due.full <= 0 ? "Nothing to pay." : due.kind === "balance" ? "Pay your balance." : "Pay to confirm your booking."}</h1>
           <div className="card stack gap12">
             <div className="row between wrapflex gap8"><b>{b.service_name} · {b.package_name}</b><span className="tag">{statusLabel(b.status)}</span></div>
-            <span className="small muted">{longDate(b.date)} · {t12(b.start_min)} to {t12(b.end_min)} · {b.room_name}</span>
+            <span className="small muted">{b.scheduling === "project" ? `Remote order · ${shortDate(b.date)}` : b.scheduling === "day" ? `Starts ${longDate(b.date)} · ${b.room_name}` : `${longDate(b.date)} · ${windowLabel(b.date, b.start_min, b.end_min)} · ${b.room_name}`}</span>
             <div className="divider" />
             <div className="row between small"><span>Total</span><span>{naira(b.total_kobo)}</span></div>
             <div className="row between small"><span>Paid so far</span><span>{naira(b.paid_kobo)}</span></div>
@@ -360,7 +372,7 @@ export function PayBooking() {
             {due.deposit > 0 && (
               <div className="card stack gap12">
                 <b className="small">How much would you like to pay?</b>
-                {([["deposit", `Deposit, ${naira(due.deposit)}`, `${naira(due.full - due.deposit)} is due before your session.`], ["full", `Full amount, ${naira(due.full)}`, "Nothing more to pay later."]] as const).map(([v, t, s]) => (
+                {([["deposit", `Deposit, ${naira(due.deposit)}`, `${naira(due.full - due.deposit)} is due ${b.scheduling === "project" ? "before your finished files are released" : "before your session"}.`], ["full", `Full amount, ${naira(due.full)}`, "Nothing more to pay later."]] as const).map(([v, t, s]) => (
                   <button key={v} type="button" className={`opt ${plan === v ? "on" : ""}`} onClick={() => setPlan(v)}><span className="radio" /><span className="grow stack"><b>{t}</b><span className="small muted">{s}</span></span></button>
                 ))}
               </div>

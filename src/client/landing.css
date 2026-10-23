@@ -267,7 +267,9 @@ a.hbadge:hover .pbadge { background: rgba(255,255,255,.1); }
 .work2 .work-body .muted, .work2 .work-body .small { color: rgba(255,255,255,.66); }
 
 /* Plans */
-.pcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; max-width: 1120px; margin: 72px auto 0; }
+.pcards { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 24px; max-width: calc(var(--n, 3) * 373px); margin: 72px auto 0; }
+.punit { font-size: 16px; letter-spacing: 0; color: rgba(255,255,255,.6); }
+.pmeta s { opacity: .8; }
 .pcard { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 34px 28px 28px; border-radius: 30px; border: 1px solid rgba(255,255,255,.16); background: #0d0d0d; color: #fff; }
 .pcard.hot { border-color: transparent; }
 .pcard.hot::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2px; pointer-events: none;

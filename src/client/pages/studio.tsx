@@ -30,7 +30,7 @@ export function Studio() {
               <div className="row gap24 wrapflex small">
                 <span><span className="mono faint">Room type</span><br /><b>{r.kind}</b></span>
                 <span><span className="mono faint">Capacity</span><br /><b>Up to {r.capacity} people</b></span>
-                <span><span className="mono faint">Extra time</span><br /><b>{naira(r.hourly_kobo || cat.rules.extraHourKobo)} per hour</b></span>
+                {cat.packages.some((p) => p.scheduling === "flex" && p.pricing === "fixed" && p.room_id === r.id) && <span><span className="mono faint">Extra time</span><br /><b>{naira(r.hourly_kobo || cat.rules.extraHourKobo)} per hour</b></span>}
               </div>
               <div><TactileLink to="/packages" size="lg">Packages for this room <Icon name="arrow" size={18} /></TactileLink></div>
             </div>

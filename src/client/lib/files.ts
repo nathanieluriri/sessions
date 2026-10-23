@@ -16,7 +16,7 @@ export function fmtBytes(n: number) {
   const units = ["KB", "MB", "GB", "TB"];
   let v = n / 1024, i = 0;
   while (v >= 1000 && i < units.length - 1) { v /= 1024; i++; }
-  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, "")} ${units[i]}`;
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1).replace(/\.0$/, "")} ${units[i]}`;
 }
 
 export const extOf = (name: string) => { const m = /\.([A-Za-z0-9]{1,10})$/.exec(name); return m ? m[1].toLowerCase() : ""; };
