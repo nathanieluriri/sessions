@@ -1,6 +1,6 @@
 # Operations
 
-Hosting, setup, backups, monitoring and running costs for the Psych Records Entertainment website.
+Hosting, setup, backups, monitoring and running costs for the Psych Studio website.
 
 ## How it is hosted
 
@@ -21,7 +21,7 @@ Settings live in `wrangler.jsonc` (`vars`) and secrets are added with Wrangler s
 ```
 npx wrangler secret put PAYSTACK_SECRET_KEY   # sk_live_... from Paystack, Settings, API Keys
 npx wrangler secret put RESEND_API_KEY        # from Resend, API Keys
-npx wrangler secret put EMAIL_FROM            # for example: Psych Records <bookings@your-domain.com>
+npx wrangler secret put EMAIL_FROM            # for example: Psych Studio <bookings@your-domain.com>
 ```
 
 - `APP_URL` in `wrangler.jsonc` must be the public address, because email links use it.

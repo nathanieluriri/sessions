@@ -161,7 +161,7 @@ function Values({ rooms, daily }: { rooms: number; daily: number }) {
   return (
     <section className="lsec values" id="about" data-tone="dark" data-nav="about">
       <div className="wrap lhead">
-        <Badge>Why Psych Records</Badge>
+        <Badge>Why Psych Studio</Badge>
         <h2 className="ltitle" data-split><Heading lead="Less admin, more" accent="music." /></h2>
         <p className="lsub" data-reveal>Everything around the session is handled, so your time in the room goes into the work.</p>
       </div>

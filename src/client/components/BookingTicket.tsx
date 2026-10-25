@@ -18,7 +18,7 @@ export function BookingTicket({ kind, scheduling, date, start, end, duration, sl
     <Ticket className={className} style={style} paper={paper} ink={ink} stubHeight="23%" label={`${kind} ${remote ? "order" : "session"} ticket, ${reference}`}
       body={
         <div className="tkt-body">
-          <div className="tkt-micro"><span className="tkt-brand"><Mark tone="ink" size={24} /><span>Psych Records{remote ? "" : ` · ${room}`}</span></span><span>Lagos · NG</span></div>
+          <div className="tkt-micro"><span className="tkt-brand"><Mark tone="ink" size={24} /><span>Psych Studio{remote ? "" : ` · ${room}`}</span></span><span>Lagos · NG</span></div>
           <div className="tkt-art"><TicketPattern /></div>
           <div>
             <h3 className="tkt-title">{kind}<br />{remote ? "Order" : stay ? "Request" : "Session"}</h3>

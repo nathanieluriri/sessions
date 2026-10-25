@@ -22,7 +22,7 @@
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
     "APP_URL": "https://sessions.uririnathaniel.workers.dev",
-    "STUDIO_NAME": "Psych Records Entertainment",
+    "STUDIO_NAME": "Psych Studio",
     "STUDIO_EMAIL": "hello@psychrecords.ng",
     "STUDIO_PHONE": "+234 812 555 0142"
   },

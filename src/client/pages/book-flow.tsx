@@ -89,7 +89,7 @@ export function Shell({ at, title, sub, cat, d, hold, children, back, next, next
   at: StepKey; title: string; sub?: string; cat: Catalog; d: BookingDraft; hold?: string | null; children: ReactNode;
   back?: string; next?: () => void; nextLabel?: string; nextDisabled?: boolean; busy?: boolean; aside?: boolean; stickyNote?: string;
 }) {
-  usePageTitle("Book with Psych Records");
+  usePageTitle("Book with Psych Studio");
   const { total, pkg, fixed, mode, win, svc } = priced(cat, d);
   const steps = stepsFor(fixed, d.packageId);
   const backTo = back ?? (at === "service" ? undefined : prevPath(steps, at));

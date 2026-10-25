@@ -1,4 +1,4 @@
--- Psych Records Entertainment platform: rooms, deposits, approvals, content and SEO.
+-- Psych Studio platform: rooms, deposits, approvals, content and SEO.
 -- D1 cannot switch foreign keys off, so referenced tables are rebuilt by copying to a temp table,
 -- dropping, recreating and re-inserting. The re-insert clears the deferred violations the drop creates.
 PRAGMA defer_foreign_keys = on;
@@ -332,7 +332,7 @@ UPDATE policies SET body = 'Pay a deposit or the full amount at checkout by card
 UPDATE policies SET body = 'Cancel 72 hours or more before your session for a full refund of what you have paid. Between 24 and 72 hours, 50% of what you paid is refunded. Under 24 hours or no-shows are not refunded.' WHERE slug = 'cancellations';
 UPDATE policies SET body = 'Each room has a guest limit, shown when you book, that includes the artist or host. No smoking, drugs or weapons. Unsafe behaviour ends a session without a refund.' WHERE slug = 'guests-conduct';
 UPDATE policies SET body = 'Overtime is billed at the room''s hourly rate in 30 minute blocks, and only when the room is free after your session.' WHERE slug = 'overtime';
-INSERT INTO policies (slug, title, body, sort, kind) VALUES ('privacy', 'Privacy policy', 'Psych Records Entertainment Limited ("we") runs this website and the studio booking service. This policy explains what we collect, why, and the choices you have under the Nigeria Data Protection Act 2023.
+INSERT INTO policies (slug, title, body, sort, kind) VALUES ('privacy', 'Privacy policy', 'Psych Studio Limited ("we") runs this website and the studio booking service. This policy explains what we collect, why, and the choices you have under the Nigeria Data Protection Act 2023.
 
 ## What we collect
 - Your name, email address and phone number when you create an account, book, or send an enquiry.
@@ -362,7 +362,7 @@ We use one essential cookie to keep you signed in. If analytics is turned on, it
 
 ## Contact
 Questions about this policy can be sent to the email address on our Contact page.', 100, 'legal');
-INSERT INTO policies (slug, title, body, sort, kind) VALUES ('terms', 'Terms of service', 'These terms apply when you use this website or book with Psych Records Entertainment Limited ("the studio").
+INSERT INTO policies (slug, title, body, sort, kind) VALUES ('terms', 'Terms of service', 'These terms apply when you use this website or book with Psych Studio Limited ("the studio").
 
 ## Bookings
 A booking is confirmed only when you receive a confirmation email with a booking reference. Requests that need approval are not confirmed until the studio approves them and your payment is verified, unless the studio confirms them in writing.
@@ -395,8 +395,8 @@ UPDATE content SET value = 'Music recording, video production, podcasts and phot
 DELETE FROM content WHERE key IN ('testimonial_quote', 'testimonial_name');
 INSERT OR IGNORE INTO content (key, value) VALUES ('hero_accent', 'under one roof.');
 INSERT OR IGNORE INTO content (key, value) VALUES ('hero_image', '');
-INSERT OR IGNORE INTO content (key, value) VALUES ('business_name', 'Psych Records Entertainment');
-INSERT OR IGNORE INTO content (key, value) VALUES ('legal_name', 'Psych Records Entertainment Limited');
+INSERT OR IGNORE INTO content (key, value) VALUES ('business_name', 'Psych Studio');
+INSERT OR IGNORE INTO content (key, value) VALUES ('legal_name', 'Psych Studio Limited');
 INSERT OR IGNORE INTO content (key, value) VALUES ('footer_blurb', 'A music, video, podcast and photography studio. Book rooms online, pay securely and walk in ready to create.');
 INSERT OR IGNORE INTO content (key, value) VALUES ('contact_phone', '+234 812 555 0142');
 INSERT OR IGNORE INTO content (key, value) VALUES ('contact_email', 'hello@psychrecords.ng');
@@ -408,7 +408,7 @@ INSERT OR IGNORE INTO content (key, value) VALUES ('social_tiktok', 'https://tik
 INSERT OR IGNORE INTO content (key, value) VALUES ('social_youtube', 'https://youtube.com');
 INSERT OR IGNORE INTO content (key, value) VALUES ('social_x', 'https://x.com');
 INSERT OR IGNORE INTO content (key, value) VALUES ('about_title', 'Built for people who make things.');
-INSERT OR IGNORE INTO content (key, value) VALUES ('about_intro', 'Psych Records Entertainment is a multimedia production studio for artists, labels, filmmakers, podcasters, creators and brands. We record, shoot and finish work in one building, with engineers, producers and crew who care about the result.');
+INSERT OR IGNORE INTO content (key, value) VALUES ('about_intro', 'Psych Studio is a multimedia production studio for artists, labels, filmmakers, podcasters, creators and brands. We record, shoot and finish work in one building, with engineers, producers and crew who care about the result.');
 INSERT OR IGNORE INTO content (key, value) VALUES ('about_vision', 'To be the studio Nigerian and international creatives trust with their best work.');
 INSERT OR IGNORE INTO content (key, value) VALUES ('about_mission', 'Give every client a professional room, the right people and a clear process, from the first booking to the final file.');
 INSERT OR IGNORE INTO content (key, value) VALUES ('about_philosophy', 'We prepare before you arrive, keep sessions on time and treat every project as if our name is on it, because it is.');
@@ -420,8 +420,8 @@ INSERT OR IGNORE INTO content (key, value) VALUES ('about_image', 'https://image
 INSERT OR IGNORE INTO content (key, value) VALUES ('studio_title', 'Rooms built for sound and picture.');
 INSERT OR IGNORE INTO content (key, value) VALUES ('studio_intro', 'Four spaces under one roof: a recording room with a separate control room, a production suite, a podcast set and an open stage for video and photography.');
 INSERT OR IGNORE INTO content (key, value) VALUES ('tour_url', '');
-INSERT OR IGNORE INTO content (key, value) VALUES ('seo_title', 'Psych Records Entertainment | Music, video and podcast studio');
-INSERT OR IGNORE INTO content (key, value) VALUES ('seo_description', 'Book music recording, video production, podcast and photography sessions at Psych Records Entertainment. Live availability, deposits and secure Paystack checkout.');
+INSERT OR IGNORE INTO content (key, value) VALUES ('seo_title', 'Psych Studio | Music, video and podcast studio');
+INSERT OR IGNORE INTO content (key, value) VALUES ('seo_description', 'Book music recording, video production, podcast and photography sessions at Psych Studio. Live availability, deposits and secure Paystack checkout.');
 INSERT OR IGNORE INTO content (key, value) VALUES ('seo_image', '');
 INSERT OR IGNORE INTO content (key, value) VALUES ('seo_indexing', '0');
 INSERT OR IGNORE INTO content (key, value) VALUES ('analytics_ga', '');
@@ -430,9 +430,9 @@ INSERT OR IGNORE INTO content (key, value) VALUES ('gsc_verification', '');
 INSERT INTO page_meta (path, title, description, image_url) VALUES ('/', '', '', '');
 INSERT INTO page_meta (path, title, description, image_url) VALUES ('/services', 'Services', 'Music recording, production, mixing, video, podcast and photography services, with packages you can book online.', '');
 INSERT INTO page_meta (path, title, description, image_url) VALUES ('/studio', 'Studio and facilities', 'Recording rooms, a production suite, a podcast set and a video and photo stage, with the equipment in each.', '');
-INSERT INTO page_meta (path, title, description, image_url) VALUES ('/portfolio', 'Portfolio', 'Music, videos, podcasts and photography made at Psych Records Entertainment.', '');
+INSERT INTO page_meta (path, title, description, image_url) VALUES ('/portfolio', 'Portfolio', 'Music, videos, podcasts and photography made at Psych Studio.', '');
 INSERT INTO page_meta (path, title, description, image_url) VALUES ('/packages', 'Pricing and packages', 'Hourly, half-day and full-day studio rates, production packages, deposits and booking policies.', '');
-INSERT INTO page_meta (path, title, description, image_url) VALUES ('/about', 'About us', 'Who we are, how we work and the team behind Psych Records Entertainment.', '');
+INSERT INTO page_meta (path, title, description, image_url) VALUES ('/about', 'About us', 'Who we are, how we work and the team behind Psych Studio.', '');
 INSERT INTO page_meta (path, title, description, image_url) VALUES ('/contact', 'Contact', 'Call, WhatsApp or send an enquiry. Find the studio on the map.', '');
 INSERT INTO page_meta (path, title, description, image_url) VALUES ('/faq', 'FAQs', 'Answers about booking, opening hours, deposits, rescheduling, late arrivals, crew and custom quotes.', '');
 INSERT INTO page_meta (path, title, description, image_url) VALUES ('/quote', 'Request a quote', 'Tell us about your music video, commercial, content day or long project and get a quote within one working day.', '');

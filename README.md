@@ -1,6 +1,6 @@
-# Psych Records Entertainment
+# Psych Studio
 
-Website, online booking and studio management for Psych Records Entertainment, a music, video, podcast and photography studio. Clients explore services, rooms and past work, check live availability per room, book and pay a deposit or the full amount with Paystack, or send a request that the studio approves first. Staff run bookings, payments, rooms, pricing, website content and reports from a permission-based dashboard.
+Website, online booking and studio management for Psych Studio, a music, video, podcast and photography studio. Clients explore services, rooms and past work, check live availability per room, book and pay a deposit or the full amount with Paystack, or send a request that the studio approves first. Staff run bookings, payments, rooms, pricing, website content and reports from a permission-based dashboard.
 
 Everything runs on Cloudflare: one Worker serves the API, the React app (Workers Static Assets) and server-rendered page metadata, D1 is the database, R2 stores uploaded images and a Cron Trigger handles expiries and reminders.
 

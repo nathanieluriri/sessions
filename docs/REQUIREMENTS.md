@@ -1,6 +1,6 @@
 # Requirements coverage
 
-How this build meets the Website Requirements Document for Psych Records Entertainment Limited, and draft answers to the questions in its section 18. Items marked **To confirm** are commercial terms for the developer and the studio to agree.
+How this build meets the Website Requirements Document for Psych Studio Limited, and draft answers to the questions in its section 18. Items marked **To confirm** are commercial terms for the developer and the studio to agree.
 
 ## Coverage
 

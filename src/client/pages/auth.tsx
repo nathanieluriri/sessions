@@ -11,7 +11,7 @@ function AuthShell({ photo, quote, by, title, sub, children }: { photo: string; 
   return (
     <div className="authsplit">
       <div className="authphoto" style={{ backgroundImage: `url(${photo})` }}>
-        <Link to="/" className="brandmark" style={{ top: 32, left: 32, color: "#fff" }}><Mark tone="neon" size={40} /> Psych Records</Link>
+        <Link to="/" className="brandmark" style={{ top: 32, left: 32, color: "#fff" }}><Mark tone="neon" size={40} /> Psych Studio</Link>
         <div style={{ left: 32, right: 32, bottom: 40 }} className="stack gap16">
           <Waveform className="authwave" step={10} />
           <p style={{ fontSize: 26, lineHeight: 1.2, letterSpacing: "-.02em", fontWeight: 500, maxWidth: 460 }}>“{quote}”</p>
@@ -69,14 +69,14 @@ export function Login() {
   return (
     <AuthShell photo={PHOTOS.singer} quote="Booked at midnight, recorded the next afternoon." by="Amaka Eze · Artist" title="Welcome back." sub="Log in to see your bookings, receipts and requests.">
       <LoginForm />
-      <p className="small muted">New to Psych Records? <Link to="/register" style={{ color: "var(--brand)", fontWeight: 500 }}>Create an account</Link></p>
+      <p className="small muted">New to Psych Studio? <Link to="/register" style={{ color: "var(--brand)", fontWeight: 500 }}>Create an account</Link></p>
     </AuthShell>
   );
 }
 
 export function StaffLogin() {
   return (
-    <AuthShell photo={PHOTOS.control} quote="Every session starts on time when the calendar is right." by="Psych Records · Staff" title="Staff sign in." sub="For studio staff accounts created by the CEO. Client accounts cannot sign in here.">
+    <AuthShell photo={PHOTOS.control} quote="Every session starts on time when the calendar is right." by="Psych Studio · Staff" title="Staff sign in." sub="For studio staff accounts created by the CEO. Client accounts cannot sign in here.">
       <LoginForm staff />
     </AuthShell>
   );
@@ -92,7 +92,7 @@ export function Register() {
     nav("/account", { replace: true });
   });
   return (
-    <AuthShell photo={PHOTOS.performer} quote="Walk in ready, walk out with the record, the video or the shoot." by="Psych Records Entertainment" title="Create your account." sub="Manage bookings, payments and receipts in one place.">
+    <AuthShell photo={PHOTOS.performer} quote="Walk in ready, walk out with the record, the video or the shoot." by="Psych Studio" title="Create your account." sub="Manage bookings, payments and receipts in one place.">
       <form className="stack gap16" onSubmit={submit}>
         <Field label="Full name" autoComplete="name" required {...bind("name")} />
         <Field label="Email" type="email" autoComplete="email" required {...bind("email")} />
@@ -112,7 +112,7 @@ export function ForgotPassword() {
   const [sent, setSent] = useState(false);
   const { error, busy, submit } = useSubmit(async () => { await api("/auth/forgot-password", { body: f }); setSent(true); });
   return (
-    <AuthShell photo={PHOTOS.voiceover} quote="Locked out? We will get you back in." by="Psych Records Entertainment" title="Reset your password." sub="Enter your email and we will send a reset link that works for one hour.">
+    <AuthShell photo={PHOTOS.voiceover} quote="Locked out? We will get you back in." by="Psych Studio" title="Reset your password." sub="Enter your email and we will send a reset link that works for one hour.">
       {sent ? <div className="panel">If an account exists for {f.email}, a reset link is on its way.</div> : (
         <form className="stack gap16" onSubmit={submit}>
           <Field label="Email" type="email" required {...bind("email")} />
@@ -131,7 +131,7 @@ export function ResetPassword() {
   const [done, setDone] = useState(false);
   const { error, busy, submit } = useSubmit(async () => { await api("/auth/reset-password", { body: { ...f, token: q.get("token") ?? "" } }); setDone(true); });
   return (
-    <AuthShell photo={PHOTOS.producer} quote="Fresh start, same sound." by="Psych Records Entertainment" title="Choose a new password.">
+    <AuthShell photo={PHOTOS.producer} quote="Fresh start, same sound." by="Psych Studio" title="Choose a new password.">
       {done ? <><div className="panel">Your password was changed. Other devices were signed out.</div><TactileLink to="/login" size="lg">Log in</TactileLink></> : (
         <form className="stack gap16" onSubmit={submit}>
           <Field label="New password" type="password" hint="At least 8 characters, with a number" required {...bind("password")} />
@@ -155,7 +155,7 @@ export function VerifyEmail() {
       .catch((e) => { setState("error"); setMsg(e.message); });
   }, [q, refresh]);
   return (
-    <AuthShell photo={PHOTOS.editing} quote="One quick check and you are set." by="Psych Records Entertainment" title={state === "ok" ? "Email verified." : state === "error" ? "That link did not work." : "Verifying your email…"}>
+    <AuthShell photo={PHOTOS.editing} quote="One quick check and you are set." by="Psych Studio" title={state === "ok" ? "Email verified." : state === "error" ? "That link did not work." : "Verifying your email…"}>
       {state === "ok" && <TactileLink to="/account" size="lg">Go to my account</TactileLink>}
       {state === "error" && <><ErrorBox error={msg} /><TactileLink to="/account/profile" variant="light" size="lg">Send a new link</TactileLink></>}
     </AuthShell>

@@ -1,6 +1,6 @@
 # Admin guide
 
-How to run Psych Records Entertainment day to day. Staff sign in at `/staff/login`. The CEO and COO see everything; other staff see only the areas they are granted in Staff.
+How to run Psych Studio day to day. Staff sign in at `/staff/login`. The CEO and COO see everything; other staff see only the areas they are granted in Staff.
 
 ## Daily routine
 

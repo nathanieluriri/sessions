@@ -30,7 +30,7 @@ export function hoursSummary(hours: Catalog["hours"], sessions: Catalog["session
 export function usePageTitle(title?: string) {
   const site = useContent();
   useEffect(() => {
-    const name = site?.content.business_name ?? "Psych Records Entertainment";
+    const name = site?.content.business_name ?? "Psych Studio";
     document.title = title ? `${title} | ${name}` : site?.content.seo_title ?? name;
   }, [title, site]);
 }
@@ -102,7 +102,7 @@ export function Nav() {
     <>
       <header className={`nav ${enter ? "enter" : ""} ${veil}`} style={late ? ({ "--nd": "2.2s" } as CSSProperties) : undefined}>
         <div className="navin">
-          <Link to="/" className="npill nlogo" aria-label="Psych Records Entertainment home" onClick={landing ? jumpTo("") : undefined}><Mark tone="neon" size={40} /><span>Psych Records</span></Link>
+          <Link to="/" className="npill nlogo" aria-label="Psych Studio home" onClick={landing ? jumpTo("") : undefined}><Mark tone="neon" size={40} /><span>Psych Studio</span></Link>
           <div className="npill nlinks" ref={links} onMouseLeave={leave}>
             <span className={`nglide nhover ${hov.on ? "on" : ""}`} style={glideStyle(hov)} aria-hidden />
             <span className={`nglide ${act.on ? "on" : ""}`} style={glideStyle(act)} aria-hidden />
@@ -178,7 +178,7 @@ export function Footer() {
           {c.whatsapp && <div className="fcol"><h4>Talk to us</h4><TactileAnchor variant="neon" size="md" href={waLink(c.whatsapp)} target="_blank" rel="noreferrer">WhatsApp the studio <Icon name="northeast" size={16} /></TactileAnchor></div>}
         </div>
         <div className="fbar">
-          <span>© {year} {c.legal_name ?? "Psych Records Entertainment Limited"}</span>
+          <span>© {year} {c.legal_name ?? "Psych Studio Limited"}</span>
           <div><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/login">Client login</Link><Link to="/staff/login">Staff sign in</Link></div>
         </div>
       </div>

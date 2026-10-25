@@ -182,7 +182,7 @@ export function DemoPay() {
       <div className="demopay-card">
         <div className="row between demopay-head"><b>Test checkout</b><span className="tag warning">Simulated Paystack</span></div>
         <div className="stack gap16" style={{ padding: 22 }}>
-          <div className="row between"><span className="muted small">{site?.content.business_name ?? "Psych Records Entertainment"}</span><b style={{ fontSize: 22 }}>{t ? naira(t.amount_kobo) : "…"}</b></div>
+          <div className="row between"><span className="muted small">{site?.content.business_name ?? "Psych Studio"}</span><b style={{ fontSize: 22 }}>{t ? naira(t.amount_kobo) : "…"}</b></div>
           <div className="small muted">Reference {ref}</div>
           <div className="panel small" style={{ padding: 14 }}>This screen stands in for Paystack until live keys are added. The booking is still confirmed only after the server verifies this transaction.</div>
           <Btn kind="primary" block onClick={() => finish("success")} disabled={busy || t?.status !== "pending"}>Pay {t ? naira(t.amount_kobo) : ""}</Btn>
@@ -226,7 +226,7 @@ export function BookVerify() {
   }, [ref]);
   const channel = CHANNEL[sessionStorage.getItem("psych.channel") ?? "card"] ?? "Card";
   const done = stage === "complete" && booking;
-  const name = site?.content.business_name ?? "Psych Records Entertainment";
+  const name = site?.content.business_name ?? "Psych Studio";
   if (state !== "checking") return (
     <><Nav />
       <div className="wrap stack gap24 donepage">
@@ -286,7 +286,7 @@ export function BookConfirmed({ id }: { id: string }) {
   usePageTitle("You’re booked");
   useEffect(() => { api(`/account/bookings/${id}`).then(setData); }, [id]);
   const b = data?.booking;
-  const name = site?.content.business_name ?? "Psych Records Entertainment";
+  const name = site?.content.business_name ?? "Psych Studio";
   const remote = b?.scheduling === "project";
   const ics = useMemo(() => {
     if (!b || remote) return "";
