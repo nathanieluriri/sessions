@@ -6,11 +6,14 @@ import { Icon } from "../components/brand";
 import { HoldToConfirm, TactileLink } from "../components/kitchen";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { dateTime, hrs, lagosToday, longDate, naira, payState, shortDate, statusLabel, statusTone, t12 } from "../lib/format";
+import { dateTime, hrs, lagosToday, longDate, naira, payState, shortDate, statusLabel, statusTone, t12, timeRange } from "../lib/format";
+import { BookingFiles, FilesPage, ReadyForYou, UploadCard, useClientFiles } from "./account-files";
+import { dueLabel } from "../lib/files";
 
 const ITEMS: NavEntry[] = [
-  { to: "/account", label: "Overview", icon: "grid", end: true },
+  { to: "/account", label: "Home", icon: "grid", end: true },
   { to: "/account/bookings", label: "Bookings", icon: "calendar" },
+  { to: "/account/files", label: "Files", icon: "music" },
   { to: "/account/payments", label: "Payments", icon: "receipt" },
   { to: "/account/profile", label: "Profile", icon: "user" },
 ];
@@ -25,7 +28,8 @@ function useOverview() {
 }
 
 const ACTIVE = ["pending", "approved", "confirmed"];
-const upcoming = (b: any[]) => b.filter((x) => ACTIVE.includes(x.status) && x.date >= lagosToday()).sort((a, b) => (a.date + String(a.start_min).padStart(4, "0")).localeCompare(b.date + String(b.start_min).padStart(4, "0")));
+const remote = (x: any) => x.scheduling === "project";
+const upcoming = (b: any[]) => b.filter((x) => ACTIVE.includes(x.status) && (remote(x) ? x.status !== "confirmed" : x.date >= lagosToday())).sort((a, b) => (a.date + String(a.start_min).padStart(4, "0")).localeCompare(b.date + String(b.start_min).padStart(4, "0")));
 const PAY_KIND: Record<string, string> = { full: "Full payment", deposit: "Deposit", balance: "Balance", manual: "Paid at the studio" };
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -47,10 +51,10 @@ function BookingRow({ b }: { b: any }) {
   return (
     <Link to={`/account/bookings/${b.id}`} className="card row between gap16 wrapflex" style={{ padding: 18 }}>
       <div className="row gap16">
-        <div style={{ width: 56, textAlign: "center" }}><div className="mono faint">{shortDate(b.date).split(" ")[0]}</div><b style={{ fontSize: 24 }}>{b.date.slice(8)}</b></div>
-        <div><b>{b.package_name}</b><div className="small muted">{b.service_name} · {b.room_name} · {t12(b.start_min)} to {t12(b.end_min)}</div></div>
+        <div style={{ width: 56, textAlign: "center" }}><div className="mono faint">{shortDate(remote(b) && b.due_date ? b.due_date : b.date).split(" ")[0]}</div><b style={{ fontSize: 24 }}>{(remote(b) && b.due_date ? b.due_date : b.date).slice(8)}</b></div>
+        <div><b>{b.package_name}</b><div className="small muted">{remote(b) ? `${b.service_name} · Remote order${b.due_date ? ` · due ${shortDate(b.due_date)}` : ""}` : `${b.service_name} · ${b.room_name} · ${t12(b.start_min)} to ${t12(b.end_min)}`}</div></div>
       </div>
-      <div className="row gap8 wrapflex">{b.pendingRequest && <Tag tone="warning">Request pending</Tag>}{["confirmed", "completed"].includes(b.status) && b.balance_kobo > 0 && <Tag tone="warning">{naira(b.balance_kobo)} due</Tag>}<Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag><Icon name="arrow" size={18} /></div>
+      <div className="row gap8 wrapflex">{b.pendingRequest && <Tag tone="warning">Request pending</Tag>}{["confirmed", "completed"].includes(b.status) && b.balance_kobo > 0 && <Tag tone="warning">{naira(b.balance_kobo)} due</Tag>}{b.delivered_final_at && <Tag tone="success">Finished</Tag>}<Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag><Icon name="arrow" size={18} /></div>
     </Link>
   );
 }
@@ -58,42 +62,51 @@ function BookingRow({ b }: { b: any }) {
 export function AccountHome() {
   const { user } = useAuth();
   const [d, load] = useOverview();
+  const [files, reloadFiles, filesError] = useClientFiles();
   const read = async () => { await api("/account/notifications/read", { method: "POST" }); load(); };
   return (
     <Shell title={`Hi, ${user?.name.split(" ")[0] ?? ""}`}>
       <VerifyBanner />
-      {!d ? <Loading /> : (() => {
-        const next = upcoming(d.bookings).find((b) => b.status === "confirmed");
+      {!d || !files ? (filesError ? <ErrorBox error={filesError} /> : <Loading />) : (() => {
+        const next = upcoming(d.bookings).find((b) => b.status === "confirmed" && !remote(b));
         const waiting = upcoming(d.bookings).filter((b) => b.status !== "confirmed");
         const unread = d.notifications.filter((n) => !n.read_at).length;
         const due = d.bookings.filter((b) => ["confirmed", "completed"].includes(b.status)).reduce((s, b) => s + b.balance_kobo, 0);
+        const orders = d.bookings.filter((b) => remote(b) && b.status === "confirmed" && !b.delivered_final_at);
         return <>
           {waiting.map((w) => (
             <div key={w.id} className="panel row between wrapflex gap12" style={{ background: w.status === "approved" ? "var(--neon-soft)" : "var(--cream)" }}>
-              <span><b>{w.status === "approved" ? `Approved: pay to confirm ${w.ref}` : `Waiting for the studio to approve ${w.ref}`}</b> <span className="muted">{w.package_name} · {shortDate(w.date)} · {t12(w.start_min)}</span></span>
+              <span><b>{w.status === "approved" ? `Approved: pay to confirm ${w.ref}` : `Waiting for the studio to approve ${w.ref}`}</b> <span className="muted">{w.package_name}{remote(w) ? "" : ` · ${shortDate(w.date)} · ${t12(w.start_min)}`}</span></span>
               <TactileLink to={w.status === "approved" ? `/pay/${w.id}` : `/account/bookings/${w.id}`} size="md" variant={w.status === "approved" ? "neon" : "light"}>{w.status === "approved" ? "Pay now" : "View request"}</TactileLink>
             </div>
           ))}
-          {next ? (
-            <div className="card row between wrapflex gap24 nextcard">
-              <div className="stack gap8"><span className="mono" style={{ color: "var(--neon)" }}>Next session · {next.ref}</span><h2 className="h2">{longDate(next.date)}</h2><span style={{ opacity: .75 }}>{t12(next.start_min)} to {t12(next.end_min)} · {next.package_name} · {next.room_name}</span>{next.balance_kobo > 0 && <span className="mono" style={{ color: "var(--yellow)" }}>{naira(next.balance_kobo)} balance due before the session</span>}</div>
-              <TactileLink to={`/account/bookings/${next.id}`} variant="neon" size="lg">View booking <Icon name="arrow" size={18} /></TactileLink>
+          <ReadyForYou bookings={files} reload={reloadFiles} />
+          <UploadCard bookings={files} reload={reloadFiles} />
+          {orders.map((o) => (
+            <Link key={o.id} to={`/account/bookings/${o.id}`} className="card quiet row between gap12 wrapflex">
+              <span><span className="mono faint">{o.ref}</span><br /><b>{o.package_name}</b><span className="small muted"> · {files.find((f) => f.id === o.id)?.deliveries.length ? "Delivered" : o.due_date ? `In production, due ${dueLabel(o.due_date)}` : "In production"}</span></span>
+              <Icon name="arrow" size={18} />
+            </Link>
+          ))}
+          {next && (
+            <div className="card quiet row between wrapflex gap16">
+              <div className="stack gap4"><span className="mono faint">Next session · {next.ref}</span><b>{longDate(next.date)}</b><span className="small muted">{timeRange(next.date, next.start_min, next.end_min)} · {next.package_name} · {next.room_name}</span>{next.balance_kobo > 0 && <span className="small" style={{ color: "#7a5a00" }}>{naira(next.balance_kobo)} balance due before the session</span>}</div>
+              <TactileLink to={`/account/bookings/${next.id}`} variant="light" size="md">View booking</TactileLink>
             </div>
-          ) : !waiting.length && <Empty>No upcoming sessions. <Link to="/book" className="link">Book one</Link></Empty>}
-          <div className="grid cols-4">
-            <Stat label="Upcoming" value={upcoming(d.bookings).length} />
-            <Stat label="Bookings" value={d.bookings.length} />
-            <Stat label="Paid to date" value={naira(d.payments.filter((p) => p.status !== "failed").reduce((s, p) => s + p.amount_kobo - p.refunded_kobo, 0))} />
-            <Stat label="Balance due" value={naira(due)} />
-          </div>
+          )}
+          {!next && !waiting.length && !orders.length && files.every((f) => !f.deliveries.length) && <Empty>Nothing booked yet. <Link to="/book" className="link">Book a session or order a mix</Link></Empty>}
+          {due > 0 && (
+            <div className="card quiet row between wrapflex gap12"><span><b>Balance due: {naira(due)}</b> <span className="small muted">Paying unlocks any finished files that are waiting.</span></span><Link to="/account/payments" className="link small">See payments</Link></div>
+          )}
           <div className="grid cols-2" style={{ alignItems: "start" }}>
-            <div className="card stack gap12">
+            <div className="card quiet stack gap12">
               <div className="row between"><h3 className="h4">Notifications {unread > 0 && <Tag tone="success">{unread} new</Tag>}</h3>{unread > 0 && <button className="link small" onClick={read}>Mark all read</button>}</div>
-              {d.notifications.length === 0 ? <span className="muted small">Nothing yet.</span> : d.notifications.slice(0, 6).map((n) => (
-                <div key={n.id} className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 10, opacity: n.read_at ? .6 : 1 }}><b className="small">{n.title}</b><span className="small muted">{n.body}</span><span className="caption">{dateTime(n.created_at)}</span></div>
-              ))}
+              {d.notifications.length === 0 ? <span className="muted small">Nothing yet.</span> : d.notifications.slice(0, 6).map((n) => {
+                const body = <><b className="small">{n.title}</b><span className="small muted">{n.body}</span><span className="caption">{dateTime(n.created_at)}</span></>;
+                return <div key={n.id} className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 10, opacity: n.read_at ? .6 : 1 }}>{n.booking_id ? <Link to={`/account/bookings/${n.booking_id}#files`} className="stack">{body}</Link> : body}</div>;
+              })}
             </div>
-            <div className="card stack gap12">
+            <div className="card quiet stack gap12">
               <div className="row between"><h3 className="h4">Recent payments</h3><Link to="/account/payments" className="link small">All payments</Link></div>
               {d.payments.length === 0 ? <span className="muted small">No payments yet.</span> : d.payments.slice(0, 5).map((p) => (
                 <div key={p.id} className="row between" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}><div><b className="small">{p.package_name ?? "Booking"}</b><div className="caption">{PAY_KIND[p.kind] ?? p.kind} · {p.reference}</div></div><div className="row gap8"><b className="small">{naira(p.amount_kobo)}</b><Tag tone={statusTone(p.status)}>{p.status}</Tag></div></div>
@@ -106,10 +119,20 @@ export function AccountHome() {
   );
 }
 
+export function AccountFiles() {
+  const [files, reload, error] = useClientFiles();
+  return (
+    <Shell title="Files">
+      {!files ? (error ? <ErrorBox error={error} /> : <Loading />) : <FilesPage bookings={files} reload={reload} />}
+    </Shell>
+  );
+}
+
 export function AccountBookings() {
   const [d] = useOverview();
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
-  const list = d ? (tab === "upcoming" ? upcoming(d.bookings) : d.bookings.filter((b) => !upcoming(d.bookings).includes(b))) : [];
+  const live = (b: any) => upcoming([b]).length > 0 || (remote(b) && b.status === "confirmed" && !b.delivered_final_at);
+  const list = d ? (tab === "upcoming" ? d.bookings.filter(live) : d.bookings.filter((b) => !live(b))) : [];
   return (
     <Shell title="My bookings">
       <div className="seg" style={{ alignSelf: "flex-start" }}><button className={tab === "upcoming" ? "on" : ""} onClick={() => setTab("upcoming")}>Upcoming</button><button className={tab === "past" ? "on" : ""} onClick={() => setTab("past")}>Past and cancelled</button></div>
@@ -138,7 +161,8 @@ export function AccountBooking() {
   const withdraw = async () => { try { await api(`/account/bookings/${id}/withdraw`, { method: "POST" }); toast("Request withdrawn"); load(); } catch (e: any) { toast(e.message); } };
   if (!d) return <Shell title="Booking"><Loading /></Shell>;
   const { booking: b, payments, policy, pendingRequest, due } = d;
-  const canChange = b.status === "confirmed" && !pendingRequest;
+  const isRemote = remote(b);
+  const canChange = b.status === "confirmed" && !pendingRequest && !b.delivered_final_at;
   return (
     <Shell title={`Booking ${b.ref}`}>
       <Link to="/account/bookings" className="link small noprint">← All bookings</Link>
@@ -146,11 +170,15 @@ export function AccountBooking() {
       {b.status === "approved" && <div className="panel row between wrapflex gap12" style={{ background: "var(--neon-soft)" }}><span><b>Approved.</b> <span className="muted">Pay {due.deposit ? `the ${naira(due.deposit)} deposit or the full ${naira(due.full)}` : naira(due.full)}{b.expires_at ? ` by ${dateTime(b.expires_at)}` : ""} to confirm.{b.decision_note ? ` Note from the studio: ${b.decision_note}` : ""}</span></span><TactileLink to={`/pay/${b.id}`} size="lg">Pay now <Icon name="arrow" size={18} /></TactileLink></div>}
       {b.status === "rejected" && <div className="panel" style={{ background: "var(--danger-soft)" }}><b>The studio could not take this booking.</b> <span className="muted">{b.decision_note}</span></div>}
       {b.status === "cancelled" && b.cancel_reason && <div className="panel"><b>Cancelled.</b> <span className="muted">{b.cancel_reason}</span></div>}
+      {!["cancelled", "rejected"].includes(b.status) && <BookingFiles d={d} reload={load} />}
       <div className="grid" style={{ gridTemplateColumns: "minmax(0,1fr) minmax(0,360px)", alignItems: "start" }} data-stack>
         <div className="card stack gap16">
           <div className="row between wrapflex gap12"><h2 className="h3">{b.package_name}</h2><div className="row gap8"><Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag>{b.rescheduled_at && <Tag>Rescheduled</Tag>}</div></div>
           <div className="grid cols-2" style={{ gap: 16 }}>
-            {[["Service", b.service_name], ["Room", b.room_name], ["Date", longDate(b.date)], ["Time", `${t12(b.start_min)} to ${t12(b.end_min)}`], ["Duration", hrs(b.end_min - b.start_min)], ["Artist or project", b.artist_name], ["People", b.people], ["Contact", `${b.contact_name} · ${b.contact_phone}`]].map(([k, v]) => (
+            {(isRemote
+              ? [["Service", b.service_name], ["Type", "Remote order, no studio time"], ["Ordered", longDate(b.date)], ["Due", b.due_date ? longDate(b.due_date) : "To be confirmed by the studio"], ["Artist or project", b.artist_name], ["Revisions included", b.revision_limit], ["Contact", `${b.contact_name} · ${b.contact_phone}`]]
+              : [["Service", b.service_name], ["Room", b.room_name], ["Date", longDate(b.date)], ["Time", timeRange(b.date, b.start_min, b.end_min)], ["Duration", hrs(b.end_min - b.start_min)], ["Artist or project", b.artist_name], ["People", b.people], ["Contact", `${b.contact_name} · ${b.contact_phone}`]]
+            ).map(([k, v]) => (
               <div key={k}><div className="mono faint">{k}</div><b style={{ fontWeight: 500 }}>{v}</b></div>
             ))}
           </div>
@@ -159,11 +187,11 @@ export function AccountBooking() {
           {b.reference_links && <div className="small"><span className="mono faint">Reference links</span><br /><span style={{ overflowWrap: "anywhere" }}>{b.reference_links}</span></div>}
           {pendingRequest && <div className="panel" style={{ background: "var(--cream)" }}><b>{pendingRequest.kind === "cancel" ? "Cancellation" : "Reschedule"} request pending.</b> <span className="muted">The studio will reply by email{pendingRequest.new_date ? `. Requested ${shortDate(pendingRequest.new_date)} at ${t12(pendingRequest.new_start_min)}` : ""}.</span></div>}
           <div className="row gap12 wrapflex noprint">
-            {canChange && <Btn kind="neutral" onClick={() => { setModal("reschedule"); setPick(null); setReason(""); }}>Request reschedule</Btn>}
+            {canChange && !isRemote && <Btn kind="neutral" onClick={() => { setModal("reschedule"); setPick(null); setReason(""); }}>Request reschedule</Btn>}
             {canChange && <Btn kind="danger" onClick={() => { setModal("cancel"); setReason(""); }}>Request cancellation</Btn>}
             {["pending", "approved"].includes(b.status) && b.paid_kobo === 0 && <HoldToConfirm onConfirm={withdraw} confirmed="Withdrawn">Hold to withdraw request</HoldToConfirm>}
           </div>
-          {b.status === "confirmed" && <span className="caption">{policy.freeReschedule ? "You can reschedule once for free, up to 48 hours before." : "Free rescheduling has closed for this booking."} If cancelled now, {Math.round(policy.refundShare * 100)}% of what you paid ({naira(policy.refundAmount)}) is refunded.</span>}
+          {b.status === "confirmed" && !b.delivered_final_at && <span className="caption">{isRemote ? "" : policy.freeReschedule ? "You can reschedule once for free, up to 48 hours before. " : "Free rescheduling has closed for this booking. "}If cancelled now, {Math.round(policy.refundShare * 100)}% of what you paid ({naira(policy.refundAmount)}) is refunded.</span>}
         </div>
         <Receipt b={b} payments={payments} due={due} />
       </div>

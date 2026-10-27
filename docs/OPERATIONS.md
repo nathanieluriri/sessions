@@ -1,6 +1,6 @@
 # Operations
 
-Hosting, setup, backups, monitoring and running costs for the Psych Records Entertainment website.
+Hosting, setup, backups, monitoring and running costs for the Psych Studio website.
 
 ## How it is hosted
 
@@ -9,6 +9,7 @@ Hosting, setup, backups, monitoring and running costs for the Psych Records Ente
 | Website and API | Cloudflare Workers | One Worker serves the React app, the API, uploaded images and page metadata. HTTPS is automatic. |
 | Database | Cloudflare D1 (SQLite) | Bookings, payments, content, users and settings. |
 | Images | Cloudflare R2 | Uploaded photos, served from `/media/...` with long browser caching. |
+| Client files | Cloudflare R2 | Songs, stems and deliveries in the same bucket, uploaded in parts and served only through the logged-in portal. Never public. |
 | Scheduled jobs | Cron Trigger, every 5 minutes | Releases expired holds, requests and unpaid approvals, sends session reminders, completes past sessions. |
 | Payments | Paystack | Hosted checkout. Card details never reach our servers. Every payment is verified on the server. |
 | Email | Resend | Booking emails and staff alerts. Without a key, emails are only logged in the outbox. |
@@ -20,7 +21,7 @@ Settings live in `wrangler.jsonc` (`vars`) and secrets are added with Wrangler s
 ```
 npx wrangler secret put PAYSTACK_SECRET_KEY   # sk_live_... from Paystack, Settings, API Keys
 npx wrangler secret put RESEND_API_KEY        # from Resend, API Keys
-npx wrangler secret put EMAIL_FROM            # for example: Psych Records <bookings@your-domain.com>
+npx wrangler secret put EMAIL_FROM            # for example: Psych Studio <bookings@your-domain.com>
 ```
 
 - `APP_URL` in `wrangler.jsonc` must be the public address, because email links use it.
@@ -95,7 +96,7 @@ Prices checked in October 2026 on the providers' official pages. They change, so
 | --- | --- | --- |
 | Cloudflare Workers | Free plan: 100,000 requests a day. Paid plan: $5 a month minimum, with 10 million requests and 30 million CPU milliseconds a month included. | Static files are free and unlimited. A studio site fits the free plan; the paid plan is recommended for 30-day backups and headroom. |
 | Cloudflare D1 | Free: 5 million rows read and 100,000 written a day, 5 GB. Paid plan: 25 billion reads and 50 million writes a month and 5 GB included. | No extra cost for Time Travel backups. |
-| Cloudflare R2 | Free each month: 10 GB stored, 1 million writes, 10 million reads, no egress fees. Then $0.015 per GB-month. | Photos are resized before upload, so 10 GB holds thousands. |
+| Cloudflare R2 | Free each month: 10 GB stored, 1 million writes, 10 million reads, no egress fees. Then $0.015 per GB-month. | Photos are resized before upload, so 10 GB holds thousands. Audio and project files use the same allowance: one WAV song is roughly 50 MB, so 10 GB holds about 200 songs. Limits per booking are 100 files and 10 GB from the client, 200 files and 20 GB from staff. |
 | Paystack | Nigeria: 1.5% + ₦100 per local transaction, the ₦100 waived under ₦2,500, capped at ₦2,000. International cards: 3.9% + ₦100. | Per transaction only. Refunds return the amount to the client. |
 | Resend | Free: 3,000 emails a month, 100 a day. Pro: $20 a month for 50,000 emails with no daily limit. | The free plan covers a studio unless reminders and confirmations pass 100 a day. |
 | Domain | Varies by registrar and extension. | Cloudflare Registrar sells at cost for supported extensions. |

@@ -1,18 +1,34 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const MARK = [
-  "M120.443 1.33206C121.412 0.250933 123.095 0.219122 124.103 1.26273L151.476 29.5791C151.717 29.8295 151.904 30.1284 152.024 30.4551L152.778 32.5059C153.354 34.0737 152.259 35.7545 150.593 35.8623L146.958 36.0957L119.857 35.8662L156.374 78.9375C157.088 79.7797 157.436 80.8051 157.44 81.8252L158.176 81.4746C161.082 87.5611 162.727 94.1732 163.012 100.912C163.296 107.651 162.214 114.378 159.831 120.688C157.448 126.997 153.813 132.76 149.144 137.628C144.476 142.496 138.871 146.369 132.667 149.015C126.463 151.66 119.787 153.022 113.042 153.021C106.297 153.019 99.6218 151.652 93.4189 149.003C87.2162 146.354 81.6137 142.477 76.9482 137.606C72.2827 132.736 68.6509 126.971 66.2714 120.66L67.0302 120.373L51.2832 91.7432L77.5791 72.752L92.3466 87.5186L83.3818 93.4951L83.7548 93.9248L96.7959 108.898L89.0849 112.058L97.6123 108.844C98.3977 110.927 99.5967 112.83 101.137 114.438C102.677 116.045 104.527 117.325 106.574 118.199C108.622 119.074 110.825 119.525 113.052 119.525C115.278 119.526 117.481 119.076 119.529 118.203C121.577 117.33 123.428 116.051 124.969 114.444C126.51 112.837 127.71 110.935 128.497 108.853C129.271 106.804 129.628 104.622 129.55 102.435L81.7861 45.5987L92.8535 32.5977C92.9429 32.2087 93.1311 31.8289 93.4335 31.4912L100.764 23.3057L104.995 18.336L105.102 18.4619L120.443 1.33206Z",
-  "M185.223 110.977C186.2 109.674 188.141 109.638 189.166 110.903L211.879 138.96C212.08 139.208 212.231 139.493 212.325 139.798L213.052 142.158C213.523 143.69 212.451 145.263 210.853 145.386L208.122 145.596L164.562 145.156C162.514 145.135 161.359 142.795 162.588 141.156L185.223 110.977Z",
-  "M25.8281 111.528C26.7952 110.374 28.5559 110.331 29.5791 111.436L50.7138 134.261C51.4775 135.086 51.5965 136.32 51.0048 137.275L46.5966 144.396C46.1362 145.139 45.3208 145.589 44.4462 145.58L2.98042 145.161C0.869855 145.14 -0.266432 142.674 1.08882 141.056L25.8281 111.528Z",
-];
+const EMBLEM = [48, 64, 96, 128, 192, 256, 384].map((w) => `/brand/emblem-${w}.webp ${w}w`).join(", ");
+const LOCKUP = [320, 480, 720, 960].map((w) => `/brand/lockup-${w}.webp ${w}w`).join(", ");
+const LOCKUP_RATIO = 6656 / 2368;
 
-/** Placeholder mark from the original Figma file, used until the official Psych Records logo is supplied. Replace the paths above to swap it everywhere. */
-export function Mark({ tone = "neon", size = 34 }: { tone?: "neon" | "ink" | "white"; size?: number }) {
-  const fill = tone === "neon" ? "#65F87C" : tone === "ink" ? "#171714" : "#FFFFFF";
+/** The Psych Studio tiger emblem, size px square. Tone "ink" is for light surfaces and sits it on a black rounded tile; the other tones go straight onto a dark surface. */
+export function Mark({ tone = "neon", size = 34, alt = "", lazy, className }: { tone?: "neon" | "ink" | "white"; size?: number; alt?: string; lazy?: boolean; className?: string }) {
+  const tile = tone === "ink", pad = tile ? Math.round(size * 0.14) : 0;
   return (
-    <svg viewBox="0 0 215 154" width={size} height={(size * 154) / 215} aria-hidden>
-      {MARK.map((d) => <path key={d.slice(0, 12)} d={d} fill={fill} />)}
-    </svg>
+    <img className={`mark${tile ? " tile" : ""}${className ? ` ${className}` : ""}`} src="/brand/emblem-128.webp" srcSet={EMBLEM} sizes={`${size - pad * 2}px`} width={size} height={size}
+      alt={alt} decoding="async" loading={lazy ? "lazy" : undefined} draggable={false} style={pad ? { padding: pad } : undefined} />
+  );
+}
+
+/** The full PSYCH Studio lockup, for dark surfaces at moderate sizes. The image is only requested once its box is near the viewport; until then an empty box of the same size holds the space. */
+export function Lockup({ width = 300, alt = "Psych Studio", className }: { width?: number; alt?: string; className?: string }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || !("IntersectionObserver" in window)) return setNear(true);
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setNear(true); io.disconnect(); } }, { rootMargin: "200px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const height = Math.round(width / LOCKUP_RATIO);
+  return (
+    <span ref={box} className="lockupbox" style={{ width, height }}>
+      {near && <img className={`lockup${className ? ` ${className}` : ""}`} src="/brand/lockup-480.webp" srcSet={LOCKUP} sizes={`${width}px`} width={width} height={height} alt={alt} decoding="async" draggable={false} />}
+    </span>
   );
 }
 
@@ -129,12 +145,11 @@ export function Waveform({ className, step = 8, color = "#65F87C" }: { className
   return <canvas ref={ref} className={className} aria-hidden />;
 }
 
-/** Traced loader built from the official mark: a faint outline with a travelling highlight. */
-export function LogoLoader({ size = 56, className }: { size?: number; className?: string }) {
+/** The emblem on its tile with a light sweep running across it. Holds still for reduced motion. */
+export function LogoLoader({ size = 64, className }: { size?: number; className?: string }) {
   return (
-    <svg className={`logoload ${className ?? ""}`} viewBox="-8 -8 231 170" width={size} height={(size * 170) / 231} role="img" aria-label="Loading">
-      <g opacity={0.18}>{MARK.map((d) => <path key={d.slice(0, 16)} d={d} fill="none" stroke="currentColor" strokeWidth={6} strokeLinejoin="round" />)}</g>
-      {MARK.map((d) => <path key={`c${d.slice(0, 16)}`} className="ll-comet" d={d} pathLength={1} fill="none" stroke="currentColor" strokeWidth={10} strokeLinecap="round" strokeLinejoin="round" />)}
-    </svg>
+    <span className={`logoload${className ? ` ${className}` : ""}`} style={{ width: size, height: size }} role="img" aria-label="Loading">
+      <Mark tone="ink" size={size} />
+    </span>
   );
 }

@@ -11,6 +11,7 @@ import { addDays, dateTime, lagosToday, naira, shortDate, statusLabel, statusTon
 import { act, useApi } from "./kit";
 import { useCatalog } from "../../lib/catalog";
 import { Availability, BookingDrawer, Bookings, Calendar, Clients } from "./bookings";
+import { Deliveries } from "./deliveries";
 import { Catalogue } from "./catalog";
 import { Website } from "./content";
 
@@ -19,7 +20,8 @@ const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "", to: "/admin", label: "Overview", title: "Overview", icon: "grid", end: true },
   { key: "calendar", to: "/admin/calendar", label: "Calendar", title: "Calendar", icon: "calendar", perm: "view_calendar" },
   { key: "bookings", to: "/admin/bookings", label: "Bookings", title: "Bookings", icon: "list", perm: "view_calendar" },
-  { key: "clients", to: "/admin/clients", label: "Clients", title: "Clients and history", icon: "users", perm: "view_calendar" },
+  { key: "deliveries", to: "/admin/deliveries", label: "Deliveries", title: "Deliveries and production queue", icon: "music", perm: "deliver_files" },
+  { key: "clients", to: "/admin/clients", label: "Clients", title: "Clients and history", icon: "users", perm: "view_calendar", any: ["manage_bookings", "update_booking_details", "assist_clients", "record_payments"] },
   { key: "availability", to: "/admin/availability", label: "Availability", title: "Availability", icon: "clock", perm: "edit_availability" },
   { key: "catalogue", to: "/admin/catalogue", label: "Services and pricing", title: "Services, packages and rooms", icon: "music", perm: "edit_packages" },
   { key: "enquiries", to: "/admin/enquiries", label: "Enquiries", title: "Enquiries and quotes", icon: "chat", perm: "assist_clients" },
@@ -31,7 +33,7 @@ const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "staff", to: "/admin/staff", label: "Staff", title: "Staff and permissions", icon: "shield", perm: "manage_staff" },
   { key: "audit", to: "/admin/audit", label: "Audit log", title: "Audit log and email outbox", icon: "receipt", perm: "view_audit" },
 ];
-const allowed = (u: User | null, s: Access) => (s.perm ? can(u, s.perm) : true);
+const allowed = (u: User | null, s: Access) => (s.perm ? can(u, s.perm) : true) && (s.any ? s.any.some((p) => can(u, p)) : true);
 
 export function Admin() {
   const { section = "" } = useParams();
@@ -54,7 +56,7 @@ function Checklist({ setup }: { setup: Record<string, boolean> }) {
     [setup.email, "Turn on email delivery", "Add a Resend API key so booking emails reach clients. Until then they are logged in the outbox.", "/admin/audit"],
     [setup.domain, "Connect your domain", "Point your own domain at the site so links and emails use it.", ""],
     [setup.contact, "Check contact details", "Replace the sample phone, email, address and WhatsApp number.", "/admin/website"],
-    [false, "Replace sample content", "Swap the sample team, equipment, portfolio, testimonials and photos for real ones, and send the official logo.", "/admin/website"],
+    [false, "Replace sample content", "Swap the sample team, equipment, portfolio, testimonials and photos for real ones.", "/admin/website"],
     [setup.analytics, "Add analytics", "Paste a Cloudflare Web Analytics token or a Google Analytics ID.", "/admin/website"],
     [setup.indexing, "Allow search engines", "Turn on indexing once everything above is done.", "/admin/website"],
   ];
@@ -313,6 +315,6 @@ function Audit() {
 }
 
 const PAGES: Record<string, () => ReactNode> = {
-  "": Overview, calendar: Calendar, bookings: Bookings, clients: Clients, availability: Availability, catalogue: Catalogue, enquiries: Enquiries,
+  "": Overview, calendar: Calendar, bookings: Bookings, deliveries: Deliveries, clients: Clients, availability: Availability, catalogue: Catalogue, enquiries: Enquiries,
   website: Website, payments: Payments, reports: Reports, staff: Staff, audit: Audit, "online-booking": OnlineBooking, verify: Verify,
 };

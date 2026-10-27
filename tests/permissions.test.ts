@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LEVELS, hasPermission, isOwner, staffChangeBlocked } from "../src/shared/permissions";
+import { LEVELS, canSeeContacts, hasPermission, isOwner, staffChangeBlocked } from "../src/shared/permissions";
 
 const ceo = { id: "ceo", role: "ceo", level: "ceo", permissions: [] };
 const coo = { id: "coo", role: "admin", level: "coo", permissions: [] };
@@ -24,6 +24,20 @@ describe("roles", () => {
   });
   it("lets the developer switch booking categories", () => {
     expect(hasPermission(dev, "toggle_booking_categories")).toBe(true);
+  });
+});
+
+describe("producers", () => {
+  const producer = { id: "prod", role: "admin", level: "producer", permissions: [...LEVELS.producer.defaults] };
+  it("can deliver files but not reach clients", () => {
+    expect(hasPermission(producer, "deliver_files")).toBe(true);
+    expect(hasPermission(producer, "view_calendar")).toBe(true);
+    expect(canSeeContacts(producer)).toBe(false);
+  });
+  it("leave contact details to owners and the front desk", () => {
+    expect(canSeeContacts(ceo) && canSeeContacts(coo) && canSeeContacts(desk) && canSeeContacts(books)).toBe(true);
+    expect(canSeeContacts(dev)).toBe(false);
+    expect(canSeeContacts({ role: "client", permissions: ["manage_bookings"] })).toBe(false);
   });
 });
 

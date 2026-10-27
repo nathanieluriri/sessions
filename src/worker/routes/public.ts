@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "../env";
 import { catalogRepo } from "../repositories/catalog";
@@ -14,16 +14,19 @@ const r = new Hono<AppEnv>();
 const PRIVATE_SETTINGS = ["analytics_ga", "analytics_cf", "gsc_verification", "seo_indexing"];
 
 r.get("/catalog", async (c) => {
-  const [services, packages, extras, rules, hours, rooms, categories] = await Promise.all([
+  const [services, packages, extras, rules, hours, rooms, categories, sessions] = await Promise.all([
     catalogRepo.services(c.env.DB), catalogRepo.packages(c.env.DB), catalogRepo.extras(c.env.DB), loadRules(c.env), settingsRepo.hours(c.env.DB),
-    catalogRepo.rooms(c.env.DB), catalogRepo.categories(c.env.DB),
+    catalogRepo.rooms(c.env.DB), catalogRepo.categories(c.env.DB), catalogRepo.sessionSlots(c.env.DB),
   ]);
   return c.json({
     services: services.map((s) => ({ ...s, deliverables: JSON.parse(s.deliverables), gallery: JSON.parse(s.gallery) })),
     packages: packages.filter((p) => categories.some((x) => x.slug === p.service_category && x.bookable)).map((p) => ({ ...p, includes: JSON.parse(p.includes) })),
     rooms: rooms.map((x) => ({ ...x, features: JSON.parse(x.features) })),
-    extras, categories, hours,
-    rules: { holdMin: rules.holdMin, extraHourKobo: rules.extraHourKobo, maxPeople: rules.maxPeople, buffer: rules.buffer, depositPercent: rules.depositPercent, requireApproval: rules.requireApproval, paymentWindowHours: rules.paymentWindowHours },
+    extras, categories, hours, sessions,
+    rules: {
+      holdMin: rules.holdMin, extraHourKobo: rules.extraHourKobo, maxPeople: rules.maxPeople, buffer: rules.buffer, depositPercent: rules.depositPercent,
+      requireApproval: rules.requireApproval, paymentWindowHours: rules.paymentWindowHours, minNotice: rules.minNotice, bookAhead: rules.bookAhead,
+    },
   });
 });
 
@@ -37,8 +40,12 @@ r.get("/content", async (c) => {
   return c.json({ policies, content, portfolio, team, equipment, gallery, testimonials, faqs, announcements });
 });
 
-r.get("/availability/month", async (c) => c.json(await availabilityService.month(c.env, c.req.query("month") ?? "", Number(c.req.query("duration") ?? 120), c.req.query("room") ?? "")));
-r.get("/availability/day", async (c) => c.json(await availabilityService.slots(c.env, c.req.query("date") ?? "", Number(c.req.query("duration") ?? 120), c.req.query("room") ?? "")));
+// With `package` the answer follows that package's scheduling mode. `duration` and `room` still work on their own for the flex grid.
+const availabilityQuery = (c: Context<AppEnv>) => ({
+  packageId: c.req.query("package") || undefined, duration: c.req.query("duration") ? Number(c.req.query("duration")) : undefined, roomId: c.req.query("room") ?? "",
+});
+r.get("/availability/month", async (c) => c.json(await availabilityService.month(c.env, { month: c.req.query("month") ?? "", ...availabilityQuery(c) })));
+r.get("/availability/day", async (c) => c.json(await availabilityService.day(c.env, { date: c.req.query("date") ?? "", ...availabilityQuery(c) })));
 
 r.post("/enquiries", async (c) => {
   const b = await body(c, z.object({

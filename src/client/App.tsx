@@ -7,6 +7,7 @@ const account = () => import("./pages/account");
 const AccountHome = lazy(() => account().then((m) => ({ default: m.AccountHome })));
 const AccountBookings = lazy(() => account().then((m) => ({ default: m.AccountBookings })));
 const AccountBooking = lazy(() => account().then((m) => ({ default: m.AccountBooking })));
+const AccountFiles = lazy(() => account().then((m) => ({ default: m.AccountFiles })));
 const AccountPayments = lazy(() => account().then((m) => ({ default: m.AccountPayments })));
 const AccountProfile = lazy(() => account().then((m) => ({ default: m.AccountProfile })));
 const Admin = lazy(() => import("./pages/admin").then((m) => ({ default: m.Admin })));
@@ -85,6 +86,7 @@ export default function App() {
           <Route path="/account" element={<AccountHome />} />
           <Route path="/account/bookings" element={<AccountBookings />} />
           <Route path="/account/bookings/:id" element={<AccountBooking />} />
+          <Route path="/account/files" element={<AccountFiles />} />
           <Route path="/account/payments" element={<AccountPayments />} />
           <Route path="/account/profile" element={<AccountProfile />} />
           <Route path="/admin/:section?" element={<Admin />} />

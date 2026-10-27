@@ -32,7 +32,7 @@ export function About() {
       </div></section>
       {points.length > 0 && (
         <section className="section darksec"><div className="wrap stack gap32">
-          <div className="row gap12"><Mark tone="neon" size={26} /><h2 className="h1">Why work with us</h2></div>
+          <div className="row gap12"><Mark tone="neon" size={44} lazy /><h2 className="h1">Why work with us</h2></div>
           <div className="grid cols-4">{points.map(([t, d]) => <div key={t} className="stack gap8 why"><b>{t}</b><span>{d}</span></div>)}</div>
         </div></section>
       )}

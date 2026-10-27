@@ -6,6 +6,7 @@ import { badRequest, conflict, unauthorized, AppError } from "../lib/errors";
 import { brand, sendEmail } from "./notifications";
 import { bookingsRepo } from "../repositories/bookings";
 import { audit } from "./audit";
+import { filesService } from "./files";
 
 export const SESSION_DAYS = 14;
 
@@ -66,7 +67,10 @@ export const authService = {
     if (!r) throw badRequest("This link has expired or was already used.");
     await usersRepo.markVerified(env.DB, r.user_id);
     const u = await usersRepo.byId(env.DB, r.user_id);
-    if (u?.role === "client") await bookingsRepo.linkGuestBookings(env.DB, u.id, u.email);
+    if (u?.role === "client") {
+      await bookingsRepo.linkGuestBookings(env.DB, u.id, u.email);
+      await filesService.catchUpForUser(env, u.id);
+    }
   },
 
   async resendVerification(env: Env, user: SessionUser) {

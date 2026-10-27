@@ -3,7 +3,7 @@ import { getCookie } from "hono/cookie";
 import type { AppEnv, SessionUser } from "../env";
 import { authService } from "../services/auth";
 import { forbidden, unauthorized } from "../lib/errors";
-import { hasPermission, type Permission } from "../../shared/permissions";
+import { canSeeContacts, hasPermission, type Permission } from "../../shared/permissions";
 
 export const COOKIE = "sessions_sid";
 
@@ -32,5 +32,13 @@ export const requirePermission = (p: Permission): MiddlewareHandler<AppEnv> => a
   const u = c.get("user");
   if (!u) throw unauthorized();
   if (!can(u, p)) throw forbidden();
+  await next();
+};
+
+/** Client lists and histories expose emails and phone numbers, so they are for staff who work with clients. */
+export const requireFrontDesk: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const u = c.get("user");
+  if (!u) throw unauthorized();
+  if (!canSeeContacts(u)) throw forbidden();
   await next();
 };

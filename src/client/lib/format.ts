@@ -1,6 +1,12 @@
 export const naira = (kobo: number) => `₦${Math.round(kobo / 100).toLocaleString("en-NG")}`;
-export const t12 = (m: number) => { const h = Math.floor(m / 60), mm = m % 60; return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")}${h >= 12 ? "pm" : "am"}`; };
-export const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+// Minutes run past 1439 for sessions that end after midnight, so the clock wraps: 1740 reads 5:00am.
+const clock = (m: number) => ((m % 1440) + 1440) % 1440;
+export const t12 = (m: number) => { const h = Math.floor(clock(m) / 60), mm = clock(m) % 60; return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")}${h >= 12 ? "pm" : "am"}`; };
+export const hm = (m: number) => `${String(Math.floor(clock(m) / 60)).padStart(2, "0")}:${String(clock(m) % 60).padStart(2, "0")}`;
+export const endsNextDay = (end: number) => end >= 1440;
+export const weekdayName = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
+/** "11:00pm to 5:00am (Sunday)": the weekday in brackets is the day after `date`. */
+export const timeRange = (date: string, start: number, end: number) => `${t12(start)} to ${t12(end)}${endsNextDay(end) ? ` (${weekdayName(addDays(date, 1))})` : ""}`;
 export const longDate = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 export const shortDate = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 export const dateTime = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" });

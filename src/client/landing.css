@@ -51,7 +51,6 @@ a.hbadge:hover .pbadge { background: rgba(255,255,255,.1); }
 .pv.on { opacity: 1; transform: none; }
 .pv.past { transform: translateX(-44px); }
 .pbar { display: flex; align-items: center; gap: 8px; font-size: 15px; }
-.pbar svg { width: 26px; height: auto; }
 .pav { display: grid; place-items: center; width: 32px; height: 32px; margin-left: auto; border-radius: 50%; background: #0a0a0a; color: var(--neon); font-size: 11px; font-weight: 600; }
 .phi { margin-top: 12px; font-size: 14px; color: #6b6b66; }
 .ptitle { font-size: 25px; line-height: 1.08; letter-spacing: -.03em; font-weight: 600; }
@@ -116,6 +115,7 @@ a.hbadge:hover .pbadge { background: rgba(255,255,255,.1); }
 .pticket { position: relative; display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 6px; padding: 16px; border-radius: 20px; background: #0a0a0a; color: #fff; text-align: left; }
 .pdone.on .pticket { animation: tkin .7s .2s cubic-bezier(.2,.75,.1,1) both; }
 @keyframes tkin { from { opacity: 0; transform: translateY(24px) rotate(-3deg); } }
+.pt-brand { display: inline-flex; align-items: center; gap: 6px; }
 .pt-top { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--neon); }
 .pticket > b { font-size: 22px; line-height: 1.05; letter-spacing: -.02em; font-weight: 600; }
 .pt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -133,7 +133,7 @@ a.hbadge:hover .pbadge { background: rgba(255,255,255,.1); }
 /* Intro */
 .intro { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: #0a0a0a; color: #fff; transition: transform .65s cubic-bezier(.7,0,.2,1); }
 .intro.s2 { transform: translateY(-100%); }
-.ilogo { display: inline-flex; align-items: center; gap: 12px; height: 66px; padding: 0 28px 0 22px; border-radius: 999px; border: 1px solid rgba(255,255,255,.24); font-size: 25px; font-weight: 600; letter-spacing: -.02em; }
+.ilogo { display: inline-flex; align-items: center; gap: 14px; height: 80px; padding: 0 34px 0 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.24); font-size: 27px; font-weight: 600; letter-spacing: -.02em; }
 .ilogo span { position: relative; color: rgba(255,255,255,.16); }
 .ilogo span::after { content: attr(data-text); position: absolute; inset: 0; color: #fff; clip-path: inset(0 100% 0 0); animation: ifill 1.05s .1s cubic-bezier(.6,0,.2,1) forwards; }
 @keyframes ifill { to { clip-path: inset(0 0 0 0); } }
@@ -147,7 +147,7 @@ a.hbadge:hover .pbadge { background: rgba(255,255,255,.1); }
 .rtrack { overflow: hidden; padding: 30px 0; -webkit-mask: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); mask: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
 .rrow { display: flex; width: max-content; animation: marquee 48s linear infinite; }
 .rrow span { display: inline-flex; align-items: center; gap: 14px; padding-right: 56px; font-size: 26px; font-weight: 600; letter-spacing: -.02em; white-space: nowrap; color: rgba(255,255,255,.58); }
-.rrow svg { opacity: .7; }
+.rrow .mark { opacity: .8; }
 .ribbon:hover .rrow { animation-play-state: paused; }
 @keyframes marquee { to { transform: translateX(-50%); } }
 
@@ -267,7 +267,9 @@ a.hbadge:hover .pbadge { background: rgba(255,255,255,.1); }
 .work2 .work-body .muted, .work2 .work-body .small { color: rgba(255,255,255,.66); }
 
 /* Plans */
-.pcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; max-width: 1120px; margin: 72px auto 0; }
+.pcards { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 24px; max-width: calc(var(--n, 3) * 373px); margin: 72px auto 0; }
+.punit { font-size: 16px; letter-spacing: 0; color: rgba(255,255,255,.6); }
+.pmeta s { opacity: .8; }
 .pcard { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 34px 28px 28px; border-radius: 30px; border: 1px solid rgba(255,255,255,.16); background: #0d0d0d; color: #fff; }
 .pcard.hot { border-color: transparent; }
 .pcard.hot::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2px; pointer-events: none;

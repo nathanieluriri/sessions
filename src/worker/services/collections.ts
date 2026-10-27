@@ -48,7 +48,7 @@ export const COLLECTIONS: Record<string, Collection> = {
   },
   extras: {
     table: "extras", key: "id", perm: "edit_packages", order: "category, price_kobo", noun: "extra", slug: true, publicWhere: "active = 1",
-    fields: { name: required("Name", 80), price_kobo: int(), category: text(40), active: flag },
+    fields: { name: required("Name", 80), price_kobo: int(), category: text(40), service_slug: text(60), pricing: z.enum(["fixed", "quote"]).default("fixed"), description: text(200), active: flag },
   },
   portfolio: {
     table: "portfolio", key: "id", perm: "edit_content", order: "sort, created_at DESC", noun: "project", publicWhere: "published = 1",
@@ -81,6 +81,13 @@ export const COLLECTIONS: Record<string, Collection> = {
     table: "announcements", key: "id", perm: "edit_content", order: "created_at DESC", noun: "announcement",
     publicWhere: "published = 1 AND (starts_on IS NULL OR starts_on <= ?1) AND (ends_on IS NULL OR ends_on >= ?1)",
     fields: { title: required("Title", 120), body: text(300), link_label: text(40), link_url: link, starts_on: optionalDate, ends_on: optionalDate, published: flag },
+  },
+  session_slots: {
+    table: "session_slots", key: "id", perm: "edit_availability", order: "kind, sort, start_min", noun: "session time",
+    fields: {
+      kind: z.enum(["day", "night"]), label: required("Name", 60), weekday: z.number().int().min(0).max(6).nullable().default(null),
+      start_min: int(0, 1439), end_min: int(1, 2880), sort: int(), active: flag,
+    },
   },
   page_meta: {
     table: "page_meta", key: "path", perm: "edit_content", order: "path", noun: "page",

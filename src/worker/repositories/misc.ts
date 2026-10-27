@@ -7,8 +7,8 @@ export const auditRepo = {
 };
 
 export const notificationsRepo = {
-  add: (db: D1Database, n: { id: string; userId: string; title: string; body: string }) => run(db, "INSERT INTO notifications (id, user_id, title, body) VALUES (?, ?, ?, ?)", n.id, n.userId, n.title, n.body),
-  forUser: (db: D1Database, userId: string) => all<{ id: string; title: string; body: string; read_at: string | null; created_at: string }>(db, "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 30", userId),
+  add: (db: D1Database, n: { id: string; userId: string; title: string; body: string; bookingId?: string | null }) => run(db, "INSERT INTO notifications (id, user_id, title, body, booking_id) VALUES (?, ?, ?, ?, ?)", n.id, n.userId, n.title, n.body, n.bookingId ?? null),
+  forUser: (db: D1Database, userId: string) => all<{ id: string; title: string; body: string; booking_id: string | null; read_at: string | null; created_at: string }>(db, "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 30", userId),
   markRead: (db: D1Database, userId: string) => run(db, "UPDATE notifications SET read_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ? AND read_at IS NULL", userId),
 };
 

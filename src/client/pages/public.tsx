@@ -7,15 +7,17 @@ import { Area, Btn, ErrorBox, Field, Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
 import { RichText } from "../components/content";
 import { PHOTOS, depositOf, needsApproval, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
-import { naira } from "../lib/format";
+import { hrs, naira } from "../lib/format";
+import { activeSessions, deliveryLabel, fixedPackages, howLine, moneyOrRequest, nextPath, revisionLabel, savings, sessionDays, sessionWindow, stepsFor } from "../lib/booking";
 import { api } from "../lib/api";
 import { loadDraft, saveDraft } from "../lib/draft";
 
-export function ServiceCard({ s, on, onClick }: { s: Service; on?: boolean; onClick?: () => void }) {
+export function ServiceCard({ s, on, onClick, quote, premium }: { s: Service; on?: boolean; onClick?: () => void; quote?: boolean; premium?: boolean }) {
   return (
-    <button type="button" className={`svc ${on ? "on" : ""}`} style={{ backgroundImage: `url(${s.image_url})` }} onClick={onClick} aria-pressed={on}>
+    <button type="button" className={`svc ${on ? "on" : ""} ${premium ? "premium" : ""}`} style={{ backgroundImage: `url(${s.image_url})` }} onClick={onClick} aria-pressed={quote ? undefined : on}>
+      {premium && <span className="svcbadge">Exclusive offer</span>}
       {on && <span className="check"><Icon name="check" size={18} /></span>}
-      <span className="label"><b>{s.name}</b><span>{s.price_label}</span></span>
+      <span className="label"><b>{s.name}</b><span>{quote ? "Request a quote" : s.price_label}</span>{premium && s.duration_label && <span className="svcsub">{s.duration_label}</span>}</span>
     </button>
   );
 }
@@ -23,9 +25,12 @@ export function ServiceCard({ s, on, onClick }: { s: Service; on?: boolean; onCl
 /** Starts the booking flow with whatever the visitor already chose. */
 export function useStartBooking() {
   const nav = useNavigate();
+  const cat = useCatalog();
   return (patch: { serviceSlug?: string; packageId?: string }) => {
-    saveDraft({ ...loadDraft(), ...patch, holdId: undefined, start: undefined });
-    nav(patch.serviceSlug && patch.packageId ? "/book/time" : patch.serviceSlug ? "/book/package" : "/book");
+    saveDraft({ ...loadDraft(), ...patch, holdId: undefined, start: undefined, date: undefined, extras: [], extraHours: 0 });
+    const svc = cat?.services.find((x) => x.slug === patch.serviceSlug);
+    const steps = stepsFor(fixedPackages(cat ?? { packages: [] }, svc), patch.packageId);
+    nav(!patch.serviceSlug ? "/book" : nextPath(steps, patch.packageId && steps.some((x) => x.key === "package") ? "package" : "service"));
   };
 }
 
@@ -35,18 +40,26 @@ export function PackageCard({ p, cat, service }: { p: Package; cat: Catalog; ser
   const quote = p.pricing === "quote";
   const approval = needsApproval(cat, p);
   const pct = p.deposit_percent ?? cat.rules.depositPercent;
-  const svc = service ?? cat.services.find((s) => s.category === p.service_category);
+  const svc = service ?? cat.services.find((s) => s.slug === p.service_slug) ?? cat.services.find((s) => s.category === p.service_category);
   const pay = pct > 0 && pct < 100 ? `${pct}% deposit (${naira(depositOf(cat, p, p.price_kobo))})` : "";
   const terms = approval ? `Needs studio approval, then ${pay ? `a ${pay} or pay in full` : "paid in full"}` : pay ? `${pay} to book, or pay in full` : "Paid in full when you book";
+  const sv = savings(p);
+  const facts = [deliveryLabel(p.turnaround_days), revisionLabel(p.revision_limit)].filter(Boolean);
+  const how = quote ? "" : howLine(p, cat.sessions);
   return (
     <div className={`pkg ${f ? "featured" : ""}`} id={`pkg-${p.slug}`}>
-      {f && <span className="pkgbadge">Most booked</span>}
+      {f && <span className="pkgbadge">Featured</span>}
       <h3 className="h3">{p.name}</h3>
       <p style={{ opacity: f ? .75 : 1 }} className={f ? "" : "muted"}>{p.description}</p>
       {quote
         ? <div className="stack gap4"><span className="price" style={{ fontSize: 30 }}>Price on request</span>{p.price_note && <span className="small" style={{ opacity: .65 }}>{p.price_note}</span>}</div>
-        : <div className="stack gap4"><div className="row gap8" style={{ alignItems: "baseline" }}><span className="price">{naira(p.price_kobo)}</span><span className="small" style={{ opacity: .6 }}>per session</span></div>
+        : <div className="stack gap4"><div className="row gap8 wrapflex" style={{ alignItems: "baseline" }}><span className="price">{naira(p.price_kobo)}</span>{p.unit && <span className="small" style={{ opacity: .6 }}>{p.unit}</span>}</div>
+          {sv && <div className="row gap8 wrapflex small" style={{ alignItems: "center" }}><s style={{ opacity: .6 }}>{naira(sv.regular)}</s><span className="tag success">Save {naira(sv.kobo)} ({sv.percent}%)</span></div>}
           <span className="small" style={{ opacity: .65 }}>{terms}</span></div>}
+      {(facts.length > 0 || how) && <div className="stack gap8">
+        {facts.length > 0 && <div className="row gap8 wrapflex">{facts.map((x) => <span key={x} className="pkgfact">{x}</span>)}</div>}
+        {how && <span className="small" style={{ opacity: .65 }}>{how}</span>}
+      </div>}
       <div className="divider" style={{ background: f ? "var(--brand-2)" : undefined }} />
       <ul>{p.includes.map((i) => <li key={i}><Eq />{i}</li>)}</ul>
       {quote
@@ -69,42 +82,70 @@ export function Packages() {
     setTimeout(() => document.getElementById(h)?.scrollIntoView({ block: "start" }), 50);
   }, [loc.hash, cat, site]);
   const booking = site?.policies.filter((p) => p.kind === "booking") ?? [];
-  const priced = cat?.categories.filter((c) => cat.packages.some((p) => p.service_category === c.slug)) ?? [];
+  const cats = [...(cat?.categories ?? [])].sort((a, b) => a.sort - b.sort);
+  const priced = cats.filter((c) => cat?.packages.some((p) => p.service_category === c.slug));
+  const exclusiveFirst = [...priced].sort((a, b) => Number(b.slug === "exclusive") - Number(a.slug === "exclusive"));
+  const sessions = cat ? activeSessions(cat.sessions) : [];
+  const revisions = cat ? Math.max(0, ...cat.packages.map((p) => p.revision_limit)) : 0;
+  const flex = !!cat?.packages.some((p) => p.scheduling === "flex" && p.pricing === "fixed" && p.active);
   return (
     <PublicLayout title="Pricing and packages">
-      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub="Every package includes the people who run the room. Prices are locked when you book, and most packages take a deposit." />
+      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub="Prices are locked when you book. Recording sessions run at fixed times, and everything we make is delivered in your portal." />
       <section className="section" style={{ paddingTop: 40 }}><div className="wrap stack gap32">
         {!cat ? <Loading /> : <>
-          {priced.length > 1 && <div className="chips" role="tablist">
-            {[{ slug: "all", name: "All packages" }, ...priced].map((c) => <button key={c.slug} className={`chip ${tab === c.slug ? "on" : ""}`} onClick={() => setTab(c.slug)} role="tab" aria-selected={tab === c.slug}>{c.name}</button>)}
+          {exclusiveFirst.length > 1 && <div className="chips" role="tablist">
+            {[{ slug: "all", name: "All packages" }, ...exclusiveFirst].map((c) => <button key={c.slug} className={`chip ${tab === c.slug ? "on" : ""}`} onClick={() => setTab(c.slug)} role="tab" aria-selected={tab === c.slug}>{c.name}</button>)}
           </div>}
-          {cat.categories.filter((c) => tab === "all" || tab === c.slug).map((c) => {
-            const list = cat.packages.filter((p) => p.service_category === c.slug);
-            if (!list.length) return null;
-            return (
-              <div key={c.slug} id={c.slug} className="stack gap20" style={{ scrollMarginTop: 100 }}>
-                <div className="stack gap4"><h2 className="h2">{c.name}</h2><p className="muted">{c.blurb}</p></div>
+          {exclusiveFirst.filter((c) => tab === "all" || tab === c.slug).map((c) => {
+            const list = cat.packages.filter((p) => p.service_category === c.slug).sort((a, b) => a.sort - b.sort);
+            const extras = cat.extras.filter((e) => e.category === c.slug);
+            const band = c.slug === "exclusive";
+            const body = (
+              <div className="stack gap20">
+                <div className="stack gap4">{band && <span className="mono neon">Exclusive offers</span>}<h2 className="h2">{c.name}</h2><p className={band ? "bandsub" : "muted"}>{c.blurb}</p></div>
                 <div className="grid cols-3">{list.map((p) => <PackageCard key={p.id} p={p} cat={cat} />)}</div>
+                {extras.length > 0 && <div className="stack gap12">
+                  <b className={band ? "bandsub" : undefined}>Add-ons you can request</b>
+                  <div className="grid cols-3">{extras.map((e) => (
+                    <div key={e.slug} className="rate extra">
+                      <span className="stack gap4"><b>{e.name}</b>{e.description && <span className="small muted">{e.description}</span>}</span>
+                      <span className="rate-price">{moneyOrRequest(e)}</span>
+                    </div>
+                  ))}</div>
+                </div>}
               </div>
             );
+            return band
+              ? <div key={c.slug} id={c.slug} className="exband" style={{ scrollMarginTop: 100 }}>{body}</div>
+              : <div key={c.slug} id={c.slug} style={{ scrollMarginTop: 100 }}>{body}</div>;
           })}
-          <div className="stack gap20 pkgmore" id="rooms">
-            <div className="stack gap4"><h2 className="h2">Rooms and extra time</h2><p className="muted">Every package includes its room and crew. Need longer? Add time at the room’s hourly rate.</p></div>
+          {sessions.length > 0 && <div className="stack gap20 pkgmore" id="sessions">
+            <div className="stack gap4"><h2 className="h2">Session times</h2><p className="muted">Recording sessions run at these times. You pick one when you book, and each ends on schedule so the room is ready for the next artist.</p></div>
+            <div className="grid cols-4">{sessions.map((s) => (
+              <div key={s.id} className="rate sessionrate">
+                <span className="stack gap4"><span className="mono faint">{sessionDays(s)}</span><b>{s.label}</b></span>
+                <span className="rate-price" style={{ fontSize: 16 }}>{sessionWindow(s)}</span>
+                <span className="small muted">{hrs(s.end_min - s.start_min)}</span>
+              </div>
+            ))}</div>
+          </div>}
+          <div className="panel deliverystrip" id="delivery">
+            <div className="stack gap4"><b>How delivery works</b><span className="small muted">Everything is delivered in your portal, never by email.</span></div>
+            <ul className="stack gap8 small">
+              <li>Your finished files appear in your portal and you get a notification.</li>
+              <li>Files unlock when your balance is paid.</li>
+              {revisions > 0 && <li>Up to {revisions} revisions, requested from your portal.</li>}
+            </ul>
+            <TactileLink to="/faq" variant="light" size="lg">Read the FAQs</TactileLink>
+          </div>
+          {flex && <div className="stack gap20" id="rooms">
+            <div className="stack gap4"><h2 className="h2">Rooms and extra time</h2><p className="muted">Hourly packages include their room and crew. Need longer? Add time at the room’s hourly rate.</p></div>
             <div className="grid cols-4">{cat.rooms.map((r) => (
               <Link key={r.id} to={`/studio#${r.slug}`} className="rate">
                 <span className="rate-img" style={{ backgroundImage: `url(${r.image_url})` }} />
                 <span className="stack gap4"><b>{r.name}</b><span className="small muted">{r.kind} · up to {r.capacity} people</span></span>
                 <span className="rate-price">{naira(r.hourly_kobo || cat.rules.extraHourKobo)}<span className="small muted"> per extra hour</span></span>
               </Link>
-            ))}</div>
-          </div>
-          {cat.extras.length > 0 && <div className="stack gap20" id="extras">
-            <div className="stack gap4"><h2 className="h2">Extras</h2><p className="muted">Add any of these when you book.</p></div>
-            <div className="grid cols-3">{cat.extras.map((e) => (
-              <div key={e.slug} className="rate extra">
-                <span className="stack gap4"><b>{e.name}</b><span className="small muted">{cat.categories.find((c) => c.slug === e.category)?.name ?? "Any session"}</span></span>
-                <span className="rate-price">{naira(e.price_kobo)}</span>
-              </div>
             ))}</div>
           </div>}
           <div className="panel row between wrapflex gap16">
@@ -138,7 +179,7 @@ function ContactCard() {
       {c.whatsapp && <TactileAnchor href={waLink(c.whatsapp)} target="_blank" rel="noreferrer" variant="neon" size="lg" block>Chat on WhatsApp</TactileAnchor>}
       {cat && <div className="stack gap8 hoursbox">
         <span className="mono neon">Opening hours</span>
-        {hoursSummary(cat.hours).map((h) => <div key={h.days} className="row between small"><span style={{ opacity: .75 }}>{h.days}</span><b>{h.time}</b></div>)}
+        {hoursSummary(cat.hours, cat.sessions).map((h) => <div key={h.days} className="row between small"><span style={{ opacity: .75 }}>{h.days}</span><b>{h.time}</b></div>)}
         {c.hours_note && <span className="caption" style={{ color: "rgba(255,255,255,.55)" }}>{c.hours_note}</span>}
       </div>}
       <Socials links={c} />

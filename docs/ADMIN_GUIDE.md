@@ -1,6 +1,6 @@
 # Admin guide
 
-How to run Psych Records Entertainment day to day. Staff sign in at `/staff/login`. The CEO and COO see everything; other staff see only the areas they are granted in Staff.
+How to run Psych Studio day to day. Staff sign in at `/staff/login`. The CEO and COO see everything; other staff see only the areas they are granted in Staff.
 
 ## Daily routine
 
@@ -39,11 +39,12 @@ Bookings, **New booking**: choose the service and package, pick an open slot (or
 
 ## Services and pricing
 
-- **Packages**: price, duration, room, category, what is included, deposit and whether the studio must approve it. Choose **Priced by quote** for work like music videos; those show a Request a quote button instead of a price. Price changes only apply to new bookings.
+- **Packages**: price, regular price (optional, shows the discount), unit text, the service it belongs to, what is included, delivery days, revisions, deposit and whether the studio must approve it. **How it is booked** decides what the client does: *Fixed session time* (picks one of the session times), *Whole day request* (picks a start day, the studio confirms the schedule), *Remote order* (no date, they order and send files in the portal) or *Flexible start time* (any time that fits). Choose **Priced by quote** for work like music videos; those show a Request a quote button instead of a price. Price changes only apply to new bookings.
 - **Services**: each service has its own page with a summary, full description, deliverables, duration, price label, image and gallery. A service shows the packages from its category.
+- **Session times**: the fixed sessions clients choose from, for example the four day sessions and the Saturday All night session. Set the name, whether it belongs to the day or night packages, which weekday it runs on (or every day), and the start and end. Tick **Ends the next day** for a session that finishes after midnight, such as 11:00pm to 5:00am. Changing a time affects new bookings only.
 - **Rooms**: name, type, description, photo, capacity, extra hour rate and features. Every room has its own calendar.
 - **Categories**: group services and packages (Music and audio, Video production and so on). Add a category to introduce a new line of work without a redesign.
-- **Extras**: add-ons clients can tick at checkout, optionally only for one category.
+- **Extras**: add-ons clients can tick at checkout, optionally only for one category or one service. An extra set to **Price on request** is never added to the total; the studio quotes it after the request.
 - **Deposits and approvals**: the default deposit percentage, whether every booking needs approval, how long requests and approvals wait, reminder timing and the default extra hour rate.
 
 ## Website content
@@ -59,6 +60,21 @@ Website (needs the edit content permission):
 - **SEO and analytics**: site title and description, share image, page titles and descriptions, Cloudflare Web Analytics or Google Analytics, Search Console verification and the search indexing switch.
 
 Images: click **Upload** next to any image field. Photos are resized in the browser before upload so pages stay fast. Use the caption field on gallery photos; it is also the description screen readers and search engines read.
+
+## Deliveries (deliver files)
+
+All finished work goes to the client through their portal, never as an email attachment. Files unlock for download once the balance is paid. Owners and staff who record payments can release a delivery earlier for one file; producers cannot.
+
+The **Deliveries** section is the production queue, with a count on each tab:
+
+- **To deliver**: paid or confirmed jobs with nothing delivered yet, with the due date (an **Overdue** tag when it has passed) and a **Balance due** tag.
+- **Revision requests**: clients who asked for changes. Delivering again answers the request.
+- **Client uploads**: files clients sent. A file stays marked **New** until it is first downloaded.
+- **Delivered**: work handed over and waiting for approval.
+
+Click a row to open the booking on its **Files** panel. To deliver: add the finished files, give each a clear title, write a note to the artist (no phone numbers or email addresses), then press **Deliver to artist**. The client is emailed a link to the portal. Tick **This is the final delivery in all agreed formats** only when everything is delivered, because it completes the job and closes revisions. If the artist cannot be notified (no account or email), add their email in **Edit details** and share the portal link.
+
+You cannot deliver while a client has a pending cancel or reschedule request; decide the request first. Clients get 3 revisions on mixing and mastering. An order the client does not answer completes by itself 7 days after the latest delivery once the balance is paid and the session date has passed. After completion there are no more adjustments or refunds under the studio's terms.
 
 ## Enquiries and quotes
 
@@ -93,6 +109,7 @@ Create staff accounts here; there is no public staff sign up. The new staff memb
 | CEO, COO | Everything |
 | Accountant | View calendar, record payments, verify payments, view payments, view reports |
 | Receptionist | View calendar, manage bookings, update booking details, verify payments, assist clients |
+| Producer or engineer | View calendar, deliver files. Sees no client email, phone or payment details anywhere in the admin |
 | Developer | Edit content, turn booking categories on or off, view audit log, manage staff |
 
 | Permission | Allows |
@@ -104,6 +121,7 @@ Create staff accounts here; there is no public staff sign up. The new staff memb
 | Verify payments | Look up payment reference codes and validate them |
 | View payments | Every payment and outstanding balance |
 | View reports | Financial reports and CSV export |
+| Deliver files | The Deliveries section and the Files panel of a booking: upload and deliver finished work, download client uploads, close revisions. Releasing a file before payment also needs Record payments |
 | Assist clients | Enquiries and quote requests |
 | Edit availability | Opening hours, buffers and blocked time |
 | Edit packages | Services, packages, rooms, categories, extras, deposits and approval rules |

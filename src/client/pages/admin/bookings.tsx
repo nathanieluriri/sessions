@@ -5,12 +5,16 @@ import { Area, Btn, ErrorBox, Field, Loading, Modal, Seg, Tag, toast } from "../
 import { HoldToConfirm, TactileAnchor } from "../../components/kitchen";
 import { api } from "../../lib/api";
 import { can, useAuth, type User } from "../../lib/auth";
+import { canSeeContacts } from "../../../shared/permissions";
+import { FilesPanel } from "./files";
 import { useCatalog } from "../../lib/catalog";
-import { addDays, dateTime, hm, hrs, lagosToday, naira, payState, shortDate, statusLabel, statusTone, t12 } from "../../lib/format";
+import { addDays, dateTime, hm, hrs, lagosToday, naira, payState, shortDate, statusLabel, statusTone, t12, timeRange } from "../../lib/format";
 import { act, useApi } from "./kit";
 
 const SOURCE: Record<string, string> = { online: "Online", phone: "Phone", whatsapp: "WhatsApp", walk_in: "Walk-in", email: "Email", instagram: "Instagram", other: "Other" };
 const toMin = (v: string) => { const [h, m] = v.split(":").map(Number); return h * 60 + (m || 0); };
+
+const Hidden = ({ why }: { why: string }) => <span className="hiddenval" title={why}>Hidden<span className="caption"> {why}</span></span>;
 
 function RoomChips({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const cat = useCatalog();
@@ -109,8 +113,9 @@ export function Bookings() {
   </>;
 }
 
-export function BookingDrawer({ id, user, onClose, onChange }: { id: string; user: User | null; onClose: () => void; onChange: () => void }) {
+export function BookingDrawer({ id, user, tab: first = "details", onClose, onChange }: { id: string; user: User | null; tab?: "details" | "files"; onClose: () => void; onChange: () => void }) {
   const [d, load] = useApi<any>(`/admin/bookings/${id}`);
+  const [tab, setTab] = useState<"details" | "files">(first);
   const [mode, setMode] = useState<"" | "edit" | "move" | "cancel" | "approve" | "reject" | "confirm" | "pay">("");
   const [pick, setPick] = useState<{ date: string; start: number } | null>(null);
   const [f, setF] = useState<any>(null);
@@ -121,17 +126,21 @@ export function BookingDrawer({ id, user, onClose, onChange }: { id: string; use
   if (!d) return <Modal title="Booking" onClose={onClose}><Loading /></Modal>;
   const b = d.booking;
   const manage = can(user, "manage_bookings"), money = can(user, "record_payments");
+  const showFiles = can(user, "deliver_files"), contacts = !!user && canSeeContacts(user), remote = b.scheduling === "project", onFiles = showFiles && tab === "files";
   const started = new Date(`${b.date}T${hm(b.start_min)}:00+01:00`).getTime() <= Date.now();
   const copy = async () => { await navigator.clipboard?.writeText(d.payLink).catch(() => {}); toast("Payment link copied"); };
   const post = (path: string, body: unknown, ok: string) => act(() => api(`/admin/bookings/${id}/${path}`, { body }), ok, refresh);
   return (
     <Modal title={`Booking ${b.ref}`} onClose={onClose}>
-      <div className="row gap8 wrapflex"><Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag>{["confirmed", "completed", "approved"].includes(b.status) && <Tag tone={b.balance_kobo > 0 ? "warning" : "success"}>{payState(b)}</Tag>}{b.source !== "online" && <Tag>{SOURCE[b.source] ?? b.source}</Tag>}{b.rescheduled_at && <Tag>Rescheduled</Tag>}</div>
-      <span className="small muted">{shortDate(b.date)} · {t12(b.start_min)} to {t12(b.end_min)} · {hrs(b.end_min - b.start_min)} · {b.room_name}</span>
+      <div className="row gap8 wrapflex"><Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag>{["confirmed", "completed", "approved"].includes(b.status) && (d.payments ? <Tag tone={b.balance_kobo > 0 ? "warning" : "success"}>{payState(b)}</Tag> : b.balance_kobo > 0 && <Tag tone="warning">Balance due</Tag>)}{b.source !== "online" && <Tag>{SOURCE[b.source] ?? b.source}</Tag>}{b.rescheduled_at && <Tag>Rescheduled</Tag>}</div>
+      <span className="small muted">{remote ? `Remote order${b.due_date ? ` · due ${shortDate(b.due_date)}` : ""} · placed ${shortDate(b.date)}` : `${shortDate(b.date)} · ${timeRange(b.date, b.start_min, b.end_min)} · ${hrs(b.end_min - b.start_min)} · ${b.room_name}`}</span>
+      {showFiles && <div className="drawtabs" role="tablist" aria-label="Booking sections">{(["details", "files"] as const).map((k) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{k === "files" ? "Files and delivery" : "Details"}</button>)}</div>}
+      {onFiles && <FilesPanel id={id} user={user} onChange={() => { load(); onChange(); }} />}
+      {!onFiles && <>
       {b.status === "pending" && b.expires_at && <div className="notice small">Request waiting for a decision. The slot is held until {dateTime(b.expires_at)}.</div>}
       {b.status === "approved" && b.expires_at && <div className="notice small">Approved. The client has until {dateTime(b.expires_at)} to pay.</div>}
       <div className="grid cols-2" style={{ gap: 12 }}>
-        {[["Service", b.service_name], ["Package", b.package_name], ["Artist or project", b.artist_name], ["People", b.people], ["Contact", b.contact_name], ["Phone", b.contact_phone], ["Email", b.contact_email || "None"], ["Total", naira(b.total_kobo)], ["Paid", d.payments ? naira(b.paid_kobo) : "Hidden"], ["Balance", d.payments ? naira(b.balance_kobo) : "Hidden"]].map(([k, v]) => <div key={k}><div className="mono faint">{k}</div><span className="small" style={{ overflowWrap: "anywhere" }}>{v}</span></div>)}
+        {[["Service", b.service_name], ["Package", b.package_name], ["Artist or project", b.artist_name], ...(remote ? [] : [["People", b.people]]), ["Contact", b.contact_name], ["Phone", contacts ? b.contact_phone : <Hidden why="Client contact details are for the front desk" />], ["Email", contacts ? b.contact_email || "None" : <Hidden why="Client contact details are for the front desk" />], ["Total", d.payments ? naira(b.total_kobo) : <Hidden why="Payments are not part of your role" />], ["Paid", d.payments ? naira(b.paid_kobo) : <Hidden why="Payments are not part of your role" />], ["Balance", d.payments ? naira(b.balance_kobo) : <Hidden why="Payments are not part of your role" />]].map(([k, v]) => <div key={String(k)}><div className="mono faint">{k}</div><span className="small" style={{ overflowWrap: "anywhere" }}>{v}</span></div>)}
       </div>
       {b.project && <div className="panel small"><span className="mono faint">Project</span><br />{b.project}</div>}
       {b.notes && <div className="panel small"><span className="mono faint">Requirements</span><br />{b.notes}</div>}
@@ -143,12 +152,12 @@ export function BookingDrawer({ id, user, onClose, onChange }: { id: string; use
           {b.status === "pending" && manage && <><Btn size="sm" onClick={() => setMode("approve")}>Approve</Btn><Btn size="sm" kind="neutral" onClick={() => setMode("reject")}>Decline</Btn></>}
           {["pending", "approved"].includes(b.status) && manage && <Btn size="sm" kind="neutral" onClick={() => setMode("confirm")}>Confirm without payment</Btn>}
           {b.status === "approved" && manage && <Btn size="sm" kind="neutral" onClick={() => setMode("reject")}>Decline</Btn>}
-          {["pending", "approved", "confirmed"].includes(b.status) && can(user, "update_booking_details") && <Btn size="sm" kind="neutral" onClick={() => { setF({ people: b.people, artist_name: b.artist_name, contact_phone: b.contact_phone, notes: b.notes, project: b.project, reference_links: b.reference_links }); setMode("edit"); }}>Edit details</Btn>}
-          {["pending", "approved", "confirmed"].includes(b.status) && manage && <Btn size="sm" kind="neutral" onClick={() => setMode("move")}>Reschedule</Btn>}
+          {["pending", "approved", "confirmed", "completed"].includes(b.status) && can(user, "update_booking_details") && <Btn size="sm" kind="neutral" onClick={() => { setF({ people: b.people, artist_name: b.artist_name, contact_phone: b.contact_phone, contact_email: "", notes: b.notes, project: b.project, reference_links: b.reference_links }); setMode("edit"); }}>Edit details</Btn>}
+          {["pending", "approved", "confirmed"].includes(b.status) && manage && !remote && <Btn size="sm" kind="neutral" onClick={() => setMode("move")}>Reschedule</Btn>}
           {!["cancelled", "rejected"].includes(b.status) && money && b.balance_kobo > 0 && <Btn size="sm" kind="neutral" onClick={() => { setPay({ amount: b.balance_kobo, method: "transfer", note: "" }); setMode("pay"); }}>Record payment</Btn>}
           {["approved", "confirmed", "completed"].includes(b.status) && money && b.balance_kobo > 0 && <Btn size="sm" kind="neutral" onClick={() => act(() => api(`/admin/bookings/${id}/payment-link`, { method: "POST" }), "Payment link emailed")}>Email payment link</Btn>}
           {d.payLink && b.balance_kobo > 0 && !["cancelled", "rejected"].includes(b.status) && <Btn size="sm" kind="neutral" onClick={copy}>Copy link</Btn>}
-          {["confirmed", "completed", "no_show"].includes(b.status) && manage && started && <>
+          {["confirmed", "completed", "no_show"].includes(b.status) && manage && started && !remote && <>
             {b.status !== "completed" && <Btn size="sm" kind="neutral" onClick={() => post("outcome", { outcome: "completed" }, "Marked completed")}>Mark completed</Btn>}
             {b.status !== "no_show" && <Btn size="sm" kind="neutral" onClick={() => post("outcome", { outcome: "no_show" }, "Marked as no-show")}>No-show</Btn>}
           </>}
@@ -180,10 +189,11 @@ export function BookingDrawer({ id, user, onClose, onChange }: { id: string; use
       {mode === "edit" && <div className="stack gap12">
         <Field label="Artist or project" name="artist_name" value={f.artist_name} onChange={(e) => setF({ ...f, artist_name: e.target.value })} />
         <div className="grid cols-2" style={{ gap: 12 }}><Field label="People" name="people" type="number" value={f.people} onChange={(e) => setF({ ...f, people: Number(e.target.value) })} /><Field label="Phone" name="contact_phone" value={f.contact_phone} onChange={(e) => setF({ ...f, contact_phone: e.target.value })} /></div>
+        <Field label="Client email" name="contact_email" type="email" value={f.contact_email} onChange={(e) => setF({ ...f, contact_email: e.target.value })} placeholder={b.contact_email || "No email on this booking"} hint={`${b.contact_email ? `Now ${b.contact_email}. Leave blank to keep it.` : "Add one so the client can sign in and get their files."} If they already have an account with this email, the booking links to it.`} />
         <Area label="Project" name="project" rows={2} value={f.project} onChange={(e) => setF({ ...f, project: e.target.value })} />
         <Area label="Requirements" name="notes" rows={2} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} />
         <Field label="Reference links" name="reference_links" value={f.reference_links} onChange={(e) => setF({ ...f, reference_links: e.target.value })} />
-        <div className="row gap8"><Btn onClick={() => act(() => api(`/admin/bookings/${id}/details`, { method: "PUT", body: f }), "Details saved", refresh)}>Save details</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
+        <div className="row gap8"><Btn onClick={() => act(async () => { const r = await api(`/admin/bookings/${id}/details`, { method: "PUT", body: f }); if (f.contact_email) toast(r.linked ? "Email saved and linked to the client's account" : "Email saved. The client sees their files after registering with it"); }, "Details saved", refresh)}>Save details</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
       </div>}
       {mode === "move" && <div className="stack gap12">
         <SlotPicker duration={b.end_min - b.start_min} room={b.room_id} value={pick} onChange={setPick} />
@@ -203,6 +213,7 @@ export function BookingDrawer({ id, user, onClose, onChange }: { id: string; use
         <span className="mono faint">Client history · {d.history.length} other booking{d.history.length === 1 ? "" : "s"}</span>
         {d.history.slice(0, 6).map((h: any) => <div key={h.id} className="row between small"><span>{h.ref} · {shortDate(h.date)} · {h.package_name}</span><Tag tone={statusTone(h.status)}>{statusLabel(h.status)}</Tag></div>)}
       </div>}
+      </>}
     </Modal>
   );
 }

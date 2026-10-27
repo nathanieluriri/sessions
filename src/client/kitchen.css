@@ -44,7 +44,12 @@
 .barcode { display: block; width: 100%; height: 22px;
   background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 4px, currentColor 4px 5px, transparent 5px 8px, currentColor 8px 12px, transparent 12px 14px); }
 .tkt-body { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 7.3cqw; height: 100%; padding: 9.2cqw 9.6cqw 11.5cqw; }
-.tkt-micro { display: flex; justify-content: space-between; gap: 5cqw; font-family: var(--mono); font-size: 3.2cqw; font-weight: 700; line-height: 1; letter-spacing: .08em; text-transform: uppercase; opacity: .72; }
+.tkt-micro { display: flex; align-items: center; justify-content: space-between; gap: 5cqw; font-family: var(--mono); font-size: 3.2cqw; font-weight: 700; line-height: 1; letter-spacing: .08em; text-transform: uppercase; }
+.tkt-micro { white-space: nowrap; }
+.tkt-micro > span:last-child, .tkt-brand > span { opacity: .72; }
+.tkt-brand { display: inline-flex; align-items: center; gap: 2cqw; min-width: 0; }
+.tkt-brand > span { overflow: hidden; text-overflow: ellipsis; }
+.tkt-brand .mark { width: 6cqw; height: 6cqw; }
 .tkt-art { display: grid; place-items: center; min-height: 0; }
 .tkt-art .kt-pattern { max-height: 100%; width: auto; aspect-ratio: 1; }
 .tkt-title { font-size: 12.8cqw; font-weight: 700; line-height: .84; letter-spacing: -.07em; text-transform: uppercase; }
@@ -119,14 +124,15 @@
 .hold-in { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .hold-fill { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 16px; background: #e5484d; color: #fff; transition-property: clip-path; }
 
-/* Logo trace loader */
-.logoload { display: block; overflow: visible; }
-.ll-comet { stroke-dasharray: .16 .84; animation: ll-loop .9s linear infinite; }
-@keyframes ll-loop { to { stroke-dashoffset: -1; } }
-.loading { display: grid; place-items: center; padding: 72px 0; color: var(--brand); }
+/* Logo loader */
+.logoload { position: relative; display: block; flex: none; border-radius: 22%; }
+.logoload::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 38%, rgb(255 244 214 / 85%) 50%, transparent 62%) 100% 0 / 250% 100% no-repeat;
+  -webkit-mask: url(/brand/emblem-128.webp) center / 72% no-repeat; mask: url(/brand/emblem-128.webp) center / 72% no-repeat; animation: ll-sweep 1.5s ease-in-out infinite; }
+@keyframes ll-sweep { to { background-position: 0 0; } }
+.loading { display: grid; place-items: center; padding: 72px 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .tactile .tf, .dynbtn, .fan-slot, .kt-tilt { transition: none; }
   .printer .pr-feed, .pr-ind svg, .db-slot, .cassette .cs-reel svg { animation: none !important; }
-  .ll-comet { animation: none; stroke-dasharray: none; }
+  .logoload::after { display: none; }
 }

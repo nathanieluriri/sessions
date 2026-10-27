@@ -3,7 +3,7 @@ import { Icon, Mark } from "./brand";
 import { prefersStill, useInView } from "../lib/motion";
 
 export interface DemoData {
-  service: string; pkg: string; room: string; price: string; deposit: string; balance: string;
+  service: string; pkg: string; room: string; price: string; deposit: string | null; balance: string; tiles: string[];
   day: string; days: { wd: string; d: string }[]; dayIndex: number;
   slots: { label: string; booked?: boolean }[]; slotIndex: number; time: string; reference: string;
 }
@@ -23,9 +23,9 @@ const PHASES: Phase[] = [
 ];
 const RESTING: Phase[] = [PHASES[0], PHASES[3], PHASES[6], PHASES[8]];
 
-const TILES: [string, string, string][] = [["mic", "Vocals", "var(--neon)"], ["video", "Music video", "var(--yellow)"], ["chat", "Podcast", "var(--coral)"], ["camera", "Photo shoot", "#c9b8ff"]];
+const TILES: [string, string][] = [["mic", "var(--neon)"], ["music", "var(--yellow)"], ["pencil", "var(--coral)"], ["star", "#c9b8ff"]];
 
-/** A phone that plays the booking flow on a loop: pick a session, hold a time, pay a deposit, get the ticket. Pass screen to hold one step still. */
+/** A phone that plays the booking flow on a loop: pick a session, hold a time, pay, get the ticket. Pass screen to hold one step still. */
 export function PhoneDemo({ data, screen, className, style }: { data: DemoData; screen?: number; className?: string; style?: CSSProperties }) {
   const [ref, inView] = useInView<HTMLDivElement>(0.2);
   const [i, setI] = useState(0);
@@ -36,21 +36,22 @@ export function PhoneDemo({ data, screen, className, style }: { data: DemoData; 
     return () => window.clearTimeout(t);
   }, [auto, inView, i]);
   const p = screen !== undefined ? RESTING[screen] : auto ? PHASES[i] : PHASES[0];
+  const dep = !!data.deposit && !!p.deposit;
   const tap = (k: string) => (p.tap === k ? "tapped" : "");
   const at = (s: number) => (p.screen === s ? "on" : p.screen > s ? "past" : "");
   return (
-    <div ref={ref} className={`phone ${className ?? ""}`} style={style} role="img" aria-label={`Booking a ${data.service.toLowerCase()} session on the Psych Records app`}>
+    <div ref={ref} className={`phone ${className ?? ""}`} style={style} role="img" aria-label={`Booking ${data.service.toLowerCase()} on the Psych Studio app`}>
       <div className="pscreen" aria-hidden>
         <div className="pisland" />
         <div className="pstatus"><b>9:41</b><span><i className="sig" /><i className="wifi" /><i className="bat" /></span></div>
 
         <div className={`pv ${at(0)}`}>
-          <div className="pbar"><Mark tone="ink" size={26} /><b>Psych Records</b><span className="pav">AE</span></div>
+          <div className="pbar"><Mark tone="ink" size={28} /><b>Psych Studio</b><span className="pav">AE</span></div>
           <p className="phi">Hi Amaka,</p>
           <h4 className="ptitle">What are we making today?</h4>
           <div className="ptiles">
-            {TILES.map(([icon, label, bg], k) => (
-              <div key={label} className={`ptile ${k === 0 ? tap("tile") : ""}`} style={{ background: bg }}><Icon name={icon} size={22} /><b>{label}</b></div>
+            {TILES.map(([icon, bg], k) => (
+              <div key={k} className={`ptile ${k === 0 ? tap("tile") : ""}`} style={{ background: bg }}><Icon name={icon} size={22} /><b>{data.tiles[k]}</b></div>
             ))}
           </div>
           <div className="pnext"><i />Next open: {data.day}, {data.time}<span>{data.room}</span></div>
@@ -83,9 +84,9 @@ export function PhoneDemo({ data, screen, className, style }: { data: DemoData; 
             <span><Icon name="door" size={14} />{data.room} · {data.pkg}</span>
             <div><span>Total</span><b>{data.price}</b></div>
           </div>
-          <div className={`popt ${p.deposit ? "on" : ""} ${tap("dep")}`}><i /><div><b>Pay a deposit</b><span>Balance {data.balance} before the session</span></div><strong>{data.deposit}</strong></div>
-          <div className={`popt ${p.deposit ? "" : "on"}`}><i /><div><b>Pay in full</b><span>Nothing more to pay</span></div><strong>{data.price}</strong></div>
-          <span className={`pbtn pay ${tap("pay")} ${p.paying ? "busy" : ""}`}>{p.paying ? <><i className="spin" />Verifying with Paystack</> : <><Icon name="lock" size={14} />Pay {p.deposit ? data.deposit : data.price}</>}</span>
+          {data.deposit && <div className={`popt ${dep ? "on" : ""} ${tap("dep")}`}><i /><div><b>Pay a deposit</b><span>Balance {data.balance} before the session</span></div><strong>{data.deposit}</strong></div>}
+          <div className={`popt ${dep ? "" : "on"}`}><i /><div><b>Pay in full</b><span>Nothing more to pay</span></div><strong>{data.price}</strong></div>
+          <span className={`pbtn pay ${tap("pay")} ${p.paying ? "busy" : ""}`}>{p.paying ? <><i className="spin" />Verifying with Paystack</> : <><Icon name="lock" size={14} />Pay {dep ? data.deposit : data.price}</>}</span>
           <p className="psecure">Secured by Paystack</p>
         </div>
 
@@ -94,12 +95,12 @@ export function PhoneDemo({ data, screen, className, style }: { data: DemoData; 
           <h4 className="ptitle">You're booked!</h4>
           <p className="psub">Your ticket is in your inbox.</p>
           <div className="pticket">
-            <div className="pt-top"><span>Psych Records</span><span>{data.room}</span></div>
+            <div className="pt-top"><span className="pt-brand"><Mark size={16} />Psych Studio</span><span>{data.room}</span></div>
             <b>{data.service}</b>
             <div className="pt-grid"><div><span>Date</span><b>{data.day}</b></div><div><span>Start</span><b>{data.time}</b></div></div>
             <div className="pt-stub"><div><span>Ref</span><b>{data.reference}</b></div><i className="pt-code" /></div>
           </div>
-          <p className="psub">Balance of {data.balance} due before your session.</p>
+          <p className="psub">{data.deposit ? `Balance of ${data.balance} due before your session.` : "Paid in full. See you in the room."}</p>
         </div>
       </div>
     </div>

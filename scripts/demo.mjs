@@ -57,7 +57,7 @@ const pickTime = async (day) => {
 try {
 // Public site
 await go("/");
-await cap("Psych Records Entertainment: music, video, podcast and photography under one roof", 3000);
+await cap("Psych Studio: music, video, podcast and photography under one roof", 3000);
 await scroll(900); await cap("Crew included, live availability per room, deposits or full payment", 2200);
 await scroll(2400, 10); await cap("How booking works, told with live data from the studio calendar", 2000);
 await scroll(3200, 12); await cap("Four rooms, each with its own calendar, capacity and hourly rate", 2200);
@@ -172,7 +172,7 @@ await login(ADMIN, true);
 await cap("Studio manager: bookings and payments recording, but no finance or website areas", 2400);
 await nav("Website"); await cap("Areas without permission are locked here and refused by the API", 2400);
 
-await go("/"); await cap("Psych Records Entertainment. Built on Cloudflare Workers, D1 and R2", 3000);
+await go("/"); await cap("Psych Studio. Built on Cloudflare Workers, D1 and R2", 3000);
 } catch (e) {
   await page.screenshot({ path: "demo/error.png", fullPage: true });
   console.error(e.message, page.url());

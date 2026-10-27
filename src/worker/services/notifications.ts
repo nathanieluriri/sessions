@@ -16,8 +16,10 @@ export async function brand(env: Env): Promise<Brand> {
   };
 }
 
-export async function sendEmail(env: Env, to: string, subject: string, text: string) {
-  if (!to) return;
+export type MailOutcome = "sent" | "logged" | "failed" | "skipped";
+
+export async function sendEmail(env: Env, to: string, subject: string, text: string): Promise<MailOutcome> {
+  if (!to) return "skipped";
   const b = await brand(env);
   const body = `${text}\n\n${b.name}\n${[b.address, [b.phone, b.email].filter(Boolean).join(" · ")].filter(Boolean).join("\n")}`;
   let status: "sent" | "logged" | "failed" = "logged";
@@ -30,18 +32,19 @@ export async function sendEmail(env: Env, to: string, subject: string, text: str
     status = res?.ok ? "sent" : "failed";
   }
   await outboxRepo.add(env.DB, { id: uuid(), to, subject, body, status });
+  return status;
 }
 
-export const notifyUser = async (env: Env, userId: string | null, title: string, body: string) => {
-  if (userId) await notificationsRepo.add(env.DB, { id: uuid(), userId, title, body });
+export const notifyUser = async (env: Env, userId: string | null, title: string, body: string, bookingId: string | null = null) => {
+  if (userId) await notificationsRepo.add(env.DB, { id: uuid(), userId, title, body, bookingId });
 };
 
 /** Emails the CEO and every active admin who holds the given permission. */
-export async function notifyStaff(env: Env, permission: string, subject: string, text: string) {
+export async function notifyStaff(env: Env, permission: string, subject: string, text: string, bookingId: string | null = null) {
   const staff = await usersRepo.staff(env.DB);
   const to = staff.filter((s) => s.active && hasPermission({ ...s, permissions: JSON.parse(s.permissions) }, permission as Permission));
   for (const s of to) {
     await sendEmail(env, s.email, subject, text);
-    await notifyUser(env, s.id, subject, text.split("\n")[0]);
+    await notifyUser(env, s.id, subject, text.split("\n")[0], bookingId);
   }
 }
