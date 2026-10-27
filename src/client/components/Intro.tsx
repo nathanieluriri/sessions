@@ -20,8 +20,8 @@ export function Intro({ onDone }: { onDone: () => void }) {
   }, [onDone]);
   return (
     <div className={`intro s${stage}`} aria-hidden>
-      <div className="ilogo"><Mark tone="neon" size={52} /><span data-text="Psych Studio">Psych Studio</span></div>
-      <p className="iline"><ScrambleText key={stage ? "b" : "a"}>{stage ? "RECORD. SHOOT. CREATE." : "WELCOME TO PSYCH STUDIO"}</ScrambleText></p>
+      <div className="ilogo"><Mark tone="neon" size={52} /><span data-text="Psych Studios">Psych Studios</span></div>
+      <p className="iline"><ScrambleText key={stage ? "b" : "a"}>{stage ? "RECORD. SHOOT. CREATE." : "WELCOME TO PSYCH STUDIOS"}</ScrambleText></p>
       <i className="ibar" />
     </div>
   );

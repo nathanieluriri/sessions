@@ -121,12 +121,17 @@ export function dueNow(b: BookingRow) {
 
 const staffCanSeeMoney = (u: SessionUser) => ["record_payments", "verify_payments", "view_payments", "manage_bookings"].some((p) => hasPermission(u, p as Permission));
 
-async function startPayment(env: Env, p: { holdId: string | null; bookingId: string | null; userId: string | null; email: string; amount: number; kind: PaymentRow["kind"] }, origin: string) {
+async function startPayment(env: Env, p: { holdId: string | null; bookingId: string | null; cartId?: string | null; userId: string | null; email: string; amount: number; kind: PaymentRow["kind"] }, origin: string) {
   const provider = paymentProvider(env);
   const reference = newReference();
-  await paymentsRepo.create(env.DB, { id: uuid(), reference, holdId: p.holdId, bookingId: p.bookingId, userId: p.userId, amount: p.amount, provider: provider.name, kind: p.kind });
-  const url = await provider.initialize(reference, p.amount, p.email, `${origin}/book/verify?reference=${reference}`);
-  return { reference, authorizationUrl: url, provider: provider.name, amount: p.amount };
+  await paymentsRepo.create(env.DB, { id: uuid(), reference, holdId: p.holdId, bookingId: p.bookingId, cartId: p.cartId, userId: p.userId, amount: p.amount, provider: provider.name, kind: p.kind });
+  try {
+    const url = await provider.initialize(reference, p.amount, p.email, `${origin}/book/verify?reference=${reference}`);
+    return { reference, authorizationUrl: url, provider: provider.name, amount: p.amount };
+  } catch (error) {
+    await paymentsRepo.markFailed(env.DB, reference);
+    throw error;
+  }
 }
 
 async function mail(env: Env, b: BookingRow, m: { subject: string; text: string }, notice?: string) {
@@ -153,10 +158,12 @@ function checkLead(rules: Rules, date: string, start: number, client: boolean) {
 }
 
 /** Where a booking lands when it moves: only a time its own mode allows, with the end that goes with it. */
-async function moveTarget(env: Env, b: BookingRow, date: string, start: number) {
+async function moveTarget(env: Env, b: BookingRow, date: string, start: number, rules: Rules) {
   if (b.scheduling === "project") throw badRequest("Remote orders have no session time to move.");
   if (!isDate(date)) throw badRequest("Pick a new date and time.");
   if (b.scheduling === "flex") {
+    const hours = await settingsRepo.hoursFor(env.DB, weekday(date));
+    if (!hours?.is_open || (start - hours.open_min) % rules.step !== 0) throw badRequest("Invalid start time.");
     const end = start + (b.end_min - b.start_min);
     await checkOpen(env, "flex", date, start, end);
     return { start, end, label: "" };
@@ -230,6 +237,71 @@ export const bookingService = {
     return { id: h.id, status: active ? "active" : h.status === "converted" ? "converted" : "expired", expiresAt: h.expires_at, draft: JSON.parse(h.draft) as Draft, bookingId: booking?.id ?? null };
   },
 
+  async createCartHold(env: Env, inputs: DraftInput[], user: SessionUser | null) {
+    if (inputs.length < 1 || inputs.length > 10) throw badRequest("Add between 1 and 10 sessions to your cart.");
+    const made: { holdId: string; expiresAt: string; draft: Draft }[] = [];
+    try {
+      for (const input of inputs) {
+        const held = await this.createHold(env, input, user);
+        if (held.draft.scheduling === "project" || held.draft.requiresApproval) {
+          await bookingsRepo.releaseHold(env.DB, held.holdId);
+          throw badRequest("Only bookable sessions can be checked out from the cart.");
+        }
+        made.push(held);
+      }
+      const id = uuid();
+      const expiresAt = made.map((x) => x.expiresAt).sort()[0];
+      await bookingsRepo.createCart(env.DB, id, expiresAt);
+      for (const item of made) await bookingsRepo.addCartItem(env.DB, { cartId: id, holdId: item.holdId, total: item.draft.total, deposit: item.draft.deposit });
+      return { id, status: "active", expiresAt, items: made.map((x) => x.draft), total: made.reduce((n, x) => n + x.draft.total, 0), deposit: made.reduce((n, x) => n + x.draft.deposit, 0) };
+    } catch (error) {
+      for (const item of made) await bookingsRepo.releaseHold(env.DB, item.holdId);
+      throw error;
+    }
+  },
+
+  async getCart(env: Env, id: string) {
+    const cart = await bookingsRepo.cart(env.DB, id);
+    if (!cart) throw notFound("Cart not found.");
+    const items = await bookingsRepo.cartItems(env.DB, id);
+    const held = await Promise.all(items.map(async (item) => {
+      const hold = await bookingsRepo.hold(env.DB, item.hold_id);
+      return { ...item, draft: hold ? JSON.parse(hold.draft) as Draft : null, holdStatus: hold?.status ?? "missing" };
+    }));
+    const bookings = cart.status === "confirmed" ? await bookingsRepo.cartBookings(env.DB, id) : [];
+    return { id: cart.id, status: cart.status, expiresAt: cart.expires_at, itemCount: items.length, bookings: bookings.map(summary), total: items.reduce((n, x) => n + x.total_kobo, 0), deposit: items.reduce((n, x) => n + x.deposit_kobo, 0) };
+  },
+
+  async releaseCart(env: Env, id: string) {
+    const cart = await bookingsRepo.cart(env.DB, id);
+    if (!cart || !["active", "paying"].includes(cart.status)) return;
+    for (const item of await bookingsRepo.cartItems(env.DB, id)) await bookingsRepo.releaseHold(env.DB, item.hold_id);
+    await bookingsRepo.cancelCart(env.DB, id);
+  },
+
+  async cartCheckout(env: Env, user: SessionUser, id: string, plan: Plan, origin: string) {
+    const cart = await bookingsRepo.cart(env.DB, id);
+    if (!cart || cart.status === "cancelled" || cart.expires_at <= new Date().toISOString()) throw new AppError(410, "Your cart hold expired. Pick your sessions again.", "hold_expired");
+    if (cart.status !== "active") throw conflict("Checkout for this cart has already started. Refresh to see its status.");
+    if (cart.user_id && cart.user_id !== user.id) throw forbidden("This cart belongs to another account.");
+    const items = await bookingsRepo.cartItems(env.DB, id);
+    if (!items.length) throw badRequest("Your cart has no sessions.");
+    const holds = await Promise.all(items.map((item) => bookingsRepo.hold(env.DB, item.hold_id)));
+    if (holds.some((hold) => !hold || hold.status !== "active" || hold.expires_at <= new Date().toISOString())) throw new AppError(410, "A session in your cart is no longer held. Pick your sessions again.", "hold_expired");
+    const total = items.reduce((n, x) => n + x.total_kobo, 0);
+    const deposit = items.reduce((n, x) => n + x.deposit_kobo, 0);
+    const amount = plan === "deposit" && deposit < total ? deposit : total;
+    for (const item of items) await bookingsRepo.attachHoldUser(env.DB, item.hold_id, user.id);
+    const claimed = await bookingsRepo.claimCart(env.DB, id, user.id, new Date().toISOString());
+    if (claimed.meta.changes !== 1) throw conflict("Checkout for this cart has already started. Refresh to see its status.");
+    try {
+      return await startPayment(env, { holdId: null, bookingId: null, cartId: id, userId: user.id, email: user.email, amount, kind: amount < total ? "deposit" : "full" }, origin);
+    } catch (error) {
+      await this.releaseCart(env, id);
+      throw error;
+    }
+  },
+
   releaseHold: (env: Env, id: string) => bookingsRepo.releaseHold(env.DB, id),
 
   async activeHold(env: Env, user: SessionUser, holdId: string) {
@@ -274,6 +346,10 @@ export const bookingService = {
     const payment = await paymentsRepo.byReference(env.DB, reference);
     if (!payment) throw notFound("Payment not found.");
     if (payment.verified_via) {
+      if (payment.cart_id) {
+        const bookings = await bookingsRepo.cartBookings(env.DB, payment.cart_id);
+        return { status: payment.status === "refunded" ? ("refunded" as const) : bookings.length ? ("confirmed" as const) : ("pending" as const), booking: bookings[0] ? summary(bookings[0]) : null, bookings: bookings.map(summary) };
+      }
       const booking = payment.booking_id ? await bookingsRepo.byId(env.DB, payment.booking_id) : null;
       return { status: payment.status === "refunded" ? ("refunded" as const) : booking ? ("confirmed" as const) : ("pending" as const), booking };
     }
@@ -284,12 +360,68 @@ export const bookingService = {
       await paymentsRepo.markFailed(env.DB, reference);
       const releases = payment.hold_id && !payment.booking_id;
       if (releases) await bookingsRepo.releaseHold(env.DB, payment.hold_id!);
+      if (payment.cart_id) await this.releaseCart(env, payment.cart_id);
       const mismatch = result.status === "success" && result.amount !== payment.amount_kobo;
       await audit(env.DB, null, mismatch ? "Payment amount mismatch" : "Payment failed", reference, mismatch ? `Provider reports ${naira(result.amount)}, expected ${naira(payment.amount_kobo)}. Check the provider dashboard and refund by hand if money was taken.` : releases ? "Slot released" : "");
       if (mismatch) await notifyStaff(env, "verify_payments", `Payment amount mismatch · ${reference}`, `The provider confirmed ${naira(result.amount)} but ${naira(payment.amount_kobo)} was expected. The payment was not applied to any booking. Check the provider dashboard and refund by hand if money was taken.`);
       return { status: "failed" as const, booking: null };
     }
+    if (payment.cart_id) return this.bookFromCart(env, payment, via, result.channel);
     return payment.booking_id ? this.applyToBooking(env, payment, via, result.channel) : this.bookFromHold(env, payment, via, result.channel);
+  },
+
+  async bookFromCart(env: Env, payment: PaymentRow, via: string, channel: string | null) {
+    const cartId = payment.cart_id!;
+    const cart = await bookingsRepo.cart(env.DB, cartId);
+    if (!cart) throw notFound("Cart not found.");
+    if (cart.status === "confirmed") {
+      const bookings = await bookingsRepo.cartBookings(env.DB, cartId);
+      return { status: "confirmed" as const, booking: bookings[0] ? summary(bookings[0]) : null, bookings: bookings.map(summary) };
+    }
+    const items = await bookingsRepo.cartItems(env.DB, cartId);
+    const rows = await Promise.all(items.map(async (item) => {
+      const hold = await bookingsRepo.hold(env.DB, item.hold_id);
+      if (!hold) throw notFound("A cart session hold is missing.");
+      const draft = JSON.parse(hold.draft) as Draft;
+      const paid = payment.kind === "deposit" ? item.deposit_kobo : item.total_kobo;
+      return { item, hold, draft, paid, booking: fromDraft(draft, { id: uuid(), userId: payment.user_id, holdId: hold.id, status: "pending", source: "online", createdBy: null, expiresAt: cart.expires_at, }) };
+    }));
+    if (!rows.length || rows.reduce((n, x) => n + x.paid, 0) !== payment.amount_kobo) throw badRequest("The cart payment does not match its held sessions.");
+    const rules = await loadRules(env);
+    const now = new Date().toISOString();
+    const claimed = "EXISTS (SELECT 1 FROM payments WHERE reference = ?3 AND verified_via = ?4 AND paid_at = ?5)";
+    const created = await env.DB.batch([
+      bookingsRepo.claimPayment(env.DB, payment.reference, via, channel, now),
+      ...rows.map(({ booking }) => bookingsRepo.insertFromHold(env.DB, booking, { buffer: rules.buffer, now, payment: { reference: payment.reference, via, paidAt: now } })),
+    ]);
+    if (created[0].meta.changes !== 1) {
+      const bookings = await bookingsRepo.cartBookings(env.DB, cartId);
+      return { status: bookings.length ? ("confirmed" as const) : ("pending" as const), booking: bookings[0] ? summary(bookings[0]) : null, bookings: bookings.map(summary) };
+    }
+    const bookings = await Promise.all(rows.map(({ hold }) => bookingsRepo.byHold(env.DB, hold.id)));
+    if (bookings.some((booking) => !booking) || bookings.length !== rows.length) {
+      for (const booking of bookings) if (booking) await bookingsRepo.transition(env.DB, booking.id, ["pending"], "cancelled", { reason: "Cart slot unavailable" });
+      await this.releaseCart(env, cartId);
+      await refundClaimed(env, payment, null, "Cart slot taken after hold expired");
+      return { status: "refunded" as const, booking: null, bookings: [] };
+    }
+    await env.DB.batch(rows.flatMap((row, i) => {
+      const booking = bookings[i]!;
+      return [
+        stmt(env.DB, `UPDATE bookings SET amount_paid_kobo = ?1, status = 'confirmed', expires_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?2 AND status = 'pending' AND ${claimed}`, row.paid, booking.id, payment.reference, via, now),
+        bookingsRepo.paymentAllocation(env.DB, payment.id, booking.id, row.paid),
+        stmt(env.DB, "UPDATE holds SET status = 'converted' WHERE id = ? AND status = 'active'", row.hold.id),
+        stmt(env.DB, "UPDATE booking_cart_items SET booking_id = ?1 WHERE cart_id = ?2 AND hold_id = ?3", booking.id, cartId, row.hold.id),
+      ];
+    }).concat([bookingsRepo.confirmCart(env.DB, cartId)]));
+    const confirmed = await bookingsRepo.cartBookings(env.DB, cartId);
+    for (const booking of confirmed) {
+      await mail(env, booking, emails.confirmed(env, booking), "Booking confirmed");
+      await notifyStaff(env, "manage_bookings", `New booking · ${booking.artist_name} · ${booking.ref}`,
+        `New booking ${booking.ref} ${placeOf(booking)}\nClient: ${booking.contact_name} (${booking.contact_email}, ${booking.contact_phone})\nWhen: ${when(booking)}\nPackage: ${booking.service_name} · ${booking.package_name}\nCart payment verified via ${via}${quoteLine(booking)}`);
+      await audit(env.DB, null, "Booking confirmed", booking.ref, `Cart payment ${payment.reference} verified via ${via}`);
+    }
+    return { status: "confirmed" as const, booking: confirmed[0] ? summary(confirmed[0]) : null, bookings: confirmed.map(summary) };
   },
 
   async bookFromHold(env: Env, payment: PaymentRow, via: string, channel: string | null) {
@@ -452,7 +584,7 @@ export const bookingService = {
       if (b.reschedules_used >= 1) throw badRequest("Your free reschedule has been used. Any further change is treated as a cancellation, so send a cancellation request or contact the studio.");
       if (minutesUntil(b.date, b.start_min) < 48 * 60) throw badRequest("Free rescheduling closes 48 hours before your session. A later change is treated as a cancellation, so send a cancellation request or contact the studio.");
       const rules = await loadRules(env);
-      const t = await moveTarget(env, b, input.newDate, input.newStart);
+      const t = await moveTarget(env, b, input.newDate, input.newStart, rules);
       if (input.newDate === b.date && t.start === b.start_min) throw badRequest("That is already your session time.");
       checkLead(rules, input.newDate, t.start, true);
       const free = await bookingsRepo.isFree(env.DB, { date: input.newDate, start: t.start, end: t.end, roomId: b.room_id ?? "" }, rules.buffer, new Date().toISOString(), b.id);
@@ -551,7 +683,7 @@ export const bookingService = {
     assertOpen(b);
     if (!["confirmed", "approved", "pending"].includes(b.status)) throw badRequest("Only upcoming bookings can be moved.");
     const rules = await loadRules(env);
-    const t = await moveTarget(env, b, date, start);
+    const t = await moveTarget(env, b, date, start, rules);
     checkLead(rules, date, t.start, false);
     const dueDate = b.due_date ? addDays(b.due_date, daysBetween(b.date, date)) : null;
     const before = when(b);

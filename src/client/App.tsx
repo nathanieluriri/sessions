@@ -17,7 +17,7 @@ import { Studio } from "./pages/studio";
 import { Portfolio } from "./pages/portfolio";
 import { About } from "./pages/about";
 import { Home } from "./pages/home";
-import { BookCheckout, BookConfirmed, BookDetails, BookPackage, BookRequested, BookReview, BookService, BookTime, BookVerify, DemoPay, PayBooking } from "./pages/book";
+import { BookCart, BookCheckout, BookConfirmed, BookDetails, BookPackage, BookRequested, BookReview, BookService, BookTime, BookVerify, DemoPay, PayBooking } from "./pages/book";
 import { ForgotPassword, Login, Register, ResetPassword, StaffLogin, VerifyEmail } from "./pages/auth";
 import { Loading } from "./components/ui";
 import { PageHero, PublicLayout } from "./components/Layout";
@@ -69,6 +69,7 @@ export default function App() {
           <Route path="/book" element={<BookService />} />
           <Route path="/book/package" element={<BookPackage />} />
           <Route path="/book/time" element={<BookTime />} />
+          <Route path="/book/cart" element={<BookCart />} />
           <Route path="/book/details" element={<BookDetails />} />
           <Route path="/book/review" element={<BookReview />} />
           <Route path="/book/checkout" element={<BookCheckout />} />

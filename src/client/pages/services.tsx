@@ -26,7 +26,7 @@ export function Services() {
   const cat = useCatalog();
   return (
     <PublicLayout title="Services">
-      <PageHero kicker="Services" title="Everything we make, and how to order it." sub="Book a recording session, order a beat or a mix online, or send a brief for a quote.">
+      <PageHero kicker="Services" title="Everything we make, and how to order it." sub="Book one-hour music, podcast, video and photography sessions, or send a project brief for a quote.">
         {cat && <div className="chips" style={{ marginTop: 8 }}>{cat.categories.map((c) => <a key={c.slug} href={`#${c.slug}`} className="chip">{c.name}</a>)}</div>}
       </PageHero>
       {!cat ? <Loading /> : cat.categories.map((c, i) => {

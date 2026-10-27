@@ -138,6 +138,9 @@ a.rate:hover { border-color: #c9c9c3; transform: translateY(-2px); }
 .stepper b { width: 40px; text-align: center; }
 .reviewrow { padding: 18px 24px; border-top: 1px solid var(--line); align-items: flex-start; }
 .signedin { border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; align-self: flex-start; }
+.cartpage { padding-top: 64px; padding-bottom: 120px; max-width: 900px; }
+.cartline { display: flex; align-items: center; gap: 20px; }
+@media (max-width: 700px) { .cartpage { padding-top: 40px; padding-bottom: 96px; } .cartline { align-items: flex-start; } }
 a.opt { color: inherit; }
 .donepage { max-width: 640px; padding-top: 88px; padding-bottom: 88px; text-align: center; align-items: center; }
 .paypage { max-width: 640px; padding-top: 48px; padding-bottom: 96px; }

@@ -19,7 +19,7 @@ const used: Record<number, number> = {};
 const fresh = (weekday: number) => nextWeekday(weekday, 9 + 7 * (used[weekday] = (used[weekday] ?? -1) + 1));
 const who = { artistName: "Kemi B", contactName: "Kemi Balogun", contactEmail: "kemi@example.com", contactPhone: "+234 805 111 2233" };
 const REC = { serviceSlug: "recording", packageId: "pkg_recording_session" };
-const FULL = { serviceSlug: "full-production", packageId: "pkg_full_production" };
+const FULL = { serviceSlug: "interviews", packageId: "pkg_stage_half_day" };
 const EP = { serviceSlug: "produce-ep", packageId: "pkg_produce_ep" };
 const PODCAST = { serviceSlug: "podcast-recording", packageId: "pkg_podcast_hour" };
 const draft = (pkg: { serviceSlug: string; packageId: string }, date: string, start: number, over: Record<string, unknown> = {}) =>
@@ -63,12 +63,12 @@ describe("no double booking when late payments land together", () => {
     expect((await payment(loser.reference)).status).toBe("refunded");
     expect(await mailTo(loser.email, "Payment refunded%")).toContain("was taken after your hold expired");
   });
-  it("does the same for the all night session", async () => {
+  it("does the same for a separate Saturday daytime session", async () => {
     const sat = fresh(6);
-    const a = await start(draft(FULL, sat, 1380));
+    const a = await start(draft(FULL, sat, 750));
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(new Date(a.hold.expiresAt).getTime() + 60_000));
-    const b = await start(draft(FULL, sat, 1380));
+    const b = await start(draft(FULL, sat, 750));
     const results = await Promise.all([h.payDemo(a.client, a.reference), h.payDemo(b.client, b.reference)]);
     expect(results.map((r) => r.body.status).sort()).toEqual(["confirmed", "refunded"]);
     expect(await h.sql("SELECT id FROM bookings WHERE date = ? AND status = 'confirmed'", sat)).toHaveLength(1);
@@ -133,30 +133,23 @@ describe("no double booking when late payments land together", () => {
 });
 
 describe("completed bookings keep their room until they end", () => {
-  it("holds the night session of a full production that was completed early", async () => {
+  it("holds a completed session until its scheduled end", async () => {
     const sat = fresh(6);
-    const id = (await boss.post("/api/admin/bookings", manual(FULL, sat, 1380))).body.id;
+    const id = (await boss.post("/api/admin/bookings", manual(FULL, sat, 600))).body.id;
     await h.sql("UPDATE bookings SET status = 'completed' WHERE id = ?", id);
-    const view = await h.client().get(`/api/availability/day?date=${sat}&package=pkg_full_production`);
-    expect(view.body.slots[0].available).toBe(false);
-    expect((await h.client().post("/api/holds", draft(FULL, sat, 1380))).status).toBe(409);
-    const month = await h.client().get(`/api/availability/month?month=${sat.slice(0, 7)}&package=pkg_full_production`);
-    expect(month.body.days.find((d: any) => d.date === sat).status).toBe("full");
+    expect((await h.client().post("/api/holds", draft(FULL, sat, 600))).status).toBe(409);
+    const free = (at: Date) => bookingsRepo.isFree(h.env.DB, { date: sat, start: 600, end: 660, roomId: "room_stage" }, 30, at.toISOString());
+    expect(await free(lagos(sat, 659))).toBe(false);
+    expect(await free(lagos(sat, 661))).toBe(true);
   });
   it("holds a daytime session completed early, and frees it once the end has passed", async () => {
     const date = fresh(1);
     const id = (await boss.post("/api/admin/bookings", manual(REC, date, 870))).body.id;
     await h.sql("UPDATE bookings SET status = 'completed' WHERE id = ?", id);
     expect((await h.client().post("/api/holds", draft(REC, date, 870))).status).toBe(409);
-    const free = (at: Date) => bookingsRepo.isFree(h.env.DB, { date, start: 870, end: 990, roomId: "room_studio_a" }, 30, at.toISOString());
-    expect(await free(lagos(date, 989))).toBe(false);
-    expect(await free(lagos(date, 991))).toBe(true);
-    const night = fresh(6);
-    const nid = (await boss.post("/api/admin/bookings", manual(FULL, night, 1380))).body.id;
-    await h.sql("UPDATE bookings SET status = 'completed' WHERE id = ?", nid);
-    const asleep = (at: Date) => bookingsRepo.isFree(h.env.DB, { date: night, start: 1380, end: 1740, roomId: "room_studio_a" }, 30, at.toISOString());
-    expect(await asleep(lagos(addDays(night, 1), 299))).toBe(false);
-    expect(await asleep(lagos(addDays(night, 1), 301))).toBe(true);
+    const free = (at: Date) => bookingsRepo.isFree(h.env.DB, { date, start: 870, end: 930, roomId: "room_studio_a" }, 30, at.toISOString());
+    expect(await free(lagos(date, 929))).toBe(false);
+    expect(await free(lagos(date, 931))).toBe(true);
   });
 });
 

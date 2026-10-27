@@ -4,7 +4,7 @@ const EMBLEM = [48, 64, 96, 128, 192, 256, 384].map((w) => `/brand/emblem-${w}.w
 const LOCKUP = [320, 480, 720, 960].map((w) => `/brand/lockup-${w}.webp ${w}w`).join(", ");
 const LOCKUP_RATIO = 6656 / 2368;
 
-/** The Psych Studio tiger emblem, size px square. Tone "ink" is for light surfaces and sits it on a black rounded tile; the other tones go straight onto a dark surface. */
+/** The Psych Studios tiger emblem, size px square. Tone "ink" is for light surfaces and sits it on a black rounded tile; the other tones go straight onto a dark surface. */
 export function Mark({ tone = "neon", size = 34, alt = "", lazy, className }: { tone?: "neon" | "ink" | "white"; size?: number; alt?: string; lazy?: boolean; className?: string }) {
   const tile = tone === "ink", pad = tile ? Math.round(size * 0.14) : 0;
   return (
@@ -13,8 +13,8 @@ export function Mark({ tone = "neon", size = 34, alt = "", lazy, className }: { 
   );
 }
 
-/** The full PSYCH Studio lockup, for dark surfaces at moderate sizes. The image is only requested once its box is near the viewport; until then an empty box of the same size holds the space. */
-export function Lockup({ width = 300, alt = "Psych Studio", className }: { width?: number; alt?: string; className?: string }) {
+/** The full PSYCH Studios lockup, for dark surfaces at moderate sizes. The image is only requested once its box is near the viewport; until then an empty box of the same size holds the space. */
+export function Lockup({ width = 300, alt = "Psych Studios", className }: { width?: number; alt?: string; className?: string }) {
   const box = useRef<HTMLSpanElement>(null);
   const [near, setNear] = useState(false);
   useEffect(() => {
