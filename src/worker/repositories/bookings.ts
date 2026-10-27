@@ -15,12 +15,14 @@ export interface BookingRow {
   revision_limit: number; revisions_used: number; delivered_final_at: string | null; delivery_notified_at: string | null;
 }
 export interface PaymentRow {
-  id: string; reference: string; hold_id: string | null; booking_id: string | null; user_id: string | null; amount_kobo: number;
+  id: string; reference: string; hold_id: string | null; booking_id: string | null; cart_id: string | null; user_id: string | null; amount_kobo: number;
   provider: "paystack" | "demo" | "manual"; kind: "full" | "deposit" | "balance" | "manual"; status: "pending" | "success" | "failed" | "refunded";
   channel: string | null; verified_via: string | null; note: string; recorded_by: string | null; refunded_kobo: number; paid_at: string | null; created_at: string;
   checked_by: string | null; checked_at: string | null;
 }
 export interface ChangeRequestRow { id: string; booking_id: string; user_id: string; kind: "reschedule" | "cancel"; new_date: string | null; new_start_min: number | null; reason: string; status: string; decided_by: string | null; decided_at: string | null; created_at: string }
+export interface BookingCartRow { id: string; user_id: string | null; status: "active" | "paying" | "confirmed" | "cancelled"; expires_at: string; created_at: string }
+export interface BookingCartItemRow { cart_id: string; hold_id: string; booking_id: string | null; total_kobo: number; deposit_kobo: number }
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 
@@ -118,6 +120,23 @@ export const bookingsRepo = {
   },
 
   hold: (db: D1Database, id: string) => first<HoldRow>(db, "SELECT * FROM holds WHERE id = ?", id),
+  cart: (db: D1Database, id: string) => first<BookingCartRow>(db, "SELECT * FROM booking_carts WHERE id = ?", id),
+  cartItems: (db: D1Database, id: string) => all<BookingCartItemRow>(db, "SELECT * FROM booking_cart_items WHERE cart_id = ? ORDER BY rowid", id),
+  cartBookings: (db: D1Database, id: string) => all<BookingRow>(db, "SELECT b.* FROM bookings b JOIN booking_cart_items i ON i.booking_id = b.id WHERE i.cart_id = ? ORDER BY i.rowid", id),
+  createCart: (db: D1Database, id: string, expiresAt: string) => run(db, "INSERT INTO booking_carts (id, expires_at) VALUES (?, ?)", id, expiresAt),
+  addCartItem: (db: D1Database, item: { cartId: string; holdId: string; total: number; deposit: number }) =>
+    run(db, "INSERT INTO booking_cart_items (cart_id, hold_id, total_kobo, deposit_kobo) VALUES (?, ?, ?, ?)", item.cartId, item.holdId, item.total, item.deposit),
+  attachCartUser: (db: D1Database, id: string, userId: string) => run(db, "UPDATE booking_carts SET user_id = ? WHERE id = ? AND (user_id IS NULL OR user_id = ?)", userId, id, userId),
+  setCartStatus: (db: D1Database, id: string, status: BookingCartRow["status"]) => run(db, "UPDATE booking_carts SET status = ? WHERE id = ? AND status = 'active'", status, id),
+  claimCart: (db: D1Database, id: string, userId: string, now: string) =>
+    run(db, "UPDATE booking_carts SET status = 'paying', user_id = ? WHERE id = ? AND status = 'active' AND expires_at > ? AND (user_id IS NULL OR user_id = ?)", userId, id, now, userId),
+  cancelCart: (db: D1Database, id: string) => run(db, "UPDATE booking_carts SET status = 'cancelled' WHERE id = ? AND status IN ('active', 'paying')", id),
+  setCartItemBooking: (db: D1Database, cartId: string, holdId: string, bookingId: string) =>
+    run(db, "UPDATE booking_cart_items SET booking_id = ? WHERE cart_id = ? AND hold_id = ? AND EXISTS (SELECT 1 FROM bookings WHERE id = ?)", bookingId, cartId, holdId, bookingId),
+  confirmCart: (db: D1Database, id: string) =>
+    stmt(db, "UPDATE booking_carts SET status = 'confirmed' WHERE id = ? AND status = 'active' AND NOT EXISTS (SELECT 1 FROM booking_cart_items WHERE cart_id = ? AND booking_id IS NULL)", id, id),
+  paymentAllocation: (db: D1Database, paymentId: string, bookingId: string, amount: number) =>
+    stmt(db, "INSERT OR IGNORE INTO payment_allocations (payment_id, booking_id, amount_kobo) SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM bookings WHERE id = ?)", paymentId, bookingId, amount, bookingId),
   attachHoldUser: (db: D1Database, id: string, userId: string) => run(db, "UPDATE holds SET user_id = ? WHERE id = ? AND (user_id IS NULL OR user_id = ?)", userId, id, userId),
   releaseHold: (db: D1Database, id: string) => run(db, "UPDATE holds SET status = 'released' WHERE id = ? AND status = 'active'", id),
   releaseExpired: (db: D1Database, now: string) => run(db, "UPDATE holds SET status = 'released' WHERE status = 'active' AND expires_at <= ?", now),
@@ -187,9 +206,9 @@ export const bookingsRepo = {
 };
 
 export const paymentsRepo = {
-  create: (db: D1Database, p: { id: string; reference: string; holdId: string | null; bookingId: string | null; userId: string | null; amount: number; provider: PaymentRow["provider"]; kind: PaymentRow["kind"] }) =>
-    run(db, "INSERT INTO payments (id, reference, hold_id, booking_id, user_id, amount_kobo, provider, kind, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')",
-      p.id, p.reference, p.holdId, p.bookingId, p.userId, p.amount, p.provider, p.kind),
+  create: (db: D1Database, p: { id: string; reference: string; holdId: string | null; bookingId: string | null; cartId?: string | null; userId: string | null; amount: number; provider: PaymentRow["provider"]; kind: PaymentRow["kind"] }) =>
+    run(db, "INSERT INTO payments (id, reference, hold_id, booking_id, user_id, amount_kobo, provider, kind, status, cart_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+      p.id, p.reference, p.holdId, p.bookingId, p.userId, p.amount, p.provider, p.kind, p.cartId ?? null),
   manual: (db: D1Database, p: { id: string; reference: string; bookingId: string; userId: string | null; amount: number; channel: string; note: string; by: string }) =>
     stmt(db, `INSERT INTO payments (id, reference, booking_id, user_id, amount_kobo, provider, kind, status, channel, verified_via, note, recorded_by, paid_at)
       SELECT ?, ?, ?, ?, ?, 'manual', 'manual', 'success', ?, 'staff', ?, ?, ${NOW} WHERE (SELECT amount_paid_kobo - refunded_kobo + ? <= total_kobo FROM bookings WHERE id = ?)`,
@@ -200,7 +219,11 @@ export const paymentsRepo = {
      LEFT JOIN users u ON u.id = p.user_id LEFT JOIN users s ON s.id = p.checked_by WHERE upper(p.reference) = upper(?)`, ref),
   markChecked: (db: D1Database, ref: string, by: string) =>
     run(db, `UPDATE payments SET checked_by = ?, checked_at = ${NOW} WHERE reference = ? AND checked_by IS NULL`, by, ref),
-  forBooking: (db: D1Database, bookingId: string) => all<PaymentRow>(db, "SELECT * FROM payments WHERE booking_id = ? AND status IN ('success', 'refunded') ORDER BY paid_at", bookingId),
+  forBooking: (db: D1Database, bookingId: string) => all<PaymentRow>(db,
+    `SELECT p.id, p.reference, p.hold_id, p.booking_id, p.cart_id, p.user_id, a.amount_kobo, p.provider, p.kind, p.status, p.channel, p.verified_via, p.note, p.recorded_by, a.refunded_kobo, p.paid_at, p.created_at, p.checked_by, p.checked_at
+     FROM payments p JOIN payment_allocations a ON a.payment_id = p.id WHERE a.booking_id = ? AND p.status IN ('success', 'refunded')
+     UNION ALL SELECT p.id, p.reference, p.hold_id, p.booking_id, p.cart_id, p.user_id, p.amount_kobo, p.provider, p.kind, p.status, p.channel, p.verified_via, p.note, p.recorded_by, p.refunded_kobo, p.paid_at, p.created_at, p.checked_by, p.checked_at
+       FROM payments p WHERE p.booking_id = ? AND p.cart_id IS NULL AND p.status IN ('success', 'refunded') ORDER BY paid_at`, bookingId, bookingId),
   forUser: (db: D1Database, userId: string) => all<PaymentRow & { booking_ref: string | null; package_name: string | null; booking_id: string | null }>(db,
     "SELECT p.*, b.ref booking_ref, b.package_name FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id WHERE (p.user_id = ? OR b.user_id = ?) AND p.status != 'pending' ORDER BY p.created_at DESC", userId, userId),
   list: (db: D1Database) => all<PaymentRow & { booking_ref: string | null; client: string | null }>(db,
@@ -211,6 +234,8 @@ export const paymentsRepo = {
     run(db, "UPDATE payments SET status = 'failed' WHERE status = 'pending' AND hold_id IS NOT NULL AND hold_id IN (SELECT id FROM holds WHERE status = 'released' OR expires_at <= ?)", now),
   addRefunded: (db: D1Database, id: string, amount: number) =>
     stmt(db, "UPDATE payments SET refunded_kobo = refunded_kobo + ?, status = CASE WHEN refunded_kobo + ? >= amount_kobo THEN 'refunded' ELSE status END WHERE id = ?", amount, amount, id),
+  addAllocationRefunded: (db: D1Database, id: string, bookingId: string, amount: number) =>
+    stmt(db, "UPDATE payment_allocations SET refunded_kobo = refunded_kobo + ? WHERE payment_id = ? AND booking_id = ?", amount, id, bookingId),
   addRefund: (db: D1Database, r: { id: string; paymentId: string; bookingId: string | null; amount: number; reason: string }) =>
     stmt(db, "INSERT INTO refunds (id, payment_id, booking_id, amount_kobo, reason) VALUES (?, ?, ?, ?, ?)", r.id, r.paymentId, r.bookingId, r.amount, r.reason),
   demoCreate: (db: D1Database, ref: string, amount: number) => run(db, "INSERT INTO demo_transactions (reference, amount_kobo, status) VALUES (?, ?, 'pending')", ref, amount),

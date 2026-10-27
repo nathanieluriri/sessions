@@ -62,6 +62,7 @@ export async function refundBooking(env: Env, b: BookingRow, amount: number, rea
     else if (p.provider === provider.name) await provider.refund(p.reference, take);
     await env.DB.batch([
       paymentsRepo.addRefund(env.DB, { id: uuid(), paymentId: p.id, bookingId: b.id, amount: take, reason }),
+      ...(p.cart_id ? [paymentsRepo.addAllocationRefunded(env.DB, p.id, b.id, take)] : []),
       paymentsRepo.addRefunded(env.DB, p.id, take),
       bookingsRepo.addRefunded(env.DB, b.id, take),
     ]);

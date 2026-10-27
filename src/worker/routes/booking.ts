@@ -20,15 +20,23 @@ export const draftFields = {
 };
 export const draftSchema = z.object({ ...draftFields, contactEmail: email });
 const plan = z.enum(["deposit", "full", "balance"]).default("full");
+const cartDrafts = z.object({ items: z.array(draftSchema).min(1).max(10) });
 
 r.post("/quote", async (c) => c.json(await bookingService.priceDraft(c.env, await body(c, draftSchema))));
 r.post("/holds", async (c) => c.json(await bookingService.createHold(c.env, await body(c, draftSchema), c.get("user"))));
 r.get("/holds/:id", async (c) => c.json(await bookingService.getHold(c.env, c.req.param("id"))));
 r.delete("/holds/:id", async (c) => { await bookingService.releaseHold(c.env, c.req.param("id")); return c.json({ ok: true }); });
+r.post("/cart/holds", async (c) => c.json(await bookingService.createCartHold(c.env, (await body(c, cartDrafts)).items, c.get("user"))));
+r.get("/cart/:id", async (c) => c.json(await bookingService.getCart(c.env, c.req.param("id"))));
+r.delete("/cart/:id", async (c) => { await bookingService.releaseCart(c.env, c.req.param("id")); return c.json({ ok: true }); });
 
 r.post("/checkout", requireUser, async (c) => {
   const b = await body(c, z.object({ holdId: required("Hold"), plan }));
   return c.json(await bookingService.checkout(c.env, c.get("user")!, b.holdId, b.plan, new URL(c.req.url).origin));
+});
+r.post("/cart/checkout", requireUser, async (c) => {
+  const b = await body(c, z.object({ cartId: required("Cart"), plan }));
+  return c.json(await bookingService.cartCheckout(c.env, c.get("user")!, b.cartId, b.plan, new URL(c.req.url).origin));
 });
 r.post("/requests", requireUser, async (c) => {
   const b = await body(c, z.object({ holdId: required("Hold") }));
@@ -47,7 +55,7 @@ r.get("/payments/verify", async (c) => {
   const payment = await paymentsRepo.byReference(c.env.DB, ref);
   if (!payment) throw notFound();
   const result = await bookingService.confirmPayment(c.env, ref, "server_verify");
-  return c.json({ status: result.status, booking: result.booking ? summary(result.booking) : null, payment: { kind: payment.kind, amount_kobo: payment.amount_kobo } });
+  return c.json({ status: result.status, booking: result.booking ? ("user_id" in result.booking ? summary(result.booking) : result.booking) : null, bookings: "bookings" in result ? result.bookings : undefined, payment: { kind: payment.kind, amount_kobo: payment.amount_kobo } });
 });
 
 // Paystack calls this; the signature proves the event came from Paystack before anything is trusted.

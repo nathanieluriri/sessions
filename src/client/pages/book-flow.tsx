@@ -89,7 +89,7 @@ export function Shell({ at, title, sub, cat, d, hold, children, back, next, next
   at: StepKey; title: string; sub?: string; cat: Catalog; d: BookingDraft; hold?: string | null; children: ReactNode;
   back?: string; next?: () => void; nextLabel?: string; nextDisabled?: boolean; busy?: boolean; aside?: boolean; stickyNote?: string;
 }) {
-  usePageTitle("Book with Psych Studio");
+  usePageTitle("Book with Psych Studios");
   const { total, pkg, fixed, mode, win, svc } = priced(cat, d);
   const steps = stepsFor(fixed, d.packageId);
   const backTo = back ?? (at === "service" ? undefined : prevPath(steps, at));
@@ -141,6 +141,7 @@ export function BookService() {
   const cats = [...cat.categories].sort((a, b) => a.sort - b.sort);
   return (
     <Shell at="service" title="What are you making?" sub="Pick the closest match. You choose the package next." cat={cat} d={d} aside={false} next={() => nav(nextPath(steps, "service"))} nextLabel={nextLabelFor(steps[1]?.key)} nextDisabled={!svc} stickyNote={svc?.name ?? "Pick what you are making"}>
+      {d.cartItems.length > 0 && <div className="panel row between wrapflex gap12"><span><b>{d.cartItems.length} {d.cartItems.length === 1 ? "session" : "sessions"} in your cart</b><span className="small muted"> Add another service or continue to checkout.</span></span><TactileLink to="/book/cart" size="md">View cart <Icon name="arrow" size={16} /></TactileLink></div>}
       {cats.map((c) => {
         const list = cat.services.filter((s) => s.category === c.slug);
         if (!list.length || !cat.packages.some((p) => p.service_category === c.slug)) return null;
@@ -292,6 +293,12 @@ export function BookTime() {
   };
   const night = mode === "slot" && pkg.slot_kind === "night";
   const nightSession = night ? windowsOn(cat.sessions, "night", d.date ?? "")[0] ?? cat.sessions.find((s) => s.active && s.kind === "night") : undefined;
+  const cartKey = `${pkg?.id}:${d.date}:${d.start}`;
+  const inCart = d.cartItems.some((x) => x.id === cartKey);
+  const addToCart = () => {
+    if (!pkg || !d.serviceSlug || !d.date || d.start == null || d.cartHoldId || d.cartItems.length >= 10 || inCart) return;
+    up({ cartHoldId: undefined, cartItems: [...d.cartItems, { id: cartKey, serviceSlug: d.serviceSlug, packageId: pkg.id, date: d.date, start: d.start, extraHours: d.extraHours, extras: [...d.extras], people: d.people }] });
+  };
   const title = mode === "day" ? "Pick the day you want to start." : mode === "flex" ? "Pick a date and start time." : "Pick a date and session.";
   const sub = mode === "flex" ? `Live availability for ${room?.name}. Times are in Lagos time (WAT).` : "Live availability. Times are in Lagos time (WAT).";
   return (
@@ -321,9 +328,9 @@ export function BookTime() {
           <div><h3 className="h3" style={{ fontSize: 20 }}>{d.date ? longDate(d.date).replace(/ \d{4}$/, "") : "Pick a day"}</h3></div>
           {mode === "flex" && (
             <div className="field">
-              <label>Duration</label>
+              <label>Session length</label>
               <div className="seg">{[0, 1, 2].map((x) => <button key={x} type="button" className={d.extraHours === x ? "on" : ""} onClick={() => up({ extraHours: x, start: undefined })}>{hrs(pkg.duration_min + x * 60)}</button>)}</div>
-              <span className="hint">Extra time in {room?.name} is {naira(hourly)} per hour.</span>
+              <span className="hint">Sessions start at one hour. Reserve consecutive hours in the same booking; each extra hour in {room?.name} is {naira(hourly)}.</span>
             </div>
           )}
           {!d.date ? <span className="small muted">Choose a day to see {mode === "day" ? "if it is free" : "the open sessions"}.</span>
@@ -355,6 +362,7 @@ export function BookTime() {
               </div>
             )}
           {night && nightSession && <div className="panel small">{nightSession.label} is for {sessionDays(nightSession).replace(" only", "")} only and ends the next morning, so your session finishes on Sunday at {t12(nightSession.end_min)}.</div>}
+          {mode === "flex" && d.date && d.start != null && <div className="panel row between wrapflex gap12"><span className="small"><b>{inCart ? "This session is in your cart." : "Add this time as a separate session."}</b><span className="muted"> {d.cartItems.length}/10 sessions</span></span><div className="row gap8 wrapflex"><Tactile variant="light" size="md" onClick={addToCart} disabled={inCart || !!d.cartHoldId || d.cartItems.length >= 10}>{inCart ? "Added" : "Add session"}</Tactile><TactileLink to="/book/cart" variant="neon" size="md">Cart ({d.cartItems.length}) <Icon name="arrow" size={16} /></TactileLink></div></div>}
           {mode === "day" && <div className="panel small muted">The studio confirms the full schedule and accommodation after approving your request.</div>}
           {updated && mode !== "day" && <span className="caption">Updated {updated.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}{mode === "flex" ? ` · ${cat.rules.buffer} min changeover included` : ""}</span>}
         </div>

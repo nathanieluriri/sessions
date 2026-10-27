@@ -85,12 +85,12 @@ export function Packages() {
   const cats = [...(cat?.categories ?? [])].sort((a, b) => a.sort - b.sort);
   const priced = cats.filter((c) => cat?.packages.some((p) => p.service_category === c.slug));
   const exclusiveFirst = [...priced].sort((a, b) => Number(b.slug === "exclusive") - Number(a.slug === "exclusive"));
-  const sessions = cat ? activeSessions(cat.sessions) : [];
+  const sessions = cat ? activeSessions(cat.sessions).filter((s) => cat.packages.some((p) => p.active && p.pricing === "fixed" && p.scheduling === "slot" && p.slot_kind === s.kind)) : [];
   const revisions = cat ? Math.max(0, ...cat.packages.map((p) => p.revision_limit)) : 0;
   const flex = !!cat?.packages.some((p) => p.scheduling === "flex" && p.pricing === "fixed" && p.active);
   return (
     <PublicLayout title="Pricing and packages">
-      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub="Prices are locked when you book. Recording sessions run at fixed times, and everything we make is delivered in your portal." />
+      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub="Prices are locked when you book. Sessions start at one hour, with consecutive hours available in the same booking." />
       <section className="section" style={{ paddingTop: 40 }}><div className="wrap stack gap32">
         {!cat ? <Loading /> : <>
           {exclusiveFirst.length > 1 && <div className="chips" role="tablist">

@@ -20,7 +20,6 @@ const fresh = (weekday: number) => nextWeekday(weekday, 10 + 7 * (used[weekday] 
 
 const who = { artistName: "Kemi B", contactName: "Kemi Balogun", contactEmail: "kemi@example.com", contactPhone: "+234 805 111 2233" };
 const REC = { serviceSlug: "recording", packageId: "pkg_recording_session" };
-const FULL = { serviceSlug: "full-production", packageId: "pkg_full_production" };
 const EP = { serviceSlug: "produce-ep", packageId: "pkg_produce_ep" };
 const MIX = { serviceSlug: "mixing-mastering", packageId: "pkg_mm_standard" };
 const draft = (pkg: { serviceSlug: string; packageId: string }, date: string, start: number, over: Record<string, unknown> = {}) =>
@@ -35,24 +34,21 @@ const mailTo = async (email: string, subject: string) =>
   (await h.sql<{ body: string }>("SELECT body FROM email_outbox WHERE to_email = ? AND subject LIKE ? ORDER BY created_at DESC, rowid DESC", email, subject))[0]?.body ?? "";
 
 describe("completing bookings", () => {
-  it("completes the all night session only at 5am on Sunday, never at midnight", async () => {
-    const sat = fresh(6);
-    const sun = addDays(sat, 1);
-    const id = await created(await boss.post("/api/admin/bookings", manual(FULL, sat, 1380)));
-    for (const [date, minute] of [[sat, 1380], [sat, 1439], [sun, 0], [sun, 60], [sun, 299]] as const) {
-      await bookingService.housekeeping(h.env, lagos(date, minute));
-      expect(await status(id), `${date} ${minute}`).toBe("confirmed");
-    }
-    await bookingService.housekeeping(h.env, lagos(sun, 300));
+  it("completes a one-hour session as soon as its scheduled end has passed", async () => {
+    const date = fresh(2);
+    const id = await created(await boss.post("/api/admin/bookings", manual(REC, date, 600)));
+    await bookingService.housekeeping(h.env, lagos(date, 659));
+    expect(await status(id)).toBe("confirmed");
+    await bookingService.housekeeping(h.env, lagos(date, 660));
     expect(await status(id)).toBe("completed");
   });
   it("completes a daytime session as soon as its own end has passed", async () => {
     const date = fresh(2);
     const first = await created(await boss.post("/api/admin/bookings", manual(REC, date, 750)));
     const last = await created(await boss.post("/api/admin/bookings", manual(REC, date, 1020)));
-    await bookingService.housekeeping(h.env, lagos(date, 839));
+    await bookingService.housekeeping(h.env, lagos(date, 809));
     expect([await status(first), await status(last)]).toEqual(["confirmed", "confirmed"]);
-    await bookingService.housekeeping(h.env, lagos(date, 840));
+    await bookingService.housekeeping(h.env, lagos(date, 810));
     expect([await status(first), await status(last)]).toEqual(["completed", "confirmed"]);
     await bookingService.housekeeping(h.env, lagos(addDays(date, 1), 0));
     expect(await status(last)).toBe("completed");
@@ -87,15 +83,15 @@ describe("completing bookings", () => {
 });
 
 describe("reminders", () => {
-  it("remind a client 24 hours before the all night session, with the overnight time", async () => {
-    const sat = fresh(6);
-    const email = "overnight@example.com";
-    const id = await created(await boss.post("/api/admin/bookings", manual(FULL, sat, 1380, { contactEmail: email })));
-    await bookingService.housekeeping(h.env, lagos(addDays(sat, -1), 1379));
+  it("reminds a client 24 hours before a one-hour session", async () => {
+    const date = fresh(2);
+    const email = "session@example.com";
+    const id = await created(await boss.post("/api/admin/bookings", manual(REC, date, 600, { contactEmail: email })));
+    await bookingService.housekeeping(h.env, lagos(addDays(date, -1), 599));
     expect(await mailTo(email, "Reminder%")).toBe("");
-    await bookingService.housekeeping(h.env, lagos(addDays(sat, -1), 1385));
+    await bookingService.housekeeping(h.env, lagos(addDays(date, -1), 605));
     const mail = await mailTo(email, "Reminder%");
-    expect(mail).toContain("Time: 11:00pm to 5:00am (Sunday)");
+    expect(mail).toContain("Time: 10:00am to 11:00am");
     expect(mail).toContain("Room: Studio A");
     const sent = await h.sql<{ reminder_sent_at: string | null }>("SELECT reminder_sent_at FROM bookings WHERE id = ?", id);
     expect(sent[0].reminder_sent_at).not.toBeNull();
@@ -165,18 +161,18 @@ describe("payments that arrive after the hold lapsed", () => {
     expect(paid.body.status).toBe("refunded");
     expect(await h.sql("SELECT id FROM bookings WHERE hold_id = ?", hold.body.holdId)).toEqual([]);
     expect(await mailTo(email, "Payment refunded%")).toContain("was taken after your hold expired");
-    expect(await mailTo(email, "Payment refunded%")).toContain("10:00am to 12:00pm");
+    expect(await mailTo(email, "Payment refunded%")).toContain("10:00am to 11:00am");
   });
-  it("refunds the all night session payment with the overnight time in the message", async () => {
+  it("refunds a late Saturday session payment with its daytime in the message", async () => {
     const sat = fresh(6);
     const { client, email } = await h.newClient();
-    const hold = await client.post("/api/holds", draft(FULL, sat, 1380, { contactEmail: email }));
+    const hold = await client.post("/api/holds", draft(REC, sat, 750, { contactEmail: email }));
     const co = await client.post("/api/checkout", { holdId: hold.body.holdId, plan: "full" });
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(new Date(hold.body.expiresAt).getTime() + 60_000));
-    expect((await h.client().post("/api/holds", draft(FULL, sat, 1380))).status).toBe(200);
+    expect((await h.client().post("/api/holds", draft(REC, sat, 750))).status).toBe(200);
     vi.useRealTimers();
     expect((await h.payDemo(client, co.body.reference)).body.status).toBe("refunded");
-    expect(await mailTo(email, "Payment refunded%")).toContain("11:00pm to 5:00am (Sunday)");
+    expect(await mailTo(email, "Payment refunded%")).toContain("12:30pm to 1:30pm");
   });
 });

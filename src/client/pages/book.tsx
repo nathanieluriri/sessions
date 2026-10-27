@@ -5,20 +5,20 @@ import { Icon, Mark, Waveform } from "../components/brand";
 import { Btn, ErrorBox, Field, Loading } from "../components/ui";
 import { Barcode, ReceiptPrinter, ScrambleText, TactileAnchor, TactileLink, type PrinterStage } from "../components/kitchen";
 import { BookingTicket } from "../components/BookingTicket";
-import { useCatalog, useContent } from "../lib/catalog";
+import { depositOf, useCatalog, useContent } from "../lib/catalog";
 import { loadDraft, clearDraft } from "../lib/draft";
 import { addDays, dateTime, lagosToday, longDate, naira, shortDate, statusLabel, t12 } from "../lib/format";
-import { whenLine, windowLabel } from "../lib/booking";
+import { extrasFor, whenLine, windowLabel } from "../lib/booking";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Shell, priced, useDraft, useGuard } from "./book-flow";
 
 export { BookDetails, BookPackage, BookReview, BookService, BookTime } from "./book-flow";
 
-function useHoldCountdown(holdId?: string) {
-  const [hold, setHold] = useState<{ status: string; expiresAt: string; bookingId: string | null } | null>(null);
+function useHoldCountdown(holdId?: string, cart = false) {
+  const [hold, setHold] = useState<{ status: string; expiresAt: string; bookingId: string | null; total?: number; deposit?: number } | null>(null);
   const [now, setNow] = useState(Date.now());
-  useEffect(() => { if (holdId) api(`/holds/${holdId}`).then(setHold).catch(() => setHold({ status: "expired", expiresAt: "", bookingId: null })); }, [holdId]);
+  useEffect(() => { if (holdId) api(`${cart ? "/cart" : "/holds"}/${holdId}`).then(setHold).catch(() => setHold({ status: "expired", expiresAt: "", bookingId: null })); }, [holdId, cart]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const left = hold?.expiresAt ? Math.max(0, Date.parse(hold.expiresAt) - now) : 0;
   const label = `${Math.floor(left / 60000)}:${String(Math.floor((left % 60000) / 1000)).padStart(2, "0")}`;
@@ -41,26 +41,106 @@ function ChannelPicker({ channel, setChannel }: { channel: string; setChannel: (
   );
 }
 
+export function BookCart() {
+  const cat = useCatalog();
+  const [d, up] = useDraft();
+  const nav = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  usePageTitle("Session cart");
+  useEffect(() => {
+    if (!d.cartHoldId) return;
+    api(`/cart/${d.cartHoldId}`, { method: "DELETE" }).finally(() => up({ cartHoldId: undefined }));
+  }, []); // eslint-disable-line
+  if (!cat) return <><Nav /><Loading /></>;
+  const rows = d.cartItems.map((item) => {
+    const pkg = cat.packages.find((p) => p.id === item.packageId);
+    const service = cat.services.find((s) => s.slug === item.serviceSlug);
+    const room = cat.rooms.find((r) => r.id === pkg?.room_id);
+    const extras = extrasFor(cat, service).filter((e) => item.extras.includes(e.slug));
+    const amount = (pkg?.price_kobo ?? 0) + item.extraHours * (room?.hourly_kobo || cat.rules.extraHourKobo) + extras.reduce((n, e) => n + (e.pricing === "quote" ? 0 : e.price_kobo), 0);
+    const deposit = pkg ? depositOf(cat, pkg, amount) : amount;
+    return { item, pkg, service, room, amount, deposit };
+  });
+  const total = rows.reduce((n, row) => n + row.amount, 0);
+  const deposit = rows.reduce((n, row) => n + row.deposit, 0);
+  const payNow = d.plan === "deposit" && deposit < total ? deposit : total;
+  const remove = (id: string) => up({ cartItems: d.cartItems.filter((item) => item.id !== id) });
+  const makeHolds = async () => {
+    if (!rows.length || !d.contactName || !/\S+@\S+\.\S+/.test(d.contactEmail) || !d.contactPhone || !d.artistName) return;
+    setBusy(true); setError(null);
+    try {
+      const items = rows.map(({ item }) => ({
+        serviceSlug: item.serviceSlug, packageId: item.packageId, date: item.date, start: item.start, extraHours: item.extraHours, extras: item.extras,
+        people: item.people, artistName: d.artistName, contactName: d.contactName, contactEmail: d.contactEmail, contactPhone: d.contactPhone,
+        project: d.project, notes: d.notes, links: d.links,
+      }));
+      const cart = await api("/cart/holds", { body: { items } });
+      up({ cartHoldId: cart.id, holdId: undefined });
+      nav("/book/checkout");
+    } catch (e: any) { setError(e.message); } finally { setBusy(false); }
+  };
+  const valid = rows.length > 0 && !!d.contactName && /\S+@\S+\.\S+/.test(d.contactEmail) && !!d.contactPhone && !!d.artistName;
+  return (
+    <><Nav />
+      <main className="wrap stack gap24 cartpage">
+        <div className="stack gap8"><span className="mono faint">Booking cart</span><h1 className="h1">Your sessions.</h1><p className="muted">Each line reserves one separate one-hour session. Consecutive hours can be selected as one longer session.</p></div>
+        {!rows.length ? <div className="card stack gap16"><p className="muted">Your cart is empty.</p><TactileLink to="/book" variant="neon" size="lg">Choose a session <Icon name="arrow" size={18} /></TactileLink></div> : <>
+          <div className="stack gap12">{rows.map(({ item, pkg, service, room, amount }, index) => (
+            <article key={item.id} className="card cartline">
+              <div className="grow stack gap8"><div className="row between wrapflex gap8"><div><span className="mono faint">Session {index + 1}</span><h2 className="h4">{service?.name ?? "Session"}</h2></div><b>{naira(amount)}</b></div>
+                <span className="small muted">{pkg?.name} · {room?.name} · {longDate(item.date)} · {t12(item.start)} to {t12(item.start + 60 * (1 + item.extraHours))}</span>
+              </div>
+              <button type="button" className="link" aria-label={`Remove ${service?.name ?? "session"}`} onClick={() => remove(item.id)}>Remove</button>
+            </article>
+          ))}</div>
+          <TactileLink to="/book" variant="light" size="md">Add another session</TactileLink>
+          <section className="card stack gap16">
+            <h2 className="h4">Contact details</h2>
+            <div className="grid cols-2" style={{ gap: 16 }}>
+              <Field label="Full name" name="contactName" value={d.contactName} onChange={(e) => up({ contactName: e.target.value })} autoComplete="name" />
+              <Field label="Email" name="contactEmail" type="email" value={d.contactEmail} onChange={(e) => up({ contactEmail: e.target.value })} autoComplete="email" />
+              <Field label="Phone number" name="contactPhone" value={d.contactPhone} onChange={(e) => up({ contactPhone: e.target.value })} autoComplete="tel" />
+              <Field label="Artist, brand or project name" name="artistName" value={d.artistName} onChange={(e) => up({ artistName: e.target.value })} />
+            </div>
+            <div className="row between"><span>Total for {rows.length} sessions</span><b>{naira(total)}</b></div>
+            {deposit < total && <div className="field"><label>Payment</label><div className="seg"><button type="button" className={d.plan === "deposit" ? "on" : ""} onClick={() => up({ plan: "deposit" })}>Deposit · {naira(deposit)}</button><button type="button" className={d.plan === "full" ? "on" : ""} onClick={() => up({ plan: "full" })}>Pay in full</button></div></div>}
+            <ErrorBox error={error} />
+            <div className="row between wrapflex gap12"><TactileLink to="/book" variant="light" size="md">Keep browsing</TactileLink><Btn arrow onClick={makeHolds} disabled={!valid || busy}>{busy ? "Holding sessions…" : `Continue · ${naira(payNow)}`}</Btn></div>
+          </section>
+        </>}
+      </main>
+    </>
+  );
+}
+
 export function BookCheckout() {
   const cat = useCatalog();
   const [d] = useDraft();
   const nav = useNavigate();
   const { user, setUser } = useAuth();
-  const { hold, label, expired } = useHoldCountdown(d.holdId);
+  const cartCheckout = !!d.cartHoldId;
+  const holdId = d.cartHoldId ?? d.holdId;
+  const { hold, label, expired } = useHoldCountdown(holdId, cartCheckout);
   const blocked = useGuard(cat, d, "checkout");
   const [tab, setTab] = useState<"register" | "login">("register");
   const [f, setF] = useState({ name: d.contactName, email: d.contactEmail, phone: d.contactPhone, password: "", confirmPassword: "" });
   const [channel, setChannel] = useState("card");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { if (!d.holdId) nav("/book/review", { replace: true }); }, [d.holdId, nav]);
-  useEffect(() => { if (hold?.bookingId) nav(`/book/confirmed/${hold.bookingId}`, { replace: true }); }, [hold, nav]);
+  useEffect(() => { if (!holdId) nav(d.cartItems.length ? "/book/cart" : "/book/review", { replace: true }); }, [holdId, d.cartItems.length, nav]);
+  useEffect(() => { if (!cartCheckout && hold?.bookingId) nav(`/book/confirmed/${hold.bookingId}`, { replace: true }); }, [hold, cartCheckout, nav]);
   if (!cat || !hold || blocked) return <><Nav /><Loading /></>;
-  const { total, deposit, approval, payNow, mode, win } = priced(cat, d);
+  const single = priced(cat, d);
+  const total = cartCheckout ? hold.total ?? 0 : single.total;
+  const deposit = cartCheckout ? hold.deposit ?? 0 : single.deposit;
+  const approval = cartCheckout ? false : single.approval;
+  const payNow = d.plan === "deposit" && deposit < total ? deposit : total;
+  const mode = single.mode, win = single.win;
   const remote = mode === "project";
   if (expired) return (
-    <Shell at="checkout" title={remote ? "This checkout timed out." : "This slot is no longer held."} sub={remote ? "Nothing has been charged and your details are saved. Review your order to start again." : "Your hold ran out before you finished, so the time was released. You have not been charged and your details are saved."} cat={cat} d={d} back="/book/review">
-      <div className="row gap12"><TactileLink to={remote ? "/book/review" : "/book/time"} size="lg">{remote ? "Review your order" : "Pick another time"} <Icon name="arrow" size={18} /></TactileLink></div>
+    <Shell at="checkout" title={remote ? "This checkout timed out." : "These session holds expired."} sub={remote ? "Nothing has been charged and your details are saved. Review your order to start again." : "Your selected times were released. Your cart is saved, so you can hold them again."} cat={cat} d={d} back={cartCheckout ? "/book/cart" : "/book/review"}>
+      <div className="row gap12"><TactileLink to={cartCheckout ? "/book/cart" : remote ? "/book/review" : "/book/time"} size="lg">{cartCheckout ? "Return to cart" : remote ? "Review your order" : "Pick another time"} <Icon name="arrow" size={18} /></TactileLink></div>
     </Shell>
   );
   const auth = async (e: React.FormEvent) => {
@@ -73,7 +153,9 @@ export function BookCheckout() {
   const pay = async () => {
     setBusy(true); setError(null);
     try {
-      const r = await api("/checkout", { body: { holdId: d.holdId, plan: d.plan } });
+      const r = cartCheckout
+        ? await api("/cart/checkout", { body: { cartId: d.cartHoldId, plan: d.plan } })
+        : await api("/checkout", { body: { holdId: d.holdId, plan: d.plan } });
       sessionStorage.setItem("psych.channel", channel);
       window.location.assign(r.authorizationUrl);
     } catch (err: any) { setError(err.message); setBusy(false); }
@@ -86,8 +168,8 @@ export function BookCheckout() {
       nav(`/book/requested/${r.booking.id}`, { replace: true });
     } catch (err: any) { setError(err.message); setBusy(false); }
   };
-  const holdMsg = remote ? null : `Slot held for ${label}`;
-  const heldFor = d.date ? `${shortDate(d.date)}${win && mode === "slot" ? `, ${windowLabel(d.date, win.start, win.end)}` : ""}` : "";
+  const holdMsg = remote ? null : `${cartCheckout ? `${d.cartItems.length} sessions held` : "Slot held"} for ${label}`;
+  const heldFor = cartCheckout ? `${d.cartItems.length} separate sessions` : d.date ? `${shortDate(d.date)}${win && mode === "slot" ? `, ${windowLabel(d.date, win.start, win.end)}` : ""}` : "";
   if (!user || user.role !== "client") return (
     <Shell at="checkout" title={approval ? "Log in or create an account to send your request." : "Log in or create an account to pay."} sub="Your details are saved. You come straight back here after." cat={cat} d={d} hold={holdMsg} back="/book/review">
       {!remote && <div className="holdmsg">We are holding {heldFor} for you. {label} left to finish.</div>}
@@ -124,7 +206,7 @@ export function BookCheckout() {
     </Shell>
   );
   return (
-    <Shell at="checkout" title={`Pay ${naira(payNow)}`} sub={payNow < total ? `Deposit now, ${naira(total - payNow)} ${remote ? "before your finished files are released" : "before your session"}. Secure checkout with Paystack.` : "Secure checkout with Paystack."} cat={cat} d={d} hold={holdMsg} back="/book/review">
+    <Shell at="checkout" title={`Pay ${naira(payNow)}`} sub={payNow < total ? `Deposit now, ${naira(total - payNow)} before your sessions. Secure checkout with Paystack.` : cartCheckout ? "One secure payment covers every session in your cart." : "Secure checkout with Paystack."} cat={cat} d={d} hold={holdMsg} back={cartCheckout ? "/book/cart" : "/book/review"} aside={!cartCheckout}>
       {signedIn}
       <ChannelPicker channel={channel} setChannel={setChannel} />
       <div className="panel row gap12" style={{ alignItems: "flex-start" }}><Icon name="lock" /><div><b>You finish payment in Paystack’s secure window.</b><div className="small muted">We confirm your {remote ? "order" : "booking"} only after Paystack verifies the payment on our server. Card details never touch our servers.</div></div></div>
@@ -182,7 +264,7 @@ export function DemoPay() {
       <div className="demopay-card">
         <div className="row between demopay-head"><b>Test checkout</b><span className="tag warning">Simulated Paystack</span></div>
         <div className="stack gap16" style={{ padding: 22 }}>
-          <div className="row between"><span className="muted small">{site?.content.business_name ?? "Psych Studio"}</span><b style={{ fontSize: 22 }}>{t ? naira(t.amount_kobo) : "…"}</b></div>
+          <div className="row between"><span className="muted small">{site?.content.business_name ?? "Psych Studios"}</span><b style={{ fontSize: 22 }}>{t ? naira(t.amount_kobo) : "…"}</b></div>
           <div className="small muted">Reference {ref}</div>
           <div className="panel small" style={{ padding: 14 }}>This screen stands in for Paystack until live keys are added. The booking is still confirmed only after the server verifies this transaction.</div>
           <Btn kind="primary" block onClick={() => finish("success")} disabled={busy || t?.status !== "pending"}>Pay {t ? naira(t.amount_kobo) : ""}</Btn>
@@ -203,6 +285,7 @@ export function BookVerify() {
   const { user } = useAuth();
   const [state, setState] = useState<"checking" | "failed" | "refunded">("checking");
   const [booking, setBooking] = useState<any>(null);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [kind, setKind] = useState("full");
   const [stage, setStage] = useState<PrinterStage>("processing");
   usePageTitle("Confirming payment");
@@ -213,8 +296,9 @@ export function BookVerify() {
       const r = await api(`/payments/verify?reference=${encodeURIComponent(ref)}`).catch(() => ({ status: "failed" }));
       if (!live) return;
       if (r.status === "confirmed") {
-        if (loadDraft().holdId) clearDraft();
+        if (loadDraft().holdId || loadDraft().cartHoldId) clearDraft();
         setBooking(r.booking);
+        setBookings(r.bookings ?? (r.booking ? [r.booking] : []));
         setKind(r.payment?.kind ?? "full");
         setStage("printing");
         timers.push(window.setTimeout(() => setStage("complete"), 1750));
@@ -226,7 +310,7 @@ export function BookVerify() {
   }, [ref]);
   const channel = CHANNEL[sessionStorage.getItem("psych.channel") ?? "card"] ?? "Card";
   const done = stage === "complete" && booking;
-  const name = site?.content.business_name ?? "Psych Studio";
+  const name = site?.content.business_name ?? "Psych Studios";
   if (state !== "checking") return (
     <><Nav />
       <div className="wrap stack gap24 donepage">
@@ -243,9 +327,12 @@ export function BookVerify() {
     <><Nav />
       <div className="wrap verify">
         <div className="stack gap12" style={{ alignItems: "center" }}>
-          <h1 className="h2">{!done ? "Confirming your payment" : kind === "balance" ? "Balance paid. You’re all set." : booking.balance_kobo > 0 ? "You’re booked. Deposit received." : "You’re booked."}</h1>
-          <p className="muted" style={{ maxWidth: 560 }}>{done ? `Booking ${booking.ref} is ${statusLabel(booking.status).toLowerCase()}.${booking.balance_kobo > 0 ? ` ${naira(booking.balance_kobo)} is due ${remote ? "before your finished files are released" : "before your session"}.` : ""} The receipt is in your inbox${owner ? " and your dashboard" : ""}.` : "Paystack has your payment. We verify it on our server before we confirm your booking."}</p>
+          <h1 className="h2">{!done ? "Confirming your payment" : bookings.length > 1 ? `${bookings.length} sessions booked.` : kind === "balance" ? "Balance paid. You’re all set." : booking.balance_kobo > 0 ? "You’re booked. Deposit received." : "You’re booked."}</h1>
+          <p className="muted" style={{ maxWidth: 560 }}>{done ? bookings.length > 1 ? `Your payment confirmed ${bookings.length} separate bookings. Individual references and sessions are listed below. The receipt is in your inbox${owner ? " and your dashboard" : ""}.` : `Booking ${booking.ref} is ${statusLabel(booking.status).toLowerCase()}.${booking.balance_kobo > 0 ? ` ${naira(booking.balance_kobo)} is due ${remote ? "before your finished files are released" : "before your session"}.` : ""} The receipt is in your inbox${owner ? " and your dashboard" : ""}.` : "Paystack has your payment. We verify it on our server before we confirm your booking."}</p>
         </div>
+        {done && bookings.length > 1 && <div className="stack gap8">{bookings.map((item) => (
+          <div key={item.id} className="panel row between wrapflex gap12"><span className="stack"><b>{item.package_name}</b><span className="small muted">{shortDate(item.date)} · {whenLine(item)} · {item.room_name}</span></span><TactileLink to={`/account/bookings/${item.id}`} variant="light" size="md">Booking {item.ref} <Icon name="arrow" size={16} /></TactileLink></div>
+        ))}</div>}
         {done && owner && (
           <div className="row gap12 wrapflex" style={{ justifyContent: "center" }}>
             <TactileLink to={`/book/confirmed/${booking.id}`} variant="neon" size="lg">{remote ? "See your order" : "See your ticket"} <Icon name="arrow" size={18} /></TactileLink>
@@ -286,7 +373,7 @@ export function BookConfirmed({ id }: { id: string }) {
   usePageTitle("You’re booked");
   useEffect(() => { api(`/account/bookings/${id}`).then(setData); }, [id]);
   const b = data?.booking;
-  const name = site?.content.business_name ?? "Psych Studio";
+  const name = site?.content.business_name ?? "Psych Studios";
   const remote = b?.scheduling === "project";
   const ics = useMemo(() => {
     if (!b || remote) return "";
