@@ -120,7 +120,7 @@ function Values({ rooms, daily }: { rooms: number; daily: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const cards = [
     { art: "streaks", line: "crew", title: "Crew included", body: "Recording sessions come with an engineer at the desk who knows the room." },
-    { art: "glitch", line: "live", title: "Fixed session times", body: `${daily ? `${daily} recording sessions every day` : "Recording sessions every day"}, with live availability that updates the moment someone books.`, light: true },
+    { art: "glitch", line: "live", title: "Fixed session times", body: "Select one of the four available options for a two-hour session.", light: true },
     { art: "spectrum", line: "deposit", title: "Delivered in your portal", body: "Beats, mixes and finished tracks arrive in your portal, never by email." },
     { art: "chrome", line: "rooms", title: `${rooms} rooms, one crew`, body: "A recording room, a production suite, a podcast set and a video and photo stage." },
   ];
