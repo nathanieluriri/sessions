@@ -84,6 +84,10 @@ const ICONS: Record<string, string> = {
   image: "M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5M15 9.5h.01",
   link: "M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1",
   mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
+  disc: "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 13a3 3 0 1 1 3-3 3 3 0 0 1-3 3zm0-2a1 1 0 1 0 1-1 1 1 0 0 0-1 1z",
+  sliders: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
+  sparkles: "M12 3l1.9 4.8L19 9.5l-4.1 3.5L16 18l-4-2.8L8 18l1.1-5L5 9.5l5.1-1.7L12 3z",
+  podcast: "M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8",
   video: "M3 7h12v10H3zM15 10l6-3v10l-6-3",
   camera: "M4 8h3l2-3h6l2 3h3v11H4zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z",
   door: "M6 21V4h12v17M3 21h18M14 12h.01",
@@ -101,6 +105,18 @@ export function Icon({ name, size = 20, className }: { name: keyof typeof ICONS 
       <path d={ICONS[name]} />
     </svg>
   );
+}
+
+export function serviceIconName(slug: string): string {
+  if (slug === "recording") return "mic";
+  if (slug === "beat-production") return "disc";
+  if (slug === "mixing-mastering") return "sliders";
+  if (slug === "full-production") return "sparkles";
+  if (slug === "song-covers") return "music";
+  if (slug.includes("podcast")) return "podcast";
+  if (slug.includes("video") || slug === "interviews" || slug === "bts-content") return "video";
+  if (slug.includes("photo") || slug === "artist-portraits" || slug === "social-content" || slug === "reels") return "camera";
+  return "music";
 }
 
 /** Live audio waveform drawn on a canvas. Pauses offscreen and holds still for reduced motion. */
