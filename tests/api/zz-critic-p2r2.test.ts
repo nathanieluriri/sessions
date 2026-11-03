@@ -70,24 +70,16 @@ describe("critic p2r2", () => {
     expect(bookings.length).toBe(1);
   });
 
-  it("D: EP request vs recordPayment vs session hold, and two EPs on the same day", async () => {
+  it("D: an EP is paid, not requested, and does not block a recording session", async () => {
     const date = day(5);
     const a = await h.newClient();
     const ha = await a.client.post("/api/holds", d(EP, date, 600, { contactEmail: a.email }));
+    expect(ha.status).toBe(200);
     const ra = await a.client.post("/api/requests", { holdId: ha.body.holdId });
-    expect(ra.status).toBe(200);
-    const id = ra.body.booking.id;
-    // request lapses but housekeeping has not run; another EP then a session take the day
-    await h.sql("UPDATE bookings SET expires_at = '2000-01-01T00:00:00Z' WHERE id = ?", id);
-    const b = await h.newClient();
-    const hb = await b.client.post("/api/holds", d(EP, date, 600, { contactEmail: b.email }));
-    const rb = await b.client.post("/api/requests", { holdId: hb.body.holdId });
-    const id2 = rb.body.booking?.id;
-    const [ap1, ap2] = await Promise.all([boss.post(`/api/admin/bookings/${id}/approve`, {}), boss.post(`/api/admin/bookings/${id2}/approve`, {})]);
-    const pay = await boss.post(`/api/admin/bookings/${id}/payments`, { amount: 100000, method: "cash", note: "" });
-    const conf = await boss.post(`/api/admin/bookings/${id}/confirm`, {});
+    expect(ra.status).toBe(400);
     const sess = await boss.post("/api/admin/bookings", { ...d(REC, date, 600, { contactEmail: "" }), status: "confirmed", source: "phone", notify: false });
-    log.D = { rb: rb.status, ap: [ap1.status, ap2.status], pay: [pay.status, pay.body], conf: conf.status, sess: [sess.status, sess.body], rows: await h.sql("SELECT id, status FROM bookings WHERE date = ?", date) };
+    expect(sess.status, JSON.stringify(sess.body)).toBe(200);
+    log.D = { ra: ra.status, sess: sess.status };
   });
 
   it("E: concurrent manual staff bookings and EP vs EP concurrent approve after both pending on different days moved same day", async () => {

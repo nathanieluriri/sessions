@@ -26,6 +26,9 @@ function useHoldCountdown(holdId?: string, cart = false) {
 }
 
 const CHANNELS = [["card", "Card", "Visa, Mastercard and Verve", "card"], ["bank_transfer", "Bank transfer", "Pay from any Nigerian bank app", "receipt"], ["ussd", "USSD", "Dial a code from your phone", "phone"]];
+const FOLLOW_UP = "Thank you for your payment! Our management team will contact you to schedule your recording sessions.";
+const isResidencyOrder = (b?: { category?: string; package_id?: string; service_name?: string; package_name?: string }) =>
+  !!b && (b.category === "exclusive" || b.package_id === "pkg_produce_ep" || b.package_id === "pkg_produce_album");
 
 function ChannelPicker({ channel, setChannel }: { channel: string; setChannel: (v: string) => void }) {
   return (
@@ -84,12 +87,12 @@ export function BookCart() {
   return (
     <><Nav />
       <main className="wrap stack gap24 cartpage">
-        <div className="stack gap8"><span className="mono faint">Booking cart</span><h1 className="h1">Your sessions.</h1><p className="muted">Each line reserves one separate one-hour session. Consecutive hours can be selected as one longer session.</p></div>
+        <div className="stack gap8"><span className="mono faint">Booking cart</span><h1 className="h1">Your sessions.</h1><p className="muted">Each line is one session. Recording sessions are the fixed two-hour times. Hourly services can add consecutive hours.</p></div>
         {!rows.length ? <div className="card stack gap16"><p className="muted">Your cart is empty.</p><TactileLink to="/book" variant="neon" size="lg">Choose a session <Icon name="arrow" size={18} /></TactileLink></div> : <>
           <div className="stack gap12">{rows.map(({ item, pkg, service, room, amount }, index) => (
             <article key={item.id} className="card cartline">
               <div className="grow stack gap8"><div className="row between wrapflex gap8"><div><span className="mono faint">Session {index + 1}</span><h2 className="h4">{service?.name ?? "Session"}</h2></div><b>{naira(amount)}</b></div>
-                <span className="small muted">{pkg?.name} · {room?.name} · {longDate(item.date)} · {t12(item.start)} to {t12(item.start + 60 * (1 + item.extraHours))}</span>
+                <span className="small muted">{pkg?.name} · {room?.name} · {longDate(item.date)} · {t12(item.start)} to {t12(item.start + (pkg?.scheduling === "slot" ? (cat.sessions.find((s) => s.active && s.kind === pkg.slot_kind && s.start_min === item.start)?.end_min ?? item.start + pkg.duration_min) - item.start : (pkg?.duration_min ?? 60) + item.extraHours * 60))}</span>
               </div>
               <button type="button" className="link" aria-label={`Remove ${service?.name ?? "session"}`} onClick={() => remove(item.id)}>Remove</button>
             </article>
@@ -360,9 +363,7 @@ export function BookVerify() {
             <Barcode />
             <p className="rc-note">Ref <ScrambleText>{booking.ref}</ScrambleText></p>
             <p className="rc-note rc-dim">
-              {booking.package_slug === "produce-ep" || booking.package_slug === "produce-album" || booking.service_slug === "produce-ep" || booking.service_slug === "produce-album"
-                ? "Thank you for your payment! Our management team will contact you to schedule your recording sessions."
-                : remote ? "Your files are delivered in your portal." : `See you in ${booking.room_name}.`}
+              {isResidencyOrder(booking) ? FOLLOW_UP : remote ? "Your files are delivered in your portal." : `See you in ${booking.room_name}.`}
             </p>
           </>}
         </ReceiptPrinter>
@@ -379,7 +380,7 @@ export function BookConfirmed({ id }: { id: string }) {
   const b = data?.booking;
   const name = site?.content.business_name ?? "Psych Studios";
   const remote = b?.scheduling === "project";
-  const isExclusivePackage = b?.package_slug === "produce-ep" || b?.package_slug === "produce-album" || b?.service_slug === "produce-ep" || b?.service_slug === "produce-album";
+  const isExclusivePackage = isResidencyOrder(b);
   const ics = useMemo(() => {
     if (!b || remote) return "";
     const dt = (day: number, m: number) => `${addDays(b.date, day).replace(/-/g, "")}T${String(Math.floor((m % 1440) / 60)).padStart(2, "0")}${String(m % 60).padStart(2, "0")}00`;
@@ -387,7 +388,7 @@ export function BookConfirmed({ id }: { id: string }) {
   }, [b, name, site, remote]);
   if (!b) return <><Nav /><Loading /></>;
   const facts: [string, string][] = remote
-    ? [["Reference", b.ref], ["Package", b.package_name], ["Ordered", shortDate(b.date)], ["Delivery", b.due_date ? `Due ${shortDate(b.due_date)}, in your portal` : "In your portal"], ["Paid", naira(b.paid_kobo)], ["Balance due", b.balance_kobo > 0 ? naira(b.balance_kobo) : "Nothing"]]
+    ? [["Reference", b.ref], ["Package", b.package_name], ["Ordered", shortDate(b.date)], ["Next", isExclusivePackage ? "The studio will contact you to schedule" : b.due_date ? `Due ${shortDate(b.due_date)}, in your portal` : "In your portal"], ["Paid", naira(b.paid_kobo)], ["Balance due", b.balance_kobo > 0 ? naira(b.balance_kobo) : "Nothing"]]
     : [["Reference", b.ref], ["Package", b.package_name], ["Room", b.room_name], ["Date", shortDate(b.date)], [b.scheduling === "day" ? "Starts" : "Session", b.scheduling === "day" ? shortDate(b.date) : `${windowLabel(b.date, b.start_min, b.end_min)}${b.slot_label ? ` · ${b.slot_label}` : ""}`], ["Paid", naira(b.paid_kobo)], ["Balance due", b.balance_kobo > 0 ? naira(b.balance_kobo) : "Nothing"]];
   return (
     <div className="confpage">
@@ -397,7 +398,7 @@ export function BookConfirmed({ id }: { id: string }) {
           <h1 className="display">{remote ? "Order " : "You’re "}<span className="neon">{remote ? "placed." : "booked."}</span></h1>
           <p style={{ fontSize: 18, opacity: .78 }}>
             {isExclusivePackage
-              ? "Thank you for your payment! Our management team will contact you to schedule your recording sessions."
+              ? FOLLOW_UP
               : remote ? `Order ${b.ref} is confirmed. Upload your stems or references from your portal. Finished work arrives in your portal, never by email.` : `Booking ${b.ref} is confirmed. Your receipt is on its way to ${b.contact_email} and saved in your dashboard.`}
           </p>
           <div className="grid cols-2 confgrid">
@@ -406,7 +407,9 @@ export function BookConfirmed({ id }: { id: string }) {
             ))}
           </div>
           <div className="row gap12 wrapflex">
-            {remote
+            {isExclusivePackage
+              ? <TactileLink to={`/account/bookings/${b.id}`} variant="neon" size="lg">Go to my order <Icon name="arrow" size={18} /></TactileLink>
+              : remote
               ? <><TactileLink to={`/account/bookings/${b.id}#files`} variant="neon" size="lg">Upload your files <Icon name="arrow" size={18} /></TactileLink><TactileLink to={`/account/bookings/${b.id}`} variant="light" size="lg">Go to my order</TactileLink></>
               : <><TactileLink to={`/account/bookings/${b.id}`} variant="neon" size="lg">Go to my booking <Icon name="arrow" size={18} /></TactileLink><TactileAnchor href={ics} download={`${b.ref}.ics`} variant="light" size="lg">Add to calendar</TactileAnchor></>}
           </div>

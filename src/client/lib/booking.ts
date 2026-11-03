@@ -66,8 +66,9 @@ export function stepsFor(fixed: Package[], packageId?: string): Step[] {
   const candidates = chosen ? [chosen] : fixed;
   const timed = candidates.length === 0 || candidates.some((p) => p.scheduling !== "project");
   const dayOnly = candidates.length > 0 && candidates.every((p) => p.scheduling === "day");
+  const benefits = candidates.some((p) => p.service_category === "exclusive");
   const list: [StepKey, string][] = [["service", "Service"]];
-  if (fixed.length !== 1) list.push(["package", "Package"]);
+  if (fixed.length !== 1 || benefits) list.push(["package", benefits ? "Benefits" : "Package"]);
   if (timed) list.push(["time", dayOnly ? "Start day" : "Date & time"]);
   list.push(["details", "Details"], ["checkout", "Checkout"]);
   return list.map(([key, label]) => ({ key, label, path: PATH[key] }));
@@ -126,9 +127,9 @@ export const moneyOrRequest = (e: { pricing: string; price_kobo: number }) => (e
 export const modeNoun = (m: Scheduling | undefined) => (m === "project" ? "order" : m === "day" ? "request" : "booking");
 
 /** One plain line about how a package is scheduled, built from the session rows. */
-export function howLine(p: Pick<Package, "scheduling" | "slot_kind">, sessions: SessionSlot[]) {
+export function howLine(p: Pick<Package, "scheduling" | "slot_kind" | "service_category">, sessions: SessionSlot[]) {
   const rows = activeSessions(sessions).filter((s) => s.kind === p.slot_kind);
-  if (p.scheduling === "project") return "Ordered online and delivered in your portal";
+  if (p.scheduling === "project") return p.service_category === "exclusive" ? "Pay online. The studio contacts you to schedule the sessions." : "Ordered online and delivered in your portal";
   if (p.scheduling === "day") return "You choose the start day and the studio confirms the schedule";
   if (p.scheduling !== "slot" || !rows.length) return "";
   if (p.slot_kind === "night") return `${rows[0].label} · ${sessionDays(rows[0])} · ${sessionWindow(rows[0])}`;

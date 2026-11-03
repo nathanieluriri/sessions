@@ -32,11 +32,13 @@ export function priced(cat: Catalog, d: BookingDraft) {
   const extraHours = mode === "flex" ? d.extraHours : 0;
   const win = draftWindow(cat.sessions, pkg, d);
   const duration = mode === "flex" ? (pkg?.duration_min ?? 0) + extraHours * 60 : win ? win.end - win.start : 0;
-  const total = (pkg?.price_kobo ?? 0) + extraHours * hourly + extras.reduce((s, e) => s + (e.pricing === "quote" ? 0 : e.price_kobo), 0);
+  const picks = pkg && mode === "slot" && pkg.slot_kind === "day" ? d.cartItems.filter((x) => x.packageId === pkg.id) : [];
+  const count = picks.length > 1 ? picks.length : 1;
+  const total = (pkg?.price_kobo ?? 0) * count + extraHours * hourly + extras.reduce((s, e) => s + (e.pricing === "quote" ? 0 : e.price_kobo), 0);
   const deposit = pkg ? depositOf(cat, pkg, total) : total;
   const approval = needsApproval(cat, pkg);
   const payNow = approval ? 0 : d.plan === "deposit" && deposit < total ? deposit : total;
-  return { svc, fixed, pkg, mode, room, extras, hourly, extraHours, win, duration, total, deposit, approval, payNow };
+  return { svc, fixed, pkg, mode, room, extras, hourly, extraHours, win, duration, total, deposit, approval, payNow, picks, count };
 }
 
 export const draftBody = (cat: Catalog, d: BookingDraft) => {
@@ -59,14 +61,14 @@ export function useGuard(cat: Catalog | null, d: BookingDraft, at: StepKey) {
 const nextLabelFor = (key: StepKey | undefined) => (key === "package" ? "Choose a package" : key === "time" ? "Choose date and time" : key === "details" ? "Continue to details" : "Review");
 
 function Summary({ cat, d, hold }: { cat: Catalog; d: BookingDraft; hold?: string | null }) {
-  const { svc, pkg, mode, room, win, total, deposit, approval, extraHours } = priced(cat, d);
+  const { svc, pkg, mode, room, win, total, deposit, approval, extraHours, count } = priced(cat, d);
   const when = !d.date ? "Pick a date" : win ? windowLabel(d.date, win.start, win.end) : "Pick a time";
   const rows: [string, string, string][] = mode === "project"
     ? [["upload", "Delivery", "In your portal"], ["clock", "Turnaround", deliveryLabel(pkg?.turnaround_days ?? null) || "Set by the studio"]]
     : mode === "day"
       ? [["calendar", "Start day", d.date ? longDate(d.date) : "Pick a day"], ["door", "Room", room ? `${room.name} · ${room.kind}` : "Set by the package"], ["users", "Staying", d.contactName ? `${d.people} ${d.people === 1 ? "person" : "people"}` : "Add in your details"]]
       : [["door", "Room", room ? `${room.name} · ${room.kind}` : "Set by the package"], ["calendar", "Date", d.date ? longDate(d.date) : "Pick a date"],
-        ["clock", "Time", mode === "flex" && d.start != null && win ? `${t12(d.start)} to ${t12(d.start + (win.end - win.start) + extraHours * 60)} · ${hrs(win.end - win.start + extraHours * 60)}` : when],
+        ["clock", "Time", count > 1 ? `${count} sessions selected` : mode === "flex" && d.start != null && win ? `${t12(d.start)} to ${t12(d.start + (win.end - win.start) + extraHours * 60)} · ${hrs(win.end - win.start + extraHours * 60)}` : when],
         ["users", "People", d.contactName ? `${d.people} ${d.people === 1 ? "person" : "people"}` : "Add in your details"]];
   return (
     <aside className="summary desk">
@@ -90,10 +92,10 @@ export function Shell({ at, title, sub, cat, d, hold, children, back, next, next
   back?: string; next?: () => void; nextLabel?: string; nextDisabled?: boolean; busy?: boolean; aside?: boolean; stickyNote?: string;
 }) {
   usePageTitle("Book with Psych Studios");
-  const { total, pkg, fixed, mode, win, svc } = priced(cat, d);
+  const { total, pkg, fixed, mode, win, svc, count } = priced(cat, d);
   const steps = stepsFor(fixed, d.packageId);
   const backTo = back ?? (at === "service" ? undefined : prevPath(steps, at));
-  const caption = stickyNote ?? (mode === "project" ? pkg?.name : d.date && win ? `${shortDate(d.date)} · ${t12(win.start)}` : pkg?.name ?? svc?.name ?? "Pick what you are making");
+  const caption = stickyNote ?? (count > 1 ? `${count} sessions` : mode === "project" ? pkg?.name : d.date && win ? `${shortDate(d.date)} · ${t12(win.start)}` : pkg?.name ?? svc?.name ?? "Pick what you are making");
   return (
     <>
       <Nav />
@@ -165,13 +167,29 @@ export function BookPackage() {
   const [d, up] = useDraft();
   const nav = useNavigate();
   const blocked = useGuard(cat, d, "package");
+  const preview = cat ? fixedPackages(cat, cat.services.find((s) => s.slug === canonicalService(d.serviceSlug))) : [];
+  useEffect(() => {
+    if (preview.length === 1 && preview[0].service_category === "exclusive" && d.packageId !== preview[0].id) up({ packageId: preview[0].id });
+  }, [preview, d.packageId]); // eslint-disable-line
   if (!cat || blocked) return <Wait />;
   const { svc, fixed, pkg } = priced(cat, d);
   const steps = stepsFor(fixed, d.packageId);
-  const quotes = svc ? cat.packages.filter((p) => p.pricing === "quote" && (p.service_slug ? p.service_slug === svc.slug : p.service_category === svc.category)) : [];
-  const choose = (id: string) => { const changed = id !== d.packageId; up({ packageId: id, ...(changed ? { start: undefined, extraHours: 0 } : {}) }); };
+  const exclusive = svc?.category === "exclusive";
+  const quotes = exclusive ? [] : svc ? cat.packages.filter((p) => p.pricing === "quote" && (p.service_slug ? p.service_slug === svc.slug : p.service_category === svc.category)) : [];
+  const choose = (id: string) => { const changed = id !== d.packageId; up({ packageId: id, ...(changed ? { start: undefined, extraHours: 0, cartItems: d.cartItems.filter((x) => x.packageId === id) } : {}) }); };
   return (
-    <Shell at="package" title="Pick a package." sub={svc ? `For ${svc.name.toLowerCase()}.` : undefined} cat={cat} d={d} next={() => nav(nextPath(steps, "package"))} nextLabel={nextLabelFor(steps[steps.findIndex((s) => s.key === "package") + 1]?.key)} nextDisabled={!pkg || !d.packageId}>
+    <Shell at="package" title={exclusive ? "What's included." : "Pick a package."} sub={exclusive ? "These benefits come with the package. Nothing here is priced separately." : svc ? `For ${svc.name.toLowerCase()}.` : undefined} cat={cat} d={d} next={() => nav(nextPath(steps, "package"))} nextLabel={exclusive ? "Continue to details" : nextLabelFor(steps[steps.findIndex((s) => s.key === "package") + 1]?.key)} nextDisabled={!pkg || !d.packageId}>
+      {exclusive && pkg && (
+        <div className="card stack gap16">
+          {svc?.image_url && <img src={svc.image_url} alt={pkg.name} className="pkg-art-img" style={{ borderRadius: 14, width: "100%", aspectRatio: "16 / 10", objectFit: "cover" }} />}
+          <h3 className="h3">{pkg.name}</h3>
+          <p className="muted">{pkg.description}</p>
+          <b>{naira(pkg.price_kobo)}{pkg.unit ? ` ${pkg.unit}` : ""}</b>
+          <b className="small">Included in this package</b>
+          <ul className="ticklist">{pkg.includes.map((i) => <li key={i}><Icon name="check" size={16} />{i}</li>)}</ul>
+        </div>
+      )}
+      {!exclusive && (
       <div className="card stack gap12">
         {fixed.map((p) => {
           const deposit = depositOf(cat, p, p.price_kobo);
@@ -208,6 +226,7 @@ export function BookPackage() {
           </div>
         )}
       </div>
+      )}
     </Shell>
   );
 }
@@ -278,9 +297,21 @@ export function BookTime() {
   const nowMin = ((Date.now() + 3600000) % 86400000) / 60000;
   const tooSoon = (t: Tile) => d.date === today && t.start - nowMin < cat.rules.minNotice;
   const nextOpen = d.date ? days?.find((x) => x.date > d.date! && ok(x.status)) : undefined;
+  const dayMulti = mode === "slot" && pkg.slot_kind === "day";
+  const picks = d.cartItems.filter((x) => x.packageId === pkg.id);
   const choose = (date: string) => {
-    up({ date, start: undefined });
+    const onDay = picks.filter((x) => x.date === date);
+    up({ date, start: onDay.at(-1)?.start });
     if (window.matchMedia("(max-width: 1000px)").matches) setTimeout(() => tilesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
+  const toggleDay = (start: number) => {
+    if (!d.date || !d.serviceSlug || picks.length >= 10 && !picks.some((x) => x.date === d.date && x.start === start)) return;
+    const id = `${pkg.id}:${d.date}:${start}`;
+    const exists = d.cartItems.some((x) => x.id === id);
+    const cartItems = exists ? d.cartItems.filter((x) => x.id !== id) : [...d.cartItems, { id, serviceSlug: d.serviceSlug, packageId: pkg.id, date: d.date, start, extraHours: 0, extras: [], people: d.people }];
+    const mine = cartItems.filter((x) => x.packageId === pkg.id);
+    const primary = mine.filter((x) => x.date === d.date).at(-1) ?? mine.at(-1);
+    up({ cartItems, start: primary?.date === d.date ? primary.start : undefined });
   };
   const reason = (date: string, status?: DayStatus) => {
     if (status === "full") return mode === "day" ? "The studio is already booked on this day." : "Every session is booked on this day.";
@@ -302,7 +333,7 @@ export function BookTime() {
   const title = mode === "day" ? "Pick the day you want to start." : mode === "flex" ? "Pick a date and start time." : "Pick a date and session.";
   const sub = mode === "flex" ? `Live availability for ${room?.name}. Times are in Lagos time (WAT).` : "Live availability. Times are in Lagos time (WAT).";
   return (
-    <Shell at="time" title={title} sub={sub} cat={cat} d={d} next={() => nav(nextPath(stepsFor(p.fixed, d.packageId), "time"))} nextLabel="Continue to details" nextDisabled={!d.date || d.start == null || !p.win}>
+    <Shell at="time" title={dayMulti ? "Pick your sessions." : title} sub={dayMulti ? "Select every session you want. Each one is booked on its own, and you pay for them together." : sub} cat={cat} d={d} next={() => { if (dayMulti && picks[0]) up({ date: picks[0].date, start: picks[0].start }); nav(nextPath(stepsFor(p.fixed, d.packageId), "time")); }} nextLabel="Continue to details" nextDisabled={dayMulti ? picks.length === 0 : !d.date || d.start == null || !p.win}>
       {q.get("taken") && <div className="error">Someone took that time a moment ago. Please pick another.</div>}
       {failed && <div className="error">We could not load availability. Check your connection and try another date.</div>}
       <div className="grid timegrid" data-stack>
@@ -352,15 +383,17 @@ export function BookTime() {
               <div className="stack gap8" role="group" aria-label="Sessions">
                 {tiles.map((s) => {
                   const soon = tooSoon(s), open = s.available && !soon;
+                  const picked = dayMulti && picks.some((x) => x.date === d.date && x.start === s.start);
                   return (
-                    <button key={s.key} type="button" className={`sesstile ${d.start === s.start ? "on" : ""}`} disabled={!open} aria-pressed={d.start === s.start} onClick={() => up({ start: s.start })}>
-                      <span className="grow stack"><b>{windowLabel(d.date!, s.start, s.end ?? s.start)}</b><span className="small muted">{s.label}</span></span>
-                      <span className={`tag ${open ? "success" : ""}`}>{open ? "Open" : soon ? "Too soon" : "Booked"}</span>
+                    <button key={s.key} type="button" className={`sesstile ${(dayMulti ? picked : d.start === s.start) ? "on" : ""}`} disabled={!open && !picked} aria-pressed={dayMulti ? picked : d.start === s.start} onClick={() => (dayMulti ? toggleDay(s.start) : up({ start: s.start }))}>
+                      <span className="grow stack"><b>{windowLabel(d.date!, s.start, s.end ?? s.start)}</b><span className="small muted">{s.label}{dayMulti ? ` · ${naira(pkg.price_kobo)}` : ""}</span></span>
+                      <span className={`tag ${open || picked ? "success" : ""}`}>{picked ? "Selected" : open ? "Open" : soon ? "Too soon" : "Booked"}</span>
                     </button>
                   );
                 })}
               </div>
             )}
+          {dayMulti && <div className="panel small"><b>{picks.length ? `${picks.length} ${picks.length === 1 ? "session" : "sessions"} selected · ${naira(pkg.price_kobo * picks.length)}` : "No sessions selected yet."}</b><div className="muted">A session is {naira(pkg.price_kobo)}. Click more than one, including sessions on other days.</div></div>}
           {night && nightSession && <div className="panel small">{nightSession.label} is for {sessionDays(nightSession).replace(" only", "")} only and ends the next morning, so your session finishes on Sunday at {t12(nightSession.end_min)}.</div>}
           {mode === "flex" && d.date && d.start != null && <div className="panel row between wrapflex gap12"><span className="small"><b>{inCart ? "This session is in your cart." : "Add this time as a separate session."}</b><span className="muted"> {d.cartItems.length}/10 sessions</span></span><div className="row gap8 wrapflex"><Tactile variant="light" size="md" onClick={addToCart} disabled={inCart || !!d.cartHoldId || d.cartItems.length >= 10}>{inCart ? "Added" : "Add session"}</Tactile><TactileLink to="/book/cart" variant="neon" size="md">Cart ({d.cartItems.length}) <Icon name="arrow" size={16} /></TactileLink></div></div>}
           {mode === "day" && <div className="panel small muted">The studio confirms the full schedule and accommodation after approving your request.</div>}
@@ -400,7 +433,7 @@ export function BookDetails() {
   const blocked = useGuard(cat, d, "details");
   useEffect(() => { if (user && !d.contactName) up({ contactName: user.name, contactEmail: user.email, contactPhone: user.phone }); }, [user]); // eslint-disable-line
   if (!cat || blocked) return <Wait />;
-  const { room, mode } = priced(cat, d);
+  const { room, mode, svc } = priced(cat, d);
   const max = room?.capacity || cat.rules.maxPeople;
   const remote = mode === "project";
   const valid = d.contactName && /\S+@\S+\.\S+/.test(d.contactEmail) && d.contactPhone && d.artistName && (remote || (d.people >= 1 && d.people <= max));
@@ -432,7 +465,9 @@ export function BookDetails() {
           <Field label="Song title or titles (optional)" name="project" value={d.project} onChange={(e) => up({ project: e.target.value })} />
           <Area label="Notes (optional)" name="notes" rows={3} value={d.notes} onChange={(e) => up({ notes: e.target.value })} placeholder="Style, tempo, references, or anything we should know." />
           <Field label="Reference links (optional)" name="links" value={d.links} onChange={(e) => up({ links: e.target.value })} placeholder="YouTube, Spotify or Drive links" />
-          <div className="panel small row gap12" style={{ alignItems: "flex-start" }}><Icon name="upload" size={18} /><span>Right after you pay, upload your stems or references from your portal. Finished work comes back to the same place.</span></div>
+          {svc?.category === "exclusive"
+            ? <div className="panel small row gap12" style={{ alignItems: "flex-start" }}><Icon name="calendar" size={18} /><span>After you pay, our management team will contact you to schedule your recording sessions.</span></div>
+            : <div className="panel small row gap12" style={{ alignItems: "flex-start" }}><Icon name="upload" size={18} /><span>Right after you pay, upload your stems or references from your portal. Finished work comes back to the same place.</span></div>}
         </> : <>
           <div className="grid cols-2" style={{ gap: 16 }}>
             <Field label="Artist, brand or project name" name="artistName" value={d.artistName} onChange={(e) => up({ artistName: e.target.value })} />
@@ -449,14 +484,14 @@ export function BookDetails() {
 }
 
 export function PriceTable({ cat, d }: { cat: Catalog; d: BookingDraft }) {
-  const { pkg, extras, extraHours, hourly, total } = priced(cat, d);
+  const { pkg, extras, extraHours, hourly, total, count } = priced(cat, d);
   if (!pkg) return null;
   const sv = savings(pkg);
   const facts = [deliveryLabel(pkg.turnaround_days), revisionLabel(pkg.revision_limit)].filter(Boolean);
   return (
     <div className="panel stack gap8" style={{ padding: 18 }}>
       <b>Price details</b>
-      <div className="row between small gap12"><span className="stack"><span>{pkg.name}</span>{pkg.unit && <span className="caption">{pkg.unit}</span>}</span><span className="row gap8">{sv && <s className="faint">{naira(sv.regular)}</s>}<span>{naira(pkg.price_kobo)}</span></span></div>
+      <div className="row between small gap12"><span className="stack"><span>{count > 1 ? `${count} × ${pkg.name}` : pkg.name}</span>{pkg.unit && <span className="caption">{pkg.unit}</span>}</span><span className="row gap8">{sv && count === 1 && <s className="faint">{naira(sv.regular)}</s>}<span>{naira(pkg.price_kobo * count)}</span></span></div>
       {sv && <div className="row between small" style={{ color: "var(--success)" }}><span>You save</span><b>{naira(sv.kobo)} ({sv.percent}%)</b></div>}
       {extraHours > 0 && <div className="row between small"><span>Extra time ({extraHours} hr at {naira(hourly)})</span><span>{naira(extraHours * hourly)}</span></div>}
       {extras.map((e) => <div key={e.slug} className="row between small gap12"><span>{e.name}</span><span className="nowrap">{e.pricing === "quote" ? "Price on request" : naira(e.price_kobo)}</span></div>)}
@@ -477,14 +512,28 @@ export function BookReview() {
   const [busy, setBusy] = useState(false);
   const blocked = useGuard(cat, d, "checkout");
   if (!cat || blocked) return <Wait />;
-  const { svc, pkg, mode, room, win, total, deposit, approval } = priced(cat, d);
+  const { svc, pkg, mode, room, win, total, deposit, approval, picks } = priced(cat, d);
   const remote = mode === "project";
+  const many = picks.length > 1;
   const go = async () => {
     setBusy(true); setError(null);
     try {
+      if (many) {
+        const items = picks.map((item) => ({
+          serviceSlug: item.serviceSlug, packageId: item.packageId, date: item.date, start: item.start, extraHours: 0, extras: [] as string[],
+          people: d.people, artistName: d.artistName, contactName: d.contactName, contactEmail: d.contactEmail, contactPhone: d.contactPhone,
+          project: d.project, notes: d.notes, links: d.links,
+        }));
+        const cart = await api("/cart/holds", { body: { items } });
+        up({ cartHoldId: cart.id, holdId: undefined });
+        nav("/book/checkout");
+        return;
+      }
       if (d.holdId) await api(`/holds/${d.holdId}`, { method: "DELETE" }).catch(() => {});
-      const r = await api("/holds", { body: draftBody(cat, d) });
-      up({ holdId: r.holdId });
+      const primary = picks[0];
+      const body = draftBody(cat, primary ? { ...d, date: primary.date, start: primary.start } : d);
+      const r = await api("/holds", { body });
+      up({ holdId: r.holdId, ...(primary ? { date: primary.date, start: primary.start } : {}) });
       nav("/book/checkout");
     } catch (e: any) {
       if (e instanceof ApiError && e.code === "slot_taken") { up({ start: undefined }); nav("/book/time?taken=1"); return; }
@@ -505,8 +554,10 @@ export function BookReview() {
       <div className="card" style={{ padding: 0 }}>
         <div style={{ marginTop: -1 }}>{row("Package", `${svc?.name}${pkg && pkg.name !== svc?.name ? ` · ${pkg.name}` : ""}`, remote ? [pkg?.unit, facts].filter(Boolean).join(" · ") : `${room?.name ?? ""}${room ? " · crew included" : ""}`, stepsFor(priced(cat, d).fixed, d.packageId).some((s) => s.key === "package") ? "/book/package" : "/book")}</div>
         {remote
-          ? row("Delivery", "In your portal", "Finished work arrives in your portal, never by email.", "/book/details")
-          : row(mode === "day" ? "Start day" : "Date and time", d.date ? longDate(d.date) : "", mode === "day" ? "The studio confirms the full schedule and accommodation after approving." : win && d.date ? `${windowLabel(d.date, win.start, win.end)}${win.label ? ` · ${win.label}` : ""}` : "", "/book/time")}
+          ? row("Delivery", svc?.category === "exclusive" ? "Scheduled with you" : "In your portal", svc?.category === "exclusive" ? "After you pay, the studio contacts you to schedule the sessions." : "Finished work arrives in your portal, never by email.", "/book/details")
+          : many
+            ? row("Sessions", `${picks.length} sessions`, picks.map((item) => `${shortDate(item.date)} · ${t12(item.start)}`).join(", "), "/book/time")
+            : row(mode === "day" ? "Start day" : "Date and time", d.date ? longDate(d.date) : "", mode === "day" ? "The studio confirms the full schedule and accommodation after approving." : win && d.date ? `${windowLabel(d.date, win.start, win.end)}${win.label ? ` · ${win.label}` : ""}` : "", "/book/time")}
         {row("Your details", d.contactName, `${d.contactEmail} · ${d.contactPhone}`, "/book/details")}
         {row(remote ? "Order" : mode === "day" ? "Project" : "Session", remote ? d.artistName : `${d.artistName} · ${d.people} ${d.people === 1 ? "person" : "people"}`, [d.project, d.notes].filter(Boolean).join(" · ") || "No project notes", "/book/details")}
       </div>
@@ -529,7 +580,7 @@ export function BookReview() {
           </> : <span className="small muted">This package is paid in full when you {remote ? "order" : "book"}: {naira(total)}.</span>}
         </div>
       )}
-      {remote && <div className="panel small row gap12" style={{ alignItems: "flex-start" }}><Icon name="upload" size={18} /><span>After you pay, upload your stems or references from your portal. Finished work arrives there too.</span></div>}
+      {remote && <div className="panel small row gap12" style={{ alignItems: "flex-start" }}><Icon name={svc?.category === "exclusive" ? "calendar" : "upload"} size={18} /><span>{svc?.category === "exclusive" ? "After you pay, our management team will contact you to schedule your recording sessions." : "After you pay, upload your stems or references from your portal. Finished work arrives there too."}</span></div>}
       <label className="row gap12 small agree" style={{ cursor: "pointer" }}>
         <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
         <span>I agree to the <Link to="/packages#policies" target="_blank" style={{ textDecoration: "underline" }}>booking policies</Link> and <Link to="/terms" target="_blank" style={{ textDecoration: "underline" }}>terms</Link>, including payments, cancellation, revisions and refunds.</span>

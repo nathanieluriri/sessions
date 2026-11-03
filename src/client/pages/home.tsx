@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "react-router-dom";
 import { PublicLayout } from "../components/Layout";
-import { Icon, Mark, serviceIconName } from "../components/brand";
+import { Icon, Mark } from "../components/brand";
 import { Badge } from "../components/pill";
 import { Tactile, TactileLink, type TactileVariant } from "../components/kitchen";
 import { Split, wordCount } from "../components/Split";
@@ -301,15 +301,10 @@ function Showcase({ cat }: { cat: Catalog }) {
         onClickCapture={(e) => { if (moved.current) { e.preventDefault(); e.stopPropagation(); moved.current = false; } }} onDragStart={(e) => e.preventDefault()}>
         {[0, 1, 2].flatMap((copy) => services.map((s, i) => {
           const k = copy * n + i, real = copy === 1;
-          const isExclusive = s.category === "exclusive";
           return (
             <article key={`${copy}-${s.id}`} className={`ccard ${k === active ? "on" : ""}`} aria-hidden={!real || undefined}>
-              <Link to={`/services/${s.slug}`} className={`cimg ${!isExclusive ? "cimg-icon" : ""}`} aria-label={s.name} tabIndex={real ? undefined : -1} draggable={false}>
-                {isExclusive ? (
-                  <span style={{ backgroundImage: `url(${s.image_url})` }} />
-                ) : (
-                  <span className="cimg-icon-wrap"><Icon name={serviceIconName(s.slug)} size={48} /></span>
-                )}
+              <Link to={`/services/${s.slug}`} className="cimg" aria-label={s.name} tabIndex={real ? undefined : -1} draggable={false}>
+                <span style={{ backgroundImage: `url(${s.image_url})` }} />
               </Link>
               <div className="cbody"><h3><Link to={`/services/${s.slug}`} tabIndex={real ? undefined : -1} draggable={false}>{s.name}</Link></h3><p>{s.description}</p><span className="ctag">{s.price_label}</span></div>
             </article>
@@ -513,7 +508,7 @@ export function Home() {
       {intro && <Intro onDone={done} />}
       <div className="landing" ref={root}>
         <Hero play={!intro && !!site} badge={badge} demo={demo} title={c.hero_title ?? "Record, shoot and create"} accent={c.hero_accent ?? "under one roof."}
-          sub={c.hero_subtitle ?? "Book recording sessions, beats, mixing and mastering online, with fixed session times and live availability."} />
+          sub={c.hero_subtitle ?? "Book recording sessions, beats, mixing and mastering online, with fixed session times and live availability. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour."} />
         <Ribbon items={cat ? cat.services.filter((s) => s.active).slice(0, 10).map((s) => s.name) : ["Recording", "Beat production", "Mixing and mastering", "Full production"]} />
         {cat && site && <>
           <Values rooms={cat.rooms.length} daily={cat.sessions.filter((s) => s.active && s.kind === "day" && s.weekday == null).length} />

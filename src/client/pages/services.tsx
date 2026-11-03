@@ -1,6 +1,6 @@
 import { Link, Navigate, useParams } from "react-router-dom";
 import { PublicLayout, PageHero, waLink } from "../components/Layout";
-import { Icon, serviceIconName } from "../components/brand";
+import { Icon } from "../components/brand";
 import { Eq } from "../components/art";
 import { Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
@@ -10,16 +10,9 @@ import { useCatalog, useContent, type Service } from "../lib/catalog";
 import { canonicalService, fixedPackages, packagesOfService } from "../lib/booking";
 
 export function ServiceTile({ s, premium }: { s: Service; premium?: boolean }) {
-  const isExclusive = premium || s.category === "exclusive";
   return (
     <Link to={`/services/${s.slug}`} className={`svtile ${premium ? "premium" : ""}`}>
-      {isExclusive ? (
-        <span className="img" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label={s.name}>{premium && <span className="svcbadge">Exclusive offer</span>}</span>
-      ) : (
-        <span className="img svc-icon-tile" role="img" aria-label={s.name}>
-          <Icon name={serviceIconName(s.slug)} size={48} className="svc-tile-icon" />
-        </span>
-      )}
+      <span className="img" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label={s.name}>{premium && <span className="svcbadge">Exclusive offer</span>}</span>
       <span className="body">
         <b>{s.name}</b>
         <span className="d">{s.description}</span>
@@ -33,7 +26,7 @@ export function Services() {
   const cat = useCatalog();
   return (
     <PublicLayout title="Services">
-      <PageHero kicker="Services" title="Everything we make, and how to order it." sub="Book one-hour music, podcast, video and photography sessions, or send a project brief for a quote.">
+      <PageHero kicker="Services" title="Everything we make, and how to order it." sub="Book a recording session, a beat, a mix or full production. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour.">
         {cat && <div className="chips" style={{ marginTop: 8 }}>{cat.categories.map((c) => <a key={c.slug} href={`#${c.slug}`} className="chip">{c.name}</a>)}</div>}
       </PageHero>
       {!cat ? <Loading /> : cat.categories.map((c, i) => {

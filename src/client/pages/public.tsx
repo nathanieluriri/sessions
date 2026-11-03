@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { PublicLayout, PageHero, hoursSummary, waLink } from "../components/Layout";
-import { Icon, Socials, serviceIconName } from "../components/brand";
+import { Icon, Socials } from "../components/brand";
 import { Eq } from "../components/art";
 import { Area, Btn, ErrorBox, Field, Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
@@ -14,18 +14,23 @@ import { loadDraft, saveDraft } from "../lib/draft";
 
 export function ServiceCard({ s, on, onClick, quote, premium }: { s: Service; on?: boolean; onClick?: () => void; quote?: boolean; premium?: boolean }) {
   const isExclusive = premium || s.category === "exclusive";
+  const label = (
+    <span className="label"><b>{s.name}</b><span>{quote ? "Request a quote" : s.price_label}</span>{premium && s.duration_label && <span className="svcsub">{s.duration_label}</span>}</span>
+  );
+  if (isExclusive) {
+    return (
+      <button type="button" className={`svc stackart ${on ? "on" : ""} ${premium ? "premium" : ""}`} onClick={onClick} aria-pressed={quote ? undefined : on}>
+        <span className="art" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label="" />
+        {premium && <span className="svcbadge">Exclusive offer</span>}
+        {on && <span className="check"><Icon name="check" size={18} /></span>}
+        {label}
+      </button>
+    );
+  }
   return (
-    <button type="button" className={`svc ${on ? "on" : ""} ${premium ? "premium" : ""} ${!isExclusive ? "svc-icon-card" : ""}`}
-      style={isExclusive ? { backgroundImage: `url(${s.image_url})` } : undefined}
-      onClick={onClick} aria-pressed={quote ? undefined : on}>
-      {premium && <span className="svcbadge">Exclusive offer</span>}
-      {!isExclusive && (
-        <span className="svc-card-icon-wrap">
-          <Icon name={serviceIconName(s.slug)} size={42} />
-        </span>
-      )}
+    <button type="button" className={`svc ${on ? "on" : ""}`} style={{ backgroundImage: `url(${s.image_url})` }} onClick={onClick} aria-pressed={quote ? undefined : on}>
       {on && <span className="check"><Icon name="check" size={18} /></span>}
-      <span className="label"><b>{s.name}</b><span>{quote ? "Request a quote" : s.price_label}</span>{premium && s.duration_label && <span className="svcsub">{s.duration_label}</span>}</span>
+      {label}
     </button>
   );
 }
@@ -38,7 +43,8 @@ export function useStartBooking() {
     saveDraft({ ...loadDraft(), ...patch, holdId: undefined, start: undefined, date: undefined, extras: [], extraHours: 0 });
     const svc = cat?.services.find((x) => x.slug === patch.serviceSlug);
     const steps = stepsFor(fixedPackages(cat ?? { packages: [] }, svc), patch.packageId);
-    nav(!patch.serviceSlug ? "/book" : nextPath(steps, patch.packageId && steps.some((x) => x.key === "package") ? "package" : "service"));
+    const benefits = svc?.category === "exclusive" && steps.some((x) => x.key === "package");
+    nav(!patch.serviceSlug ? "/book" : benefits ? "/book/package" : nextPath(steps, patch.packageId && steps.some((x) => x.key === "package") ? "package" : "service"));
   };
 }
 
@@ -77,6 +83,7 @@ export function PackageCard({ p, cat, service }: { p: Package; cat: Catalog; ser
         {how && <span className="small" style={{ opacity: .65 }}>{how}</span>}
       </div>}
       <div className="divider" style={{ background: f ? "var(--brand-2)" : undefined }} />
+      {isExclusive && p.includes.length > 0 && <b className="small">Included in this package</b>}
       <ul>{p.includes.map((i) => <li key={i}><Eq />{i}</li>)}</ul>
       {quote
         ? <TactileLink to={`/quote?service=${encodeURIComponent(svc?.name ?? p.name)}`} variant={f ? "neon" : "light"} size="lg" block>Request a quote</TactileLink>
@@ -106,7 +113,7 @@ export function Packages() {
   const flex = !!cat?.packages.some((p) => p.scheduling === "flex" && p.pricing === "fixed" && p.active);
   return (
     <PublicLayout title="Pricing and packages">
-      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub="Prices are locked when you book. Sessions start at one hour, with consecutive hours available in the same booking." />
+      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub="Prices are locked when you book. Recording runs as four sessions a day, and you can book more than one at once. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour." />
       <section className="section" style={{ paddingTop: 40 }}><div className="wrap stack gap32">
         {!cat ? <Loading /> : <>
           {exclusiveFirst.length > 1 && <div className="chips" role="tablist">

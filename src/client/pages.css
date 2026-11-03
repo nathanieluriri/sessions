@@ -228,6 +228,10 @@ a.opt { color: inherit; }
 @media (max-width: 900px) { .deliverystrip { grid-template-columns: 1fr; } }
 
 /* Service icons & artwork styling */
+.svc.stackart { aspect-ratio: auto; display: flex; flex-direction: column; background: #141414; color: #fff; }
+.svc.stackart .art { display: block; width: 100%; aspect-ratio: 16 / 10; background: #111 center / cover no-repeat; }
+.svc.stackart .label { position: static; padding: 14px 16px 16px; }
+.svcpick .svc.premium.stackart { aspect-ratio: auto; }
 .svc-icon-tile { display: flex !important; align-items: center; justify-content: center; background: #1a1a1a !important; color: var(--neon); }
 .svc-card-icon-wrap { display: flex; align-items: center; justify-content: center; height: 100px; color: var(--neon); }
 .svc-icon-card { display: flex; flex-direction: column; justify-content: flex-end; background: #181818 !important; }

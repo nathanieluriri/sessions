@@ -19,11 +19,20 @@ const used: Record<number, number> = {};
 const fresh = (weekday: number) => nextWeekday(weekday, 9 + 7 * (used[weekday] = (used[weekday] ?? -1) + 1));
 const who = { artistName: "Kemi B", contactName: "Kemi Balogun", contactEmail: "kemi@example.com", contactPhone: "+234 805 111 2233" };
 const REC = { serviceSlug: "recording", packageId: "pkg_recording_session" };
-const FULL = { serviceSlug: "interviews", packageId: "pkg_stage_half_day" };
+const FULL = { serviceSlug: "full-production", packageId: "pkg_full_production" };
 const EP = { serviceSlug: "produce-ep", packageId: "pkg_produce_ep" };
 const PODCAST = { serviceSlug: "podcast-recording", packageId: "pkg_podcast_hour" };
 const draft = (pkg: { serviceSlug: string; packageId: string }, date: string, start: number, over: Record<string, unknown> = {}) =>
   ({ ...pkg, date, start, extraHours: 0, extras: [], people: 2, project: "", notes: "", links: "", ...who, ...over });
+async function residency() {
+  const r = await boss.post("/api/admin/packages", {
+    name: "Day residency", description: "Holds the day.", category: "session", durationMin: 540, priceKobo: 150_000_000, includes: ["The day"], featured: false, active: true,
+    serviceCategory: "music", roomId: "room_studio_a", pricing: "fixed", depositPercent: 50, requiresApproval: true, priceNote: "",
+    serviceSlug: "recording", scheduling: "day", slotKind: "day", unit: "per day",
+  });
+  if (r.status !== 200) throw new Error(JSON.stringify(r.body));
+  return { serviceSlug: "recording", packageId: r.body.id as string };
+}
 const manual = (pkg: { serviceSlug: string; packageId: string }, date: string, start: number, over: Record<string, unknown> = {}) =>
   ({ ...draft(pkg, date, start), status: "confirmed", source: "phone", ignoreHours: false, notify: false, payment: null, ...over });
 const row = async (id: string) => (await h.sql("SELECT * FROM bookings WHERE id = ?", id))[0];
@@ -63,12 +72,12 @@ describe("no double booking when late payments land together", () => {
     expect((await payment(loser.reference)).status).toBe("refunded");
     expect(await mailTo(loser.email, "Payment refunded%")).toContain("was taken after your hold expired");
   });
-  it("does the same for a separate Saturday daytime session", async () => {
+  it("does the same for the all night session", async () => {
     const sat = fresh(6);
-    const a = await start(draft(FULL, sat, 750));
+    const a = await start(draft(FULL, sat, 1380));
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(new Date(a.hold.expiresAt).getTime() + 60_000));
-    const b = await start(draft(FULL, sat, 750));
+    const b = await start(draft(FULL, sat, 1380));
     const results = await Promise.all([h.payDemo(a.client, a.reference), h.payDemo(b.client, b.reference)]);
     expect(results.map((r) => r.body.status).sort()).toEqual(["confirmed", "refunded"]);
     expect(await h.sql("SELECT id FROM bookings WHERE date = ? AND status = 'confirmed'", sat)).toHaveLength(1);
@@ -76,7 +85,7 @@ describe("no double booking when late payments land together", () => {
   it("refuses to approve or confirm a request whose time was sold after it expired", async () => {
     const date = fresh(3);
     const { client, email } = await h.newClient();
-    const hold = await client.post("/api/holds", draft(EP, date, 600, { contactEmail: email }));
+    const hold = await client.post("/api/holds", draft(await residency(), date, 600, { contactEmail: email }));
     const req = await client.post("/api/requests", { holdId: hold.body.holdId });
     const id = req.body.booking.id;
     await h.sql("UPDATE bookings SET expires_at = '2020-01-01T00:00:00.000Z' WHERE id = ?", id);
@@ -95,7 +104,7 @@ describe("no double booking when late payments land together", () => {
   it("still approves an expired request when nothing took its time", async () => {
     const date = fresh(3);
     const { client, email } = await h.newClient();
-    const hold = await client.post("/api/holds", draft(EP, date, 600, { contactEmail: email }));
+    const hold = await client.post("/api/holds", draft(await residency(), date, 600, { contactEmail: email }));
     const id = (await client.post("/api/requests", { holdId: hold.body.holdId })).body.booking.id;
     await h.sql("UPDATE bookings SET expires_at = '2020-01-01T00:00:00.000Z' WHERE id = ?", id);
     expect((await boss.post(`/api/admin/bookings/${id}/approve`, { note: "" })).status).toBe(200);
@@ -104,7 +113,7 @@ describe("no double booking when late payments land together", () => {
   it("refunds a payment for an approved booking whose time was sold, and cancels the booking", async () => {
     const date = fresh(4);
     const { client, email } = await h.newClient();
-    const hold = await client.post("/api/holds", draft(EP, date, 600, { contactEmail: email }));
+    const hold = await client.post("/api/holds", draft(await residency(), date, 600, { contactEmail: email }));
     const id = (await client.post("/api/requests", { holdId: hold.body.holdId })).body.booking.id;
     expect((await boss.post(`/api/admin/bookings/${id}/approve`, { note: "" })).status).toBe(200);
     const pay = await client.post(`/api/pay/${id}`, { plan: "deposit" });
@@ -133,23 +142,30 @@ describe("no double booking when late payments land together", () => {
 });
 
 describe("completed bookings keep their room until they end", () => {
-  it("holds a completed session until its scheduled end", async () => {
+  it("holds the night session of a full production that was completed early", async () => {
     const sat = fresh(6);
-    const id = (await boss.post("/api/admin/bookings", manual(FULL, sat, 600))).body.id;
+    const id = (await boss.post("/api/admin/bookings", manual(FULL, sat, 1380))).body.id;
     await h.sql("UPDATE bookings SET status = 'completed' WHERE id = ?", id);
-    expect((await h.client().post("/api/holds", draft(FULL, sat, 600))).status).toBe(409);
-    const free = (at: Date) => bookingsRepo.isFree(h.env.DB, { date: sat, start: 600, end: 660, roomId: "room_stage" }, 30, at.toISOString());
-    expect(await free(lagos(sat, 659))).toBe(false);
-    expect(await free(lagos(sat, 661))).toBe(true);
+    const view = await h.client().get(`/api/availability/day?date=${sat}&package=pkg_full_production`);
+    expect(view.body.slots[0].available).toBe(false);
+    expect((await h.client().post("/api/holds", draft(FULL, sat, 1380))).status).toBe(409);
+    const month = await h.client().get(`/api/availability/month?month=${sat.slice(0, 7)}&package=pkg_full_production`);
+    expect(month.body.days.find((d: any) => d.date === sat).status).toBe("full");
   });
   it("holds a daytime session completed early, and frees it once the end has passed", async () => {
     const date = fresh(1);
     const id = (await boss.post("/api/admin/bookings", manual(REC, date, 870))).body.id;
     await h.sql("UPDATE bookings SET status = 'completed' WHERE id = ?", id);
     expect((await h.client().post("/api/holds", draft(REC, date, 870))).status).toBe(409);
-    const free = (at: Date) => bookingsRepo.isFree(h.env.DB, { date, start: 870, end: 930, roomId: "room_studio_a" }, 30, at.toISOString());
-    expect(await free(lagos(date, 929))).toBe(false);
-    expect(await free(lagos(date, 931))).toBe(true);
+    const free = (at: Date) => bookingsRepo.isFree(h.env.DB, { date, start: 870, end: 990, roomId: "room_studio_a" }, 30, at.toISOString());
+    expect(await free(lagos(date, 989))).toBe(false);
+    expect(await free(lagos(date, 991))).toBe(true);
+    const night = fresh(6);
+    const nid = (await boss.post("/api/admin/bookings", manual(FULL, night, 1380))).body.id;
+    await h.sql("UPDATE bookings SET status = 'completed' WHERE id = ?", nid);
+    const asleep = (at: Date) => bookingsRepo.isFree(h.env.DB, { date: night, start: 1380, end: 1740, roomId: "room_studio_a" }, 30, at.toISOString());
+    expect(await asleep(lagos(addDays(night, 1), 299))).toBe(false);
+    expect(await asleep(lagos(addDays(night, 1), 301))).toBe(true);
   });
 });
 
@@ -193,11 +209,10 @@ describe("overpayment", () => {
 describe("staff bookings in the past", () => {
   it("refuses sessions that are already over, unless a flex booking is forced", async () => {
     const yesterday = addDays(studioNow().date, -1);
-    for (const pkg of [REC, EP]) {
-      const r = await boss.post("/api/admin/bookings", manual(pkg, yesterday, 600));
-      expect(r.status).toBe(400);
-      expect(r.body.error).toMatch(/already over/);
-    }
+    const r = await boss.post("/api/admin/bookings", manual(REC, yesterday, 600));
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/already over/);
+    expect((await boss.post("/api/admin/bookings", manual(EP, yesterday, 600))).status).toBe(200);
     const forcedSlot = await boss.post("/api/admin/bookings", manual(REC, yesterday, 600, { ignoreHours: true }));
     expect(forcedSlot.status).toBe(400);
     expect((await boss.post("/api/admin/bookings", manual(PODCAST, yesterday, 600))).status).toBe(400);
@@ -248,7 +263,11 @@ describe("copy", () => {
   it("publishes hours that agree with the all night session and policies that state the remote order refund", async () => {
     const { body } = await h.client().get("/api/content");
     expect(body.content.hours_note).toBe("Recording sessions run daily from 10:00am to 7:00pm. The All night session runs on Saturdays from 11:00pm to 5:00am (Sunday).");
-    for (const key of ["hero_subtitle", "footer_blurb", "seo_description"]) expect(body.content[key], key).toMatch(/by quote/);
+    for (const key of ["hero_subtitle", "footer_blurb", "seo_description"]) {
+      expect(body.content[key], key).toMatch(/₦40,000 per hour/);
+      expect(body.content[key], key).toMatch(/₦60,000 per hour/);
+      expect(body.content[key], key).not.toMatch(/by quote/);
+    }
     const policy = (slug: string) => body.policies.find((p: any) => p.slug === slug).body;
     expect(policy("cancellations")).toContain("full refund until the first finished files are delivered");
     expect(policy("terms")).toContain("full refund until the first finished files are delivered");
@@ -258,9 +277,11 @@ describe("copy", () => {
     const date = fresh(2);
     const { client, email } = await h.newClient();
     const hold = await client.post("/api/holds", draft(EP, date, 600, { contactEmail: email, extras: ["independent-distribution"] }));
-    await client.post("/api/requests", { holdId: hold.body.holdId });
-    const mail = await mailTo(email, "Request received%");
-    expect(mail).toContain("Independent distribution (optional, price on request)");
+    expect(hold.status, JSON.stringify(hold.body)).toBe(200);
+    expect(hold.body.draft.extras).toEqual([]);
+    const paid = await book(draft(EP, date, 600, { contactEmail: email, extras: ["independent-distribution"] }));
+    const mail = await mailTo(paid.email, "Order confirmed%");
+    expect(mail).not.toMatch(/price on request/i);
     expect(mail).not.toContain(") (");
     const beat = await book({ serviceSlug: "beat-production", packageId: "pkg_beat_production", ...who });
     expect(await mailTo(beat.email, "Order confirmed%")).toContain("Service: Beat production\n");
@@ -325,7 +346,7 @@ describe("every money movement happens once", () => {
     });
     it(`lets only one of two simultaneous approvals win with an already decided answer (round ${round})`, async () => {
       const { client, email } = await h.newClient();
-      const hold = await client.post("/api/holds", draft(EP, fresh(5), 600, { contactEmail: email }));
+      const hold = await client.post("/api/holds", draft(await residency(), fresh(5), 600, { contactEmail: email }));
       const id = (await client.post("/api/requests", { holdId: hold.body.holdId })).body.booking.id;
       const out = await Promise.all([boss.post(`/api/admin/bookings/${id}/approve`, { note: "" }), boss.post(`/api/admin/bookings/${id}/approve`, { note: "" })]);
       expect(out.map((o) => o.status).sort()).toEqual([200, 409]);
@@ -396,7 +417,7 @@ describe("every money movement happens once", () => {
 describe("wording and rules from round three", () => {
   it("says the preferred start date moved for a day booking", async () => {
     const date = fresh(1), other = fresh(1);
-    const made = await boss.post("/api/admin/bookings", manual(EP, date, 600, { contactEmail: "moved@example.com" }));
+    const made = await boss.post("/api/admin/bookings", manual(await residency(), date, 600, { contactEmail: "moved@example.com" }));
     expect((await boss.post(`/api/admin/bookings/${made.body.id}/reschedule`, { date: other, start: 600 })).status).toBe(200);
     const mail = await mailTo("moved@example.com", "Your preferred start date has moved%");
     expect(mail).toContain("The preferred start date for");

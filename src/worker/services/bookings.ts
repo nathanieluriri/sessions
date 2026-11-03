@@ -105,7 +105,7 @@ export const summary = (b: BookingRow) => ({
   id: b.id, ref: b.ref, status: b.status, service_name: b.service_name, package_name: b.package_name, package_price_kobo: b.package_price_kobo,
   room_name: b.room_name, date: b.date, start_min: b.start_min, end_min: b.end_min, extras: JSON.parse(b.extras), total_kobo: b.total_kobo,
   deposit_kobo: b.deposit_kobo, paid_kobo: paidNet(b), balance_kobo: balanceOf(b), expires_at: b.expires_at,
-  scheduling: b.scheduling, slot_label: b.slot_label, due_date: b.due_date,
+  scheduling: b.scheduling, slot_label: b.slot_label, due_date: b.due_date, package_id: b.package_id, category: b.category,
 });
 
 /** The amount the client can pay now and whether a smaller deposit is on offer. */

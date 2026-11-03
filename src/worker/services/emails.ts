@@ -41,10 +41,11 @@ const money = (b: BookingRow) => {
 };
 
 /** Where a remote order's client goes next. Walk-in clients without an account are told to register with the booking email. */
-const orderSteps = (env: Env, b: BookingRow) =>
-  `What happens next:\n1. ${b.user_id ? `Upload your files (stems, references or lyrics) in your portal: ${bookingLink(env, b)}` : `Create a free account with ${b.contact_email} at ${env.APP_URL}/register, then upload your files (stems, references or lyrics) in your portal`}\n` +
+const orderSteps = (env: Env, b: BookingRow) => (b.category === "exclusive"
+  ? "What happens next:\nThank you for your payment! Our management team will contact you to schedule your recording sessions.\n"
+  : `What happens next:\n1. ${b.user_id ? `Upload your files (stems, references or lyrics) in your portal: ${bookingLink(env, b)}` : `Create a free account with ${b.contact_email} at ${env.APP_URL}/register, then upload your files (stems, references or lyrics) in your portal`}\n` +
   `2. We work on your order and deliver the finished files in your portal. We never send finished work by email.\n` +
-  `3. You get an email when it is ready. Sign in and download it.${balanceOf(b) > 0 ? `\n   Finished files unlock once your balance is paid. Pay here: ${payLink(env, b)}` : ""}`;
+  `3. You get an email when it is ready. Sign in and download it.${balanceOf(b) > 0 ? `\n   Finished files unlock once your balance is paid. Pay here: ${payLink(env, b)}` : ""}`);
 
 export const emails = {
   confirmed: (env: Env, b: BookingRow) =>
