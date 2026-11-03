@@ -1,6 +1,6 @@
 import { Link, Navigate, useParams } from "react-router-dom";
 import { PublicLayout, PageHero, waLink } from "../components/Layout";
-import { Icon } from "../components/brand";
+import { Icon, serviceIconName } from "../components/brand";
 import { Eq } from "../components/art";
 import { Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
@@ -10,9 +10,16 @@ import { useCatalog, useContent, type Service } from "../lib/catalog";
 import { canonicalService, fixedPackages, packagesOfService } from "../lib/booking";
 
 export function ServiceTile({ s, premium }: { s: Service; premium?: boolean }) {
+  const isExclusive = premium || s.category === "exclusive";
   return (
     <Link to={`/services/${s.slug}`} className={`svtile ${premium ? "premium" : ""}`}>
-      <span className="img" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label={s.name}>{premium && <span className="svcbadge">Exclusive offer</span>}</span>
+      {isExclusive ? (
+        <span className="img" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label={s.name}>{premium && <span className="svcbadge">Exclusive offer</span>}</span>
+      ) : (
+        <span className="img svc-icon-tile" role="img" aria-label={s.name}>
+          <Icon name={serviceIconName(s.slug)} size={48} className="svc-tile-icon" />
+        </span>
+      )}
       <span className="body">
         <b>{s.name}</b>
         <span className="d">{s.description}</span>

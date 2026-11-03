@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { PublicLayout, PageHero, hoursSummary, waLink } from "../components/Layout";
-import { Icon, Socials } from "../components/brand";
+import { Icon, Socials, serviceIconName } from "../components/brand";
 import { Eq } from "../components/art";
 import { Area, Btn, ErrorBox, Field, Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
@@ -13,9 +13,17 @@ import { api } from "../lib/api";
 import { loadDraft, saveDraft } from "../lib/draft";
 
 export function ServiceCard({ s, on, onClick, quote, premium }: { s: Service; on?: boolean; onClick?: () => void; quote?: boolean; premium?: boolean }) {
+  const isExclusive = premium || s.category === "exclusive";
   return (
-    <button type="button" className={`svc ${on ? "on" : ""} ${premium ? "premium" : ""}`} style={{ backgroundImage: `url(${s.image_url})` }} onClick={onClick} aria-pressed={quote ? undefined : on}>
+    <button type="button" className={`svc ${on ? "on" : ""} ${premium ? "premium" : ""} ${!isExclusive ? "svc-icon-card" : ""}`}
+      style={isExclusive ? { backgroundImage: `url(${s.image_url})` } : undefined}
+      onClick={onClick} aria-pressed={quote ? undefined : on}>
       {premium && <span className="svcbadge">Exclusive offer</span>}
+      {!isExclusive && (
+        <span className="svc-card-icon-wrap">
+          <Icon name={serviceIconName(s.slug)} size={42} />
+        </span>
+      )}
       {on && <span className="check"><Icon name="check" size={18} /></span>}
       <span className="label"><b>{s.name}</b><span>{quote ? "Request a quote" : s.price_label}</span>{premium && s.duration_label && <span className="svcsub">{s.duration_label}</span>}</span>
     </button>
@@ -46,8 +54,16 @@ export function PackageCard({ p, cat, service }: { p: Package; cat: Catalog; ser
   const sv = savings(p);
   const facts = [deliveryLabel(p.turnaround_days), revisionLabel(p.revision_limit)].filter(Boolean);
   const how = quote ? "" : howLine(p, cat.sessions);
+  const isExclusive = p.service_category === "exclusive" || svc?.category === "exclusive";
+  const artwork = isExclusive && svc?.image_url;
+
   return (
-    <div className={`pkg ${f ? "featured" : ""}`} id={`pkg-${p.slug}`}>
+    <div className={`pkg ${f ? "featured" : ""} ${isExclusive ? "pkg-exclusive" : ""}`} id={`pkg-${p.slug}`}>
+      {artwork && (
+        <div className="pkg-art-wrap">
+          <img src={artwork} alt={p.name} className="pkg-art-img" />
+        </div>
+      )}
       {f && <span className="pkgbadge">Featured</span>}
       <h3 className="h3">{p.name}</h3>
       <p style={{ opacity: f ? .75 : 1 }} className={f ? "" : "muted"}>{p.description}</p>

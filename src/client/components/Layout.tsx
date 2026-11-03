@@ -178,7 +178,7 @@ export function Footer() {
           {c.whatsapp && <div className="fcol"><h4>Talk to us</h4><TactileAnchor variant="neon" size="md" href={waLink(c.whatsapp)} target="_blank" rel="noreferrer">WhatsApp the studio <Icon name="northeast" size={16} /></TactileAnchor></div>}
         </div>
         <div className="fbar">
-          <span>© {year} {c.legal_name ?? "Psych Studios Limited"}</span>
+          <span>Copyright © 2026 Psych Records Entertainment Limited | Email: booking@psychrecords.ng</span>
           <div><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/login">Client login</Link><Link to="/staff/login">Staff sign in</Link></div>
         </div>
       </div>

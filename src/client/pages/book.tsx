@@ -359,7 +359,11 @@ export function BookVerify() {
             <hr className="rc-hr" />
             <Barcode />
             <p className="rc-note">Ref <ScrambleText>{booking.ref}</ScrambleText></p>
-            <p className="rc-note rc-dim">{remote ? "Your files are delivered in your portal." : `See you in ${booking.room_name}.`}</p>
+            <p className="rc-note rc-dim">
+              {booking.package_slug === "produce-ep" || booking.package_slug === "produce-album" || booking.service_slug === "produce-ep" || booking.service_slug === "produce-album"
+                ? "Thank you for your payment! Our management team will contact you to schedule your recording sessions."
+                : remote ? "Your files are delivered in your portal." : `See you in ${booking.room_name}.`}
+            </p>
           </>}
         </ReceiptPrinter>
       </div>
@@ -375,6 +379,7 @@ export function BookConfirmed({ id }: { id: string }) {
   const b = data?.booking;
   const name = site?.content.business_name ?? "Psych Studios";
   const remote = b?.scheduling === "project";
+  const isExclusivePackage = b?.package_slug === "produce-ep" || b?.package_slug === "produce-album" || b?.service_slug === "produce-ep" || b?.service_slug === "produce-album";
   const ics = useMemo(() => {
     if (!b || remote) return "";
     const dt = (day: number, m: number) => `${addDays(b.date, day).replace(/-/g, "")}T${String(Math.floor((m % 1440) / 60)).padStart(2, "0")}${String(m % 60).padStart(2, "0")}00`;
@@ -390,7 +395,11 @@ export function BookConfirmed({ id }: { id: string }) {
       <div className="wrap grid cols-2 confwrap" style={{ paddingTop: 72, paddingBottom: 120, alignItems: "center", gap: 64 }}>
         <div className="stack gap24">
           <h1 className="display">{remote ? "Order " : "You’re "}<span className="neon">{remote ? "placed." : "booked."}</span></h1>
-          <p style={{ fontSize: 18, opacity: .78 }}>{remote ? `Order ${b.ref} is confirmed. Upload your stems or references from your portal. Finished work arrives in your portal, never by email.` : `Booking ${b.ref} is confirmed. Your receipt is on its way to ${b.contact_email} and saved in your dashboard.`}</p>
+          <p style={{ fontSize: 18, opacity: .78 }}>
+            {isExclusivePackage
+              ? "Thank you for your payment! Our management team will contact you to schedule your recording sessions."
+              : remote ? `Order ${b.ref} is confirmed. Upload your stems or references from your portal. Finished work arrives in your portal, never by email.` : `Booking ${b.ref} is confirmed. Your receipt is on its way to ${b.contact_email} and saved in your dashboard.`}
+          </p>
           <div className="grid cols-2 confgrid">
             {facts.map(([k, v]) => (
               <div key={k}><div className="mono" style={{ opacity: .55 }}>{k}</div><b style={{ fontWeight: 500 }}>{v}</b></div>
