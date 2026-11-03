@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { Icon, Lockup, Mark, Socials } from "./brand";
+import { Icon, Mark, Socials } from "./brand";
 import { useAuth } from "../lib/auth";
 import { TactileAnchor, TactileLink } from "./kitchen";
 import { useCatalog, useContent, type Catalog } from "../lib/catalog";
@@ -160,7 +160,7 @@ export function Footer() {
       <div className="wrap">
         <div className="fgrid">
           <div className="fbrand">
-            <Link to="/" className="flogo"><Lockup width={340} /></Link>
+            <Link to="/" className="flogo"><img src="/brand/footer-wordmark.png" width={340} height={170} alt={c.business_name ?? "Psych Studios"} decoding="async" style={{ maxWidth: "100%", height: "auto" }} /></Link>
             <p>{c.footer_blurb}</p>
           </div>
           <FootLinks title="Explore" links={[["/services", "Services"], ["/studio", "Studio and facilities"], ["/portfolio", "Portfolio"], ["/packages", "Pricing and packages"], ["/about", "About us"]]} />
