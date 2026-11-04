@@ -2,7 +2,7 @@ import { all, first, run, stmt } from "./db";
 
 export interface HoursRow { weekday: number; is_open: number; open_min: number; close_min: number }
 export interface BlockRow { id: string; date: string; start_min: number; end_min: number; reason: string; created_by: string | null; room_id: string | null; created_at: string }
-export interface PolicyRow { slug: string; title: string; body: string; kind: "booking" | "legal"; sort: number; updated_at: string }
+export interface PolicyRow { slug: string; title: string; body: string; kind: "booking" | "legal"; sort: number; updated_at: string; published: number }
 
 export const settingsRepo = {
   all: async (db: D1Database) => Object.fromEntries((await all<{ key: string; value: string }>(db, "SELECT key, value FROM settings")).map((r) => [r.key, r.value])),
@@ -19,8 +19,10 @@ export const settingsRepo = {
 };
 
 export const contentRepo = {
-  policies: (db: D1Database) => all<PolicyRow>(db, "SELECT slug, title, body, kind, sort, updated_at FROM policies ORDER BY sort"),
-  policy: (db: D1Database, slug: string) => first<PolicyRow>(db, "SELECT slug, title, body, kind, sort, updated_at FROM policies WHERE slug = ?", slug),
+  policies: (db: D1Database, publicOnly = false) => all<PolicyRow>(db, `SELECT slug, title, body, kind, sort, updated_at, published FROM policies ${publicOnly ? "WHERE published = 1" : ""} ORDER BY sort`),
+  policy: (db: D1Database, slug: string) => first<PolicyRow>(db, "SELECT slug, title, body, kind, sort, updated_at, published FROM policies WHERE slug = ?", slug),
+  setPublished: (db: D1Database, slug: string, published: boolean, by: string) =>
+    run(db, "UPDATE policies SET published = ?, updated_by = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE slug = ?", published ? 1 : 0, by, slug),
   savePolicy: (db: D1Database, slug: string, title: string, body: string, by: string) =>
     run(db, "UPDATE policies SET title = ?, body = ?, updated_by = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE slug = ?", title, body, by, slug),
   content: async (db: D1Database) => Object.fromEntries((await all<{ key: string; value: string }>(db, "SELECT key, value FROM content")).map((r) => [r.key, r.value])) as Record<string, string>,

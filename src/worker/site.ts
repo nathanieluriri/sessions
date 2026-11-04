@@ -18,8 +18,9 @@ export async function robots(env: Env, origin: string) {
 }
 
 export async function sitemap(env: Env, origin: string) {
-  const services = await catalogRepo.services(env.DB);
-  const urls = [...PUBLIC_PATHS, ...services.map((s) => `/services/${s.slug}`)];
+  const [services, policies] = await Promise.all([catalogRepo.services(env.DB), contentRepo.policies(env.DB, true)]);
+  const legal = new Set(policies.filter((p) => p.kind === "legal").map((p) => `/${p.slug}`));
+  const urls = [...PUBLIC_PATHS.filter((p) => p !== "/privacy" && p !== "/terms" || legal.has(p)), ...services.map((s) => `/services/${s.slug}`)];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${origin}${u}</loc></url>`).join("\n")}\n</urlset>\n`;
   return new Response(xml, { headers: { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
 }

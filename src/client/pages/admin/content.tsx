@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Area, Btn, Field, Loading, Modal, Tag } from "../../components/ui";
 import { api } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
 import { loadSite, useCatalog } from "../../lib/catalog";
 import { dateTime } from "../../lib/format";
 import { act, CollectionEditor, FormFields, Tabs, useApi, type FieldDef } from "./kit";
@@ -52,6 +53,8 @@ function ContentForm({ groups, d, reload }: { groups: [string, FieldDef[]][]; d:
 }
 
 export function Website() {
+  const { user } = useAuth();
+  const ceo = user?.role === "ceo";
   const [tab, setTab] = useState<Tab>("pages");
   const [d, load] = useApi<any>("/admin/content");
   const cat = useCatalog();
@@ -100,8 +103,9 @@ export function Website() {
         { key: "starts_on", label: "Show from", type: "date" }, { key: "ends_on", label: "Show until", type: "date" }, { key: "published", label: "Published", type: "bool" }]}
       row={(a) => <div><b>{a.title}</b><div className="caption">{a.starts_on || a.ends_on ? `${a.starts_on ?? "now"} to ${a.ends_on ?? "no end date"}` : "No dates"}</div></div>} />}
     {tab === "policies" && <div className="card stack gap8">
-      <span className="small muted">Booking policies are shown on the Pricing page and accepted at checkout. Publishing one creates a new policy version; existing bookings keep the version they accepted. Privacy and terms have their own pages. Use blank lines for paragraphs, ## for headings and - for bullet points.</span>
-      {d.policies.map((p: any) => <div key={p.slug} className="row between gap12" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}><div><b className="small">{p.title}</b> <Tag>{p.kind === "legal" ? "Page" : "Booking policy"}</Tag><div className="caption">Updated {dateTime(p.updated_at)} · {p.body.slice(0, 100)}…</div></div><button className="link small" onClick={() => setPol({ ...p })}>Edit</button></div>)}
+      <span className="small muted">Policy documents are hidden from the website until the CEO turns each one on. Saving the text does not show it. Booking policies appear on the Pricing page. Privacy and terms have their own pages. Use blank lines for paragraphs, ## for headings and - for bullet points.</span>
+      {!ceo && <span className="caption">Only the CEO can show or hide these documents.</span>}
+      {d.policies.map((p: any) => <div key={p.slug} className="row between gap12" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}><div><b className="small">{p.title}</b> <Tag tone={p.published ? "success" : ""}>{p.published ? "On the website" : "Hidden"}</Tag> <Tag>{p.kind === "legal" ? "Page" : "Booking policy"}</Tag><div className="caption">Updated {dateTime(p.updated_at)} · {p.body.slice(0, 100)}…</div></div><div className="row gap8">{ceo && <button className="link small" onClick={() => act(() => api(`/admin/policies/${p.slug}/visibility`, { method: "PUT", body: { published: !p.published } }), p.published ? "Hidden from the website" : "Now on the website", () => { load(); loadSite(true); })}>{p.published ? "Hide" : "Show"}</button>}<button className="link small" onClick={() => setPol({ ...p })}>Edit</button></div></div>)}
     </div>}
     {tab === "seo" && <>
       <ContentForm groups={[["Search and analytics", SEO]]} d={d} reload={load} />
@@ -119,7 +123,7 @@ export function Website() {
     {pol && <Modal title={`Edit ${pol.title}`} onClose={() => setPol(null)}>
       <Field label="Title" name="ptitle" value={pol.title} onChange={(e) => setPol({ ...pol, title: e.target.value })} />
       <Area label="Text" name="pbody" rows={pol.kind === "legal" ? 16 : 7} value={pol.body} onChange={(e) => setPol({ ...pol, body: e.target.value })} />
-      <Btn onClick={() => act(() => api(`/admin/policies/${pol.slug}`, { method: "PUT", body: { title: pol.title, body: pol.body } }), "Published", () => { setPol(null); load(); loadSite(true); })}>Publish</Btn>
+      <Btn onClick={() => act(() => api(`/admin/policies/${pol.slug}`, { method: "PUT", body: { title: pol.title, body: pol.body } }), "Saved", () => { setPol(null); load(); loadSite(true); })}>Save</Btn>
     </Modal>}
     {page && <Modal title={`SEO for ${page.path}`} onClose={() => setPage(null)}>
       <FormFields fields={[{ key: "title", label: "Page title", hint: "The business name is added automatically." }, { key: "description", label: "Meta description", type: "textarea", rows: 3, hint: "About 150 characters works best." }, { key: "image_url", label: "Share image", type: "image" }]} value={page} onChange={setPage} />

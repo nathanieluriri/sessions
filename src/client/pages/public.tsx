@@ -177,11 +177,11 @@ export function Packages() {
           </div>
         </>}
       </div></section>
-      <section className="section" style={{ background: "var(--surface)" }} id="policies" ref={ref}><div className="wrap stack gap32">
+      {booking.length > 0 && <section className="section" style={{ background: "var(--surface)" }} id="policies" ref={ref}><div className="wrap stack gap32">
         <h2 className="h1">Booking policies</h2>
         <div className="grid cols-3 policies">{booking.map((p) => <div key={p.slug} className="card stack gap8"><h3 className="h4">{p.title}</h3><p className="muted">{p.body}</p></div>)}</div>
-        {booking.length > 0 && <span className="mono faint">Last updated {new Date(Math.max(...booking.map((p) => Date.parse(p.updated_at)))).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>}
-      </div></section>
+        <span className="mono faint">Last updated {new Date(Math.max(...booking.map((p) => Date.parse(p.updated_at)))).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>
+      </div></section>}
     </PublicLayout>
   );
 }
@@ -331,10 +331,11 @@ export function Faq() {
 export function Legal({ slug }: { slug: "privacy" | "terms" }) {
   const site = useContent();
   const p = site?.policies.find((x) => x.slug === slug);
+  const title = p?.title ?? (slug === "privacy" ? "Privacy policy" : "Terms of service");
   return (
-    <PublicLayout title={p?.title ?? (slug === "privacy" ? "Privacy policy" : "Terms of service")}>
-      <PageHero kicker="Legal" title={p?.title ?? ""} sub={p ? `Last updated ${new Date(p.updated_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : ""} />
-      <section className="section" style={{ paddingTop: 40 }}><div className="wrap" style={{ maxWidth: 860 }}>{!p ? <Loading /> : <RichText text={p.body} />}</div></section>
+    <PublicLayout title={title}>
+      <PageHero kicker="Legal" title={p ? p.title : title} sub={p ? `Last updated ${new Date(p.updated_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}` : "This document is not published yet."} />
+      <section className="section" style={{ paddingTop: 40 }}><div className="wrap" style={{ maxWidth: 860 }}>{!site ? <Loading /> : p ? <RichText text={p.body} /> : <p className="muted">The studio has not published this document. Check back later, or contact the studio if you need it.</p>}</div></section>
     </PublicLayout>
   );
 }

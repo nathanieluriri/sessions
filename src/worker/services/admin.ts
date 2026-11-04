@@ -132,8 +132,16 @@ export const contentService = {
     if (p.kind === "booking") {
       const v = Number((await settingsRepo.all(env.DB)).policy_version) + 1;
       await settingsRepo.set(env.DB, "policy_version", String(v));
-      await audit(env.DB, actor, "Published policy", title, `Version ${v}`);
-    } else await audit(env.DB, actor, "Published page", title);
+      await audit(env.DB, actor, "Saved policy", title, `Version ${v}`);
+    } else await audit(env.DB, actor, "Saved page", title);
+  },
+  /** Showing a policy on the website is separate from saving its text, and only the CEO may do it. */
+  async setPolicyVisibility(env: Env, actor: SessionUser, slug: string, published: boolean) {
+    if (actor.role !== "ceo") throw forbidden("Only the CEO can show or hide policy documents.");
+    const p = await contentRepo.policy(env.DB, slug);
+    if (!p) throw notFound("Policy not found.");
+    await contentRepo.setPublished(env.DB, slug, published, actor.id);
+    await audit(env.DB, actor, published ? "Showed policy on the website" : "Hid policy from the website", p.title);
   },
   async saveContent(env: Env, actor: SessionUser, entries: Record<string, string>) {
     const keys = Object.keys(entries);

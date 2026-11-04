@@ -185,6 +185,11 @@ r.put("/policies/:slug", requirePermission("edit_content"), async (c) => {
   await contentService.savePolicy(c.env, actor(c), c.req.param("slug"), b.title, b.body);
   return c.json(ok);
 });
+r.put("/policies/:slug/visibility", requireStaff, async (c) => {
+  const b = await body(c, z.object({ published: z.boolean() }));
+  await contentService.setPolicyVisibility(c.env, actor(c), c.req.param("slug"), b.published);
+  return c.json(ok);
+});
 r.put("/content", requirePermission("edit_content"), async (c) => {
   const b = await body(c, z.record(z.string().regex(/^[a-z_]{2,40}$/, "Invalid field."), text(2000)));
   await contentService.saveContent(c.env, actor(c), b);

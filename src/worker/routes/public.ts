@@ -34,7 +34,7 @@ r.get("/content", async (c) => {
   const today = studioNow().date;
   const list = (name: string) => collectionsService.list(c.env, name, true, today);
   const [policies, content, portfolio, team, equipment, gallery, testimonials, faqs, announcements] = await Promise.all([
-    contentRepo.policies(c.env.DB), contentRepo.content(c.env.DB), list("portfolio"), list("team"), list("equipment"), list("gallery"), list("testimonials"), list("faqs"), list("announcements"),
+    contentRepo.policies(c.env.DB, true), contentRepo.content(c.env.DB), list("portfolio"), list("team"), list("equipment"), list("gallery"), list("testimonials"), list("faqs"), list("announcements"),
   ]);
   for (const k of PRIVATE_SETTINGS) delete content[k];
   return c.json({ policies, content, portfolio, team, equipment, gallery, testimonials, faqs, announcements });

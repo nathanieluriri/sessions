@@ -164,7 +164,7 @@ export function Footer() {
             {c.footer_blurb ? <p>{c.footer_blurb}</p> : null}
           </div>
           <FootLinks title="Explore" links={[["/services", "Services"], ["/studio", "Studio and facilities"], ["/portfolio", "Portfolio"], ["/packages", "Pricing and packages"], ["/about", "About us"]]} />
-          <FootLinks title="Help" links={[["/book", "Book a session"], ["/quote", "Request a quote"], ["/faq", "FAQs"], ["/packages#policies", "Booking policies"], ["/contact", "Contact"]]} />
+          <FootLinks title="Help" links={[["/book", "Book a session"], ["/quote", "Request a quote"], ["/faq", "FAQs"], ...(site?.policies.some((p) => p.kind === "booking") ? [["/packages#policies", "Booking policies"] as [string, string]] : []), ["/contact", "Contact"]]} />
           <div className="fcol">
             <h4>Visit</h4>
             {c.studio_address && <p><Icon name="pin" size={16} />{c.studio_address}</p>}
@@ -179,7 +179,7 @@ export function Footer() {
         </div>
         <div className="fbar">
           <span>Copyright © 2026 Psych Records Entertainment Limited | Email: bookings@psychstudios.com</span>
-          <div><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/login">Client login</Link><Link to="/staff/login">Staff sign in</Link></div>
+          <div>{site?.policies.some((p) => p.slug === "privacy") && <Link to="/privacy">Privacy</Link>}{site?.policies.some((p) => p.slug === "terms") && <Link to="/terms">Terms</Link>}<Link to="/login">Client login</Link><Link to="/staff/login">Staff sign in</Link></div>
         </div>
       </div>
     </footer>

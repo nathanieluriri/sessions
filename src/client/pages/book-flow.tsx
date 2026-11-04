@@ -5,7 +5,7 @@ import { Icon } from "../components/brand";
 import { Area, Btn, ErrorBox, Field, Loading, Steps } from "../components/ui";
 import { ServiceCard } from "./public";
 import { Tactile, TactileLink } from "../components/kitchen";
-import { depositOf, needsApproval, roomOf, useCatalog, type Catalog } from "../lib/catalog";
+import { depositOf, needsApproval, roomOf, useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { loadDraft, saveDraft, type BookingDraft } from "../lib/draft";
 import { addDays, hrs, lagosToday, longDate, naira, shortDate, t12 } from "../lib/format";
 import {
@@ -512,6 +512,7 @@ export function BookReview() {
   const cat = useCatalog();
   const [d, up] = useDraft();
   const nav = useNavigate();
+  const site = useContent();
   const [agree, setAgree] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -589,7 +590,7 @@ export function BookReview() {
       {remote && <div className="panel small row gap12" style={{ alignItems: "flex-start" }}><Icon name={svc?.category === "exclusive" ? "calendar" : "upload"} size={18} /><span>{svc?.category === "exclusive" ? "After you pay, our management team will contact you to schedule your recording sessions." : "After you pay, upload your stems or references from your portal. Finished work arrives there too."}</span></div>}
       <label className="row gap12 small agree" style={{ cursor: "pointer" }}>
         <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-        <span>I agree to the <Link to="/packages#policies" target="_blank" style={{ textDecoration: "underline" }}>booking policies</Link> and <Link to="/terms" target="_blank" style={{ textDecoration: "underline" }}>terms</Link>, including payments and cancellation. Cancelling does not refund what you have paid.</span>
+        <span>I agree to pay the amount shown. Cancelling does not refund what you have paid.{site?.policies.some((p) => p.kind === "booking") && <> See the <Link to="/packages#policies" target="_blank" style={{ textDecoration: "underline" }}>booking policies</Link>.</>}{site?.policies.some((p) => p.slug === "terms") && <> See the <Link to="/terms" target="_blank" style={{ textDecoration: "underline" }}>terms</Link>.</>}</span>
       </label>
       <ErrorBox error={error} />
     </Shell>

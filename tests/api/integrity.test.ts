@@ -271,12 +271,21 @@ describe("copy", () => {
     expect(body.content.footer_blurb).toBe("");
     expect(body.content.contact_email).toBe("bookings@psychstudios.com");
     expect(JSON.stringify(body.content)).not.toMatch(/hello@psychrecords\.ng|booking@psychrecords\.ng/);
-    const policy = (slug: string) => body.policies.find((p: any) => p.slug === slug).body;
+    expect(body.policies).toEqual([]);
+    for (const slug of ["cancellations", "terms", "approvals"]) {
+      const shown = await boss.put(`/api/admin/policies/${slug}/visibility`, { published: true });
+      expect(shown.status, JSON.stringify(shown.body)).toBe(200);
+    }
+    const live = await h.client().get("/api/content");
+    const policy = (slug: string) => live.body.policies.find((p: any) => p.slug === slug).body;
+    expect(live.body.policies.map((p: any) => p.slug).sort()).toEqual(["approvals", "cancellations", "terms"]);
     expect(policy("cancellations")).toContain("does not refund");
     expect(policy("cancellations")).not.toMatch(/full refund|50%/);
     expect(policy("terms")).toContain("does not refund");
     expect(policy("terms")).not.toMatch(/full refund/);
     expect(policy("approvals")).toContain("within 48 hours");
+    const staff = await h.newStaff("producer", ["deliver_files"]);
+    expect((await staff.client.put("/api/admin/policies/cancellations/visibility", { published: false })).status).toBe(403);
   });
   it("words the add-on and balance lines cleanly", async () => {
     const date = fresh(2);
