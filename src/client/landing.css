@@ -219,7 +219,8 @@ a.hbadge:hover .pbadge { background: rgba(255,255,255,.1); }
 .ccard.on .cimg span, .ccard:hover .cimg span { transform: scale(1.05); }
 .cbody { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 22px 24px 26px; }
 .cbody h3 { font-size: 21px; letter-spacing: -.02em; font-weight: 500; }
-.cbody p { font-size: 15px; line-height: 1.5; color: rgba(255,255,255,.66); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cbody p { font-size: 15px; line-height: 1.5; color: rgba(255,255,255,.66); }
+.crow { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
 .ctag { margin-top: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2); font-size: 13px; color: rgba(255,255,255,.85); }
 .cnav { display: flex; justify-content: center; gap: 12px; margin-top: 36px; }
 .cnav .flip { transform: rotate(180deg); }

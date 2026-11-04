@@ -45,7 +45,7 @@ export const draftBody = (cat: Catalog, d: BookingDraft) => {
   const { svc, pkg, mode, extras } = priced(cat, d);
   return {
     serviceSlug: svc?.slug, packageId: pkg?.id, extras: extras.map((e) => e.slug),
-    ...(mode === "project" ? {} : { date: d.date, start: d.start, people: d.people }),
+    ...(mode === "project" ? (svc?.category === "exclusive" ? {} : { date: d.date, start: 0 }) : { date: d.date, start: d.start, people: d.people }),
     ...(mode === "flex" ? { extraHours: d.extraHours } : {}),
     artistName: d.artistName, contactName: d.contactName, contactEmail: d.contactEmail, contactPhone: d.contactPhone, project: d.project, notes: d.notes, links: d.links,
   };
@@ -58,13 +58,14 @@ export function useGuard(cat: Catalog | null, d: BookingDraft, at: StepKey) {
   return !!to;
 }
 
-const nextLabelFor = (key: StepKey | undefined) => (key === "package" ? "Choose a package" : key === "time" ? "Choose date and time" : key === "details" ? "Continue to details" : "Review");
+const nextLabelFor = (key: StepKey | undefined, label?: string) => (label === "Start date" ? "Choose a start date" : label === "Benefits" ? "See what's included" : key === "package" ? "Choose a package" : key === "time" ? "Choose date and time" : key === "details" ? "Continue to details" : "Review");
 
 function Summary({ cat, d, hold }: { cat: Catalog; d: BookingDraft; hold?: string | null }) {
   const { svc, pkg, mode, room, win, total, deposit, approval, extraHours, count } = priced(cat, d);
   const when = !d.date ? "Pick a date" : win ? windowLabel(d.date, win.start, win.end) : "Pick a time";
+  const exclusive = svc?.category === "exclusive";
   const rows: [string, string, string][] = mode === "project"
-    ? [["upload", "Delivery", "In your portal"], ["clock", "Turnaround", deliveryLabel(pkg?.turnaround_days ?? null) || "Set by the studio"]]
+    ? [...(exclusive ? [] : [["calendar", "Start date", d.date ? longDate(d.date) : "Pick a start date"] as [string, string, string]]), ["upload", "Delivery", exclusive ? "Scheduled with you" : "In your portal"], ["clock", "Turnaround", deliveryLabel(pkg?.turnaround_days ?? null) || (exclusive ? "Set with you" : "Set by the studio")]]
     : mode === "day"
       ? [["calendar", "Start day", d.date ? longDate(d.date) : "Pick a day"], ["door", "Room", room ? `${room.name} · ${room.kind}` : "Set by the package"], ["users", "Staying", d.contactName ? `${d.people} ${d.people === 1 ? "person" : "people"}` : "Add in your details"]]
       : [["door", "Room", room ? `${room.name} · ${room.kind}` : "Set by the package"], ["calendar", "Date", d.date ? longDate(d.date) : "Pick a date"],
@@ -95,7 +96,7 @@ export function Shell({ at, title, sub, cat, d, hold, children, back, next, next
   const { total, pkg, fixed, mode, win, svc, count } = priced(cat, d);
   const steps = stepsFor(fixed, d.packageId);
   const backTo = back ?? (at === "service" ? undefined : prevPath(steps, at));
-  const caption = stickyNote ?? (count > 1 ? `${count} sessions` : mode === "project" ? pkg?.name : d.date && win ? `${shortDate(d.date)} · ${t12(win.start)}` : pkg?.name ?? svc?.name ?? "Pick what you are making");
+  const caption = stickyNote ?? (count > 1 ? `${count} sessions` : mode === "project" ? (svc?.category !== "exclusive" && d.date ? `Starts ${shortDate(d.date)}` : pkg?.name) : d.date && win ? `${shortDate(d.date)} · ${t12(win.start)}` : pkg?.name ?? svc?.name ?? "Pick what you are making");
   return (
     <>
       <Nav />
@@ -142,7 +143,7 @@ export function BookService() {
   };
   const cats = [...cat.categories].sort((a, b) => a.sort - b.sort);
   return (
-    <Shell at="service" title="What are you making?" sub="Pick the closest match. You choose the package next." cat={cat} d={d} aside={false} next={() => nav(nextPath(steps, "service"))} nextLabel={nextLabelFor(steps[1]?.key)} nextDisabled={!svc} stickyNote={svc?.name ?? "Pick what you are making"}>
+    <Shell at="service" title="What are you making?" sub="Pick the closest match. You choose the package next." cat={cat} d={d} aside={false} next={() => nav(nextPath(steps, "service"))} nextLabel={nextLabelFor(steps[1]?.key, steps[1]?.label)} nextDisabled={!svc} stickyNote={svc?.name ?? "Pick what you are making"}>
       {d.cartItems.length > 0 && <div className="panel row between wrapflex gap12"><span><b>{d.cartItems.length} {d.cartItems.length === 1 ? "session" : "sessions"} in your cart</b><span className="small muted"> Add another service or continue to checkout.</span></span><TactileLink to="/book/cart" size="md">View cart <Icon name="arrow" size={16} /></TactileLink></div>}
       {cats.map((c) => {
         const list = cat.services.filter((s) => s.category === c.slug);
@@ -178,7 +179,7 @@ export function BookPackage() {
   const quotes = exclusive ? [] : svc ? cat.packages.filter((p) => p.pricing === "quote" && (p.service_slug ? p.service_slug === svc.slug : p.service_category === svc.category)) : [];
   const choose = (id: string) => { const changed = id !== d.packageId; up({ packageId: id, ...(changed ? { start: undefined, extraHours: 0, cartItems: d.cartItems.filter((x) => x.packageId === id) } : {}) }); };
   return (
-    <Shell at="package" title={exclusive ? "What's included." : "Pick a package."} sub={exclusive ? "These benefits come with the package. Nothing here is priced separately." : svc ? `For ${svc.name.toLowerCase()}.` : undefined} cat={cat} d={d} next={() => nav(nextPath(steps, "package"))} nextLabel={exclusive ? "Continue to details" : nextLabelFor(steps[steps.findIndex((s) => s.key === "package") + 1]?.key)} nextDisabled={!pkg || !d.packageId}>
+    <Shell at="package" title={exclusive ? "What's included." : "Pick a package."} sub={exclusive ? "These benefits come with the package. Nothing here is priced separately." : svc ? `For ${svc.name.toLowerCase()}.` : undefined} cat={cat} d={d} next={() => nav(nextPath(steps, "package"))} nextLabel={nextLabelFor(steps[steps.findIndex((s) => s.key === "package") + 1]?.key, steps[steps.findIndex((s) => s.key === "package") + 1]?.label)} nextDisabled={!pkg || !d.packageId}>
       {exclusive && pkg && (
         <div className="card stack gap16">
           {svc?.image_url && <img src={svc.image_url} alt={pkg.name} className="pkg-art-img" style={{ borderRadius: 14, width: "100%", aspectRatio: "16 / 10", objectFit: "cover" }} />}
@@ -298,8 +299,10 @@ export function BookTime() {
   const tooSoon = (t: Tile) => d.date === today && t.start - nowMin < cat.rules.minNotice;
   const nextOpen = d.date ? days?.find((x) => x.date > d.date! && ok(x.status)) : undefined;
   const dayMulti = mode === "slot" && pkg.slot_kind === "day";
+  const startOnly = mode === "project";
   const picks = d.cartItems.filter((x) => x.packageId === pkg.id);
   const choose = (date: string) => {
+    if (startOnly) { up({ date, start: 0 }); return; }
     const onDay = picks.filter((x) => x.date === date);
     up({ date, start: onDay.at(-1)?.start });
     if (window.matchMedia("(max-width: 1000px)").matches) setTimeout(() => tilesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
@@ -330,10 +333,11 @@ export function BookTime() {
     if (!pkg || !d.serviceSlug || !d.date || d.start == null || d.cartHoldId || d.cartItems.length >= 10 || inCart) return;
     up({ cartHoldId: undefined, cartItems: [...d.cartItems, { id: cartKey, serviceSlug: d.serviceSlug, packageId: pkg.id, date: d.date, start: d.start, extraHours: d.extraHours, extras: [...d.extras], people: d.people }] });
   };
-  const title = mode === "day" ? "Pick the day you want to start." : mode === "flex" ? "Pick a date and start time." : "Pick a date and session.";
-  const sub = mode === "flex" ? `Live availability for ${room?.name}. Times are in Lagos time (WAT).` : "Live availability. Times are in Lagos time (WAT).";
+  const title = startOnly ? "Pick a start date." : mode === "day" ? "Pick the day you want to start." : mode === "flex" ? "Pick a date and start time." : "Pick a date and session.";
+  const sub = startOnly ? "This is the day we begin. It is not a studio session, and you can ask us to move it later." : mode === "flex" ? `Live availability for ${room?.name}. Times are in Lagos time (WAT).` : "Live availability. Times are in Lagos time (WAT).";
+  const startReady = !!d.date && !(days && d.date.slice(0, 7) === month && sel && !ok(sel.status));
   return (
-    <Shell at="time" title={dayMulti ? "Pick your sessions." : title} sub={dayMulti ? "Select every session you want. Each one is booked on its own, and you pay for them together." : sub} cat={cat} d={d} next={() => { if (dayMulti && picks[0]) up({ date: picks[0].date, start: picks[0].start }); nav(nextPath(stepsFor(p.fixed, d.packageId), "time")); }} nextLabel="Continue to details" nextDisabled={dayMulti ? picks.length === 0 : !d.date || d.start == null || !p.win}>
+    <Shell at="time" title={dayMulti ? "Pick your sessions." : title} sub={dayMulti ? "Select every session you want. Each one is booked on its own, and you pay for them together." : sub} cat={cat} d={d} next={() => { if (dayMulti && picks[0]) up({ date: picks[0].date, start: picks[0].start }); nav(nextPath(stepsFor(p.fixed, d.packageId), "time")); }} nextLabel="Continue to details" nextDisabled={startOnly ? !startReady : dayMulti ? picks.length === 0 : !d.date || d.start == null || !p.win}>
       {q.get("taken") && <div className="error">Someone took that time a moment ago. Please pick another.</div>}
       {failed && <div className="error">We could not load availability. Check your connection and try another date.</div>}
       <div className="grid timegrid" data-stack>
@@ -352,7 +356,7 @@ export function BookTime() {
           <div className="row gap16 wrapflex caption">
             <span className="row gap4"><i className="key" style={{ background: "var(--success)" }} />Open</span>
             {mode === "slot" && <span className="row gap4"><i className="key" style={{ background: "var(--coral)" }} />Few left</span>}
-            <span>Crossed out: fully booked{mode === "slot" ? ". Boxed: no sessions that day." : "."}</span>
+            <span>{startOnly ? `Any day from today, up to ${cat.rules.bookAhead} days ahead.` : `Crossed out: fully booked${mode === "slot" ? ". Boxed: no sessions that day." : "."}`}</span>
           </div>
         </div>
         <div className="card stack gap16" ref={tilesRef} style={{ scrollMarginTop: 96 }}>
@@ -364,7 +368,8 @@ export function BookTime() {
               <span className="hint">Sessions start at one hour. Reserve consecutive hours in the same booking; each extra hour in {room?.name} is {naira(hourly)}.</span>
             </div>
           )}
-          {!d.date ? <span className="small muted">Choose a day to see {mode === "day" ? "if it is free" : "the open sessions"}.</span>
+          {startOnly ? (d.date && ok(sel?.status) ? <div className="panel small" role="status"><b>We start on {shortDate(d.date)}.</b><div className="muted">Pay on the next steps. This date is saved with your order.</div></div> : <span className="small muted">Choose the day we should begin.</span>)
+            : !d.date ? <span className="small muted">Choose a day to see {mode === "day" ? "if it is free" : "the open sessions"}.</span>
             : !tiles || !days ? <span className="small muted">Checking…</span>
             : !ok(sel?.status) && mode !== "flex" ? (
               <div className="stack gap12">
@@ -553,6 +558,7 @@ export function BookReview() {
       next={go} nextLabel={approval ? "Continue to send request" : "Continue to checkout"} nextDisabled={!agree} busy={busy}>
       <div className="card" style={{ padding: 0 }}>
         <div style={{ marginTop: -1 }}>{row("Package", `${svc?.name}${pkg && pkg.name !== svc?.name ? ` · ${pkg.name}` : ""}`, remote ? [pkg?.unit, facts].filter(Boolean).join(" · ") : `${room?.name ?? ""}${room ? " · crew included" : ""}`, stepsFor(priced(cat, d).fixed, d.packageId).some((s) => s.key === "package") ? "/book/package" : "/book")}</div>
+        {remote && svc?.category !== "exclusive" && row("Start date", d.date ? longDate(d.date) : "Pick a date", "We begin your order on this day. You can ask us to move it later.", "/book/time")}
         {remote
           ? row("Delivery", svc?.category === "exclusive" ? "Scheduled with you" : "In your portal", svc?.category === "exclusive" ? "After you pay, the studio contacts you to schedule the sessions." : "Finished work arrives in your portal, never by email.", "/book/details")
           : many
@@ -583,7 +589,7 @@ export function BookReview() {
       {remote && <div className="panel small row gap12" style={{ alignItems: "flex-start" }}><Icon name={svc?.category === "exclusive" ? "calendar" : "upload"} size={18} /><span>{svc?.category === "exclusive" ? "After you pay, our management team will contact you to schedule your recording sessions." : "After you pay, upload your stems or references from your portal. Finished work arrives there too."}</span></div>}
       <label className="row gap12 small agree" style={{ cursor: "pointer" }}>
         <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-        <span>I agree to the <Link to="/packages#policies" target="_blank" style={{ textDecoration: "underline" }}>booking policies</Link> and <Link to="/terms" target="_blank" style={{ textDecoration: "underline" }}>terms</Link>, including payments, cancellation, revisions and refunds.</span>
+        <span>I agree to the <Link to="/packages#policies" target="_blank" style={{ textDecoration: "underline" }}>booking policies</Link> and <Link to="/terms" target="_blank" style={{ textDecoration: "underline" }}>terms</Link>, including payments and cancellation. Cancelling does not refund what you have paid.</span>
       </label>
       <ErrorBox error={error} />
     </Shell>

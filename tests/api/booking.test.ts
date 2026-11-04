@@ -122,15 +122,16 @@ describe("availability", () => {
     expect(statusOf(sat)).toBe("available");
     if (addDays(sat, 1).startsWith(sat.slice(0, 7))) expect(statusOf(addDays(sat, 1))).toBe("closed");
   });
-  it("offers one whole-day window for day packages and no calendar for remote orders", async () => {
+  it("offers no calendar for an EP and a start-date calendar for a mix", async () => {
     const date = monday();
     const c = h.client();
     const ep = await c.get(`/api/availability/day?date=${date}&package=pkg_produce_ep`);
     expect(ep.body).toMatchObject({ mode: "project", room: null, open: null, slots: [] });
     const project = await c.get(`/api/availability/day?date=${date}&package=pkg_mm_standard`);
-    expect(project.body).toEqual({ date: studioNow().date, mode: "project", room: null, open: null, slots: [] });
+    expect(project.body).toMatchObject({ date, mode: "project", room: null, slots: [{ id: "start", label: "Start date", start: 0, end: 0, available: true }] });
     const month = await c.get(`/api/availability/month?month=${date.slice(0, 7)}&package=pkg_mm_standard`);
-    expect(month.body).toEqual({ month: date.slice(0, 7), mode: "project", room: null, days: [] });
+    expect(month.body.days.find((d: { date: string }) => d.date === date).status).toBe("available");
+    expect(month.body.days.length).toBeGreaterThan(27);
   });
   it("keeps the flex grid for duration and room, with or without a package", async () => {
     const date = monday();
@@ -243,10 +244,11 @@ describe("holds", () => {
     expect((await h.client().post("/api/holds", draft(ALBUM, date, S1))).status).toBe(200);
   });
   it("never lets remote orders clash with anything", async () => {
-    const results = await Promise.all(Array.from({ length: 6 }, () => h.client().post("/api/holds", draft(MIX, "", 0))));
+    const start = addDays(studioNow().date, 4);
+    const results = await Promise.all(Array.from({ length: 6 }, () => h.client().post("/api/holds", draft(MIX, start, 0))));
     expect(results.map((r) => r.status)).toEqual([200, 200, 200, 200, 200, 200]);
     const stored = await h.sql<{ room_id: string | null; date: string; start_min: number; end_min: number }>("SELECT * FROM holds WHERE id = ?", results[0].body.holdId);
-    expect(stored[0]).toMatchObject({ room_id: null, date: studioNow().date, start_min: 0, end_min: 0 });
+    expect(stored[0]).toMatchObject({ room_id: null, date: start, start_min: 0, end_min: 0 });
   });
   it("keeps the small hours of Sunday for a session that ran past midnight, in both directions", async () => {
     const studioHour = await boss.post("/api/admin/packages", {
@@ -333,20 +335,21 @@ describe("what a booking may not be", () => {
   });
   it("refuses room capacity but lets a remote order take any group size up to 200", async () => {
     await rejects(draft(REC, monday(), S1, { people: 7 }), /up to 6 people/);
-    expect((await h.client().post("/api/holds", draft(MIX, "", 0, { people: 200 }))).status).toBe(200);
-    expect((await h.client().post("/api/quote", draft(MIX, "", 0, { people: 201 }))).status).toBe(400);
+    expect((await h.client().post("/api/holds", draft(MIX, monday(), 0, { people: 200 }))).status).toBe(200);
+    expect((await h.client().post("/api/quote", draft(MIX, monday(), 0, { people: 201 }))).status).toBe(400);
   });
   it("books the podcast studio online at ₦60,000 per hour", async () => {
     const held = await h.client().post("/api/holds", draft(PODCAST, monday(), S1));
     expect(held.status, JSON.stringify(held.body)).toBe(200);
     expect(held.body.draft).toMatchObject({ scheduling: "flex", total: 6_000_000, duration: 60 });
   });
-  it("forces a remote order onto today with no time and no room, whatever the client sends", async () => {
-    const r = await h.client().post("/api/quote", draft(BEAT, "2030-01-01", 900));
-    expect(r.body).toMatchObject({ scheduling: "project", date: studioNow().date, start: 0, duration: 0, roomId: "", roomName: "", slotKind: "", slotLabel: "", dueDate: null });
-    const bare = await h.client().post("/api/quote", { ...BEAT, ...who });
-    expect(bare.body).toMatchObject({ scheduling: "project", people: 1, total: 10_000_000 });
-    expect((await h.client().post("/api/quote", draft(BEAT, "", 0, { extraHours: 2 }))).status).toBe(400);
+  it("keeps a beat's start date and refuses one that is missing or too far ahead", async () => {
+    const date = addDays(studioNow().date, 4);
+    const r = await h.client().post("/api/quote", draft(BEAT, date, 900));
+    expect(r.body).toMatchObject({ scheduling: "project", date, start: 0, duration: 0, roomId: "", roomName: "", slotKind: "", slotLabel: "", dueDate: null });
+    expect((await h.client().post("/api/quote", draft(BEAT, "2030-01-01", 900))).status).toBe(400);
+    expect((await h.client().post("/api/quote", { ...BEAT, ...who })).status).toBe(400);
+    expect((await h.client().post("/api/quote", draft(BEAT, date, 0, { extraHours: 2 }))).status).toBe(400);
   });
 });
 
@@ -433,7 +436,7 @@ describe("money", () => {
     expect(rec.body.extrasList).toEqual([{ slug: "studio-snacks", name: "Studio snacks", price: 500_000 }]);
     expect(rec.body.extras).toEqual(["studio-snacks"]);
     expect(rec.body.total).toBe(8_500_000);
-    const mix = await c.post("/api/quote", draft(MIX, "", 0, { extras: ["stem-pack", "studio-snacks", "rush-masters"] }));
+    const mix = await c.post("/api/quote", draft(MIX, monday(), 0, { extras: ["stem-pack", "studio-snacks", "rush-masters"] }));
     expect(mix.body.extrasList).toHaveLength(3);
     expect(mix.body.extrasList).toEqual(expect.arrayContaining([
       { slug: "studio-snacks", name: "Studio snacks", price: 500_000 }, { slug: "stem-pack", name: "Stem pack", price: 1_000_000 }, { slug: "rush-masters", name: "Rush masters", price: 0, quote: true },
@@ -516,13 +519,13 @@ describe("day scheduling still holds a studio day", () => {
 
 describe("remote orders", () => {
   it("are paid for without a room or a time, and carry a delivery date", async () => {
-    const today = studioNow().date;
-    const { id, email, booking, hold } = await book(draft(EXPRESS, "", 0));
-    expect(hold.draft).toMatchObject({ scheduling: "project", roomId: "", dueDate: addDays(today, 1), turnaroundDays: 1, revisionLimit: 3 });
-    expect(booking).toMatchObject({ scheduling: "project", room_name: "", date: today, start_min: 0, end_min: 0, due_date: addDays(today, 1), status: "confirmed", total_kobo: 17_000_000, paid_kobo: 17_000_000 });
-    expect(await row(id)).toMatchObject({ room_id: null, room_name: "", scheduling: "project", slot_kind: "", slot_label: "", revision_limit: 3, revisions_used: 0, delivered_final_at: null, due_date: addDays(today, 1) });
+    const start = monday();
+    const { id, email, booking, hold } = await book(draft(EXPRESS, start, 0));
+    expect(hold.draft).toMatchObject({ scheduling: "project", roomId: "", date: start, dueDate: addDays(start, 1), turnaroundDays: 1, revisionLimit: 3 });
+    expect(booking).toMatchObject({ scheduling: "project", room_name: "", date: start, start_min: 0, end_min: 0, due_date: addDays(start, 1), status: "confirmed", total_kobo: 17_000_000, paid_kobo: 17_000_000 });
+    expect(await row(id)).toMatchObject({ room_id: null, room_name: "", scheduling: "project", slot_kind: "", slot_label: "", revision_limit: 3, revisions_used: 0, delivered_final_at: null, due_date: addDays(start, 1) });
     const mail = await mailTo(email, "Order confirmed%");
-    expect(mail).toContain("Order placed:");
+    expect(mail).toContain("Start date:");
     expect(mail).toContain("Delivery due:");
     expect(mail).not.toMatch(/Room:|Time:|Date:/);
     expect(mail).toContain("Upload your files");
@@ -531,33 +534,34 @@ describe("remote orders", () => {
     expect(mail).toContain("Payment status: paid in full");
   });
   it("count seven days for standard mixing and nothing for a beat", async () => {
-    const today = studioNow().date;
-    expect((await book(draft(MIX, "", 0))).booking.due_date).toBe(addDays(today, 7));
-    const beat = await book(draft(BEAT, "", 0));
+    const start = monday();
+    expect((await book(draft(MIX, start, 0))).booking.due_date).toBe(addDays(start, 7));
+    const beat = await book(draft(BEAT, monday(), 0));
     expect(beat.booking.due_date).toBeNull();
     expect(await mailTo(beat.email, "Order confirmed%")).not.toContain("Delivery due");
   });
-  it("start the clock when the order is paid, even if the hold was made the evening before", async () => {
+  it("keeps the start date the client picked when payment lands the next day", async () => {
     const { client, email } = await h.newClient();
     const day = addDays(studioNow().date, 3);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(`${day}T22:55:00Z`));
-    const hold = await client.post("/api/holds", draft(MIX, "", 0, { contactEmail: email }));
+    const hold = await client.post("/api/holds", draft(MIX, day, 0, { contactEmail: email }));
+    expect(hold.status, JSON.stringify(hold.body)).toBe(200);
     expect(hold.body.draft).toMatchObject({ date: day, dueDate: addDays(day, 7) });
     const co = await client.post("/api/checkout", { holdId: hold.body.holdId, plan: "full" });
     vi.setSystemTime(new Date(`${day}T23:05:00Z`));
     const paid = await h.payDemo(client, co.body.reference);
-    expect(paid.body.booking).toMatchObject({ date: addDays(day, 1), due_date: addDays(day, 8), start_min: 0 });
+    expect(paid.body.booking).toMatchObject({ date: day, due_date: addDays(day, 7), start_min: 0 });
   });
   it("show up in the client's account with their scheduling fields", async () => {
-    const { client, id } = await book(draft(EXPRESS, "", 0));
+    const { client, id } = await book(draft(EXPRESS, monday(), 0));
     const overview = await client.get("/api/account/overview");
     expect(overview.body.bookings.find((b: any) => b.id === id)).toMatchObject({ scheduling: "project", room_id: null, due_date: expect.any(String), revision_limit: 3 });
     const detail = await client.get(`/api/account/bookings/${id}`);
-    expect(detail.body.policy).toEqual({ freeReschedule: false, refundShare: 1, refundAmount: 17_000_000 });
+    expect(detail.body.policy).toEqual({ freeReschedule: false, refundShare: 0, refundAmount: 0 });
   });
   it("cannot be marked completed or no-show by hand", async () => {
-    const { id } = await book(draft(MIX, "", 0));
+    const { id } = await book(draft(MIX, monday(), 0));
     for (const outcome of ["completed", "no_show"]) {
       const r = await boss.post(`/api/admin/bookings/${id}/outcome`, { outcome });
       expect(r.status).toBe(400);
@@ -653,12 +657,12 @@ describe("moving bookings", () => {
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/no session time to move/);
   });
-  it("never moves a remote order", async () => {
-    const { id } = await book(draft(MIX, "", 0));
-    const r = await move(id, monday(), 0);
-    expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/no session time to move/);
-    expect(await row(id)).toMatchObject({ date: studioNow().date, start_min: 0 });
+  it("moves a mix to a new start date and shifts its delivery date with it", async () => {
+    const start = monday();
+    const { id } = await book(draft(MIX, start, 0));
+    const next = addDays(start, 5);
+    expect((await move(id, next, 0)).status).toBe(200);
+    expect(await row(id)).toMatchObject({ date: next, start_min: 0, end_min: 0, due_date: addDays(next, 7) });
   });
   it("keeps a flex booking inside opening hours and clear of its room's other bookings", async () => {
     const date = monday(), other = monday();
@@ -732,43 +736,47 @@ describe("change requests and cancellations", () => {
     expect(await row(id)).toMatchObject({ date, start_min: S1 });
     expect((await boss.get("/api/admin/requests")).body.some((r: any) => r.id === pending.id)).toBe(true);
   });
-  it("lets a remote order be cancelled for a full refund until work is delivered, but not rescheduled", async () => {
-    const { id, client, email } = await book(draft(MIX, "", 0));
+  it("lets a remote order move its start date, and cancelling does not refund", async () => {
+    const start = monday();
+    const { id, client, email } = await book(draft(MIX, start, 0));
     const ask = (body: Record<string, unknown>) => client.post(`/api/account/bookings/${id}/requests`, { reason: "", ...body });
-    const nope = await ask({ kind: "reschedule", newDate: monday(), newStart: 0 });
-    expect(nope.status).toBe(400);
-    expect(nope.body.error).toMatch(/no session time to move/);
-    expect((await ask({ kind: "reschedule" })).status).toBe(400);
+    const next = addDays(start, 4);
+    expect((await ask({ kind: "reschedule", newDate: next, newStart: 0 })).status).toBe(200);
+    const moved = (await boss.get("/api/admin/requests")).body.find((r: any) => r.booking_id === id);
+    expect((await boss.post(`/api/admin/requests/${moved.id}`, { approve: true })).status).toBe(200);
+    expect(await row(id)).toMatchObject({ status: "confirmed", date: next, refunded_kobo: 0 });
     expect((await ask({ kind: "cancel", reason: "Changed my mind" })).status).toBe(200);
     const pending = (await boss.get("/api/admin/requests")).body.find((r: any) => r.booking_id === id);
     expect((await boss.post(`/api/admin/requests/${pending.id}`, { approve: true })).status).toBe(200);
-    expect(await row(id)).toMatchObject({ status: "cancelled", refunded_kobo: 10_000_000 });
-    expect(await mailTo(email, "Booking cancelled%")).toContain("₦100,000 is being refunded");
+    expect(await row(id)).toMatchObject({ status: "cancelled", refunded_kobo: 0 });
+    const mail = await mailTo(email, "Booking cancelled%");
+    expect(mail).toContain("does not refund");
+    expect(mail).not.toContain("is being refunded");
   });
   it("stops refunding a remote order in full once the first delivery is published", async () => {
-    const { id, client } = await book(draft(MIX, "", 0));
+    const { id, client } = await book(draft(MIX, monday(), 0));
     await h.sql("INSERT INTO booking_files (id, booking_id, direction, title, name, r2_key, state, delivered_at) VALUES (?, ?, 'delivery', 'Master', 'master.wav', ?, 'ready', '2026-10-23T10:00:00.000Z')", `file-${id}`, id, `portal/${id}/file`);
     expect((await client.get(`/api/account/bookings/${id}`)).body.policy).toMatchObject({ refundShare: 0, refundAmount: 0 });
     const cancelled = await boss.post(`/api/admin/bookings/${id}/cancel`, { reason: "Client asked", fullRefund: false });
     expect(cancelled.body).toEqual({ refund: 0, manual: 0 });
-    const second = await book(draft(MIX, "", 0));
+    const second = await book(draft(MIX, monday(), 0));
     await h.sql("INSERT INTO booking_files (id, booking_id, direction, title, name, r2_key, state, delivered_at) VALUES (?, ?, 'delivery', 'Master', 'master.wav', ?, 'ready', '2026-10-23T10:00:00.000Z')", `file-${second.id}`, second.id, `portal/${second.id}/file`);
     const override = await boss.post(`/api/admin/bookings/${second.id}/cancel`, { reason: "Our delay", fullRefund: true });
     expect(override.body.refund).toBe(10_000_000);
   });
-  it("keeps the refund policy for sessions: full more than 72 hours out, and the slot is free again", async () => {
+  it("does not refund a cancelled session, and the slot is free again", async () => {
     const date = monday();
     const { id } = await book(draft(REC, date, S4));
     const cancelled = await boss.post(`/api/admin/bookings/${id}/cancel`, { reason: "Client asked", fullRefund: false });
-    expect(cancelled.body).toEqual({ refund: 8_000_000, manual: 0 });
-    expect(await row(id)).toMatchObject({ status: "cancelled", refunded_kobo: 8_000_000 });
+    expect(cancelled.body).toEqual({ refund: 0, manual: 0 });
+    expect(await row(id)).toMatchObject({ status: "cancelled", refunded_kobo: 0 });
     expect((await h.client().post("/api/holds", draft(REC, date, S4))).status).toBe(200);
   });
-  it("refunds half between 24 and 72 hours before the all night session, and nothing within 24 hours", async () => {
+  it("does not refund an all night session, however close it is", async () => {
     const half = await book(draft(FULL, saturday(), NIGHT));
     const today = studioNow().date;
     await h.sql("UPDATE bookings SET date = ? WHERE id = ?", addDays(today, 2), half.id);
-    expect((await boss.post(`/api/admin/bookings/${half.id}/cancel`, { reason: "Late change", fullRefund: false })).body.refund).toBe(14_000_000);
+    expect((await boss.post(`/api/admin/bookings/${half.id}/cancel`, { reason: "Late change", fullRefund: false })).body.refund).toBe(0);
     const none = await book(draft(FULL, saturday(), NIGHT));
     await h.sql("UPDATE bookings SET date = ? WHERE id = ?", today, none.id);
     expect((await boss.post(`/api/admin/bookings/${none.id}/cancel`, { reason: "Same day", fullRefund: false })).body.refund).toBe(0);

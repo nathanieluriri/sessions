@@ -3,11 +3,11 @@ import type { BookingRow } from "../repositories/bookings";
 import { prettyDate, timeRange } from "../lib/time";
 import { naira } from "../lib/money";
 
-type Moment = { date: string; start_min: number; end_min: number; scheduling?: string };
+type Moment = { date: string; start_min: number; end_min: number; scheduling?: string; category?: string };
 
-/** Remote orders have no session time, only the day they were placed. */
+/** Remote orders have no session time. Exclusive packages are dated when they are paid. The others keep the start date the client picked. */
 export const when = (b: Moment) =>
-  b.scheduling === "project" ? `ordered ${prettyDate(b.date)}` : b.scheduling === "day" ? `preferred start date ${prettyDate(b.date)}` : `${prettyDate(b.date)}, ${timeRange(b.date, b.start_min, b.end_min)}`;
+  b.scheduling === "project" ? `${b.category === "exclusive" ? "ordered" : "starting"} ${prettyDate(b.date)}` : b.scheduling === "day" ? `preferred start date ${prettyDate(b.date)}` : `${prettyDate(b.date)}, ${timeRange(b.date, b.start_min, b.end_min)}`;
 export const paidNet = (b: BookingRow) => b.amount_paid_kobo - b.refunded_kobo;
 export const balanceOf = (b: BookingRow) => Math.max(0, b.total_kobo - paidNet(b));
 export const payLink = (env: Env, b: BookingRow) => `${env.APP_URL}/pay/${b.id}?t=${b.pay_token ?? ""}`;
@@ -28,7 +28,7 @@ const addOns = (b: BookingRow) =>
 const details = (b: BookingRow) =>
   [
     `Booking reference: ${b.ref}`, `Service: ${b.service_name === b.package_name ? b.service_name : `${b.service_name} · ${b.package_name}`}`,
-    ...(isOrder(b) ? [`Order placed: ${prettyDate(b.date)}`]
+    ...(isOrder(b) ? [b.category === "exclusive" ? `Order placed: ${prettyDate(b.date)}` : `Start date: ${prettyDate(b.date)}`]
       : isResidency(b) ? [`Room: ${b.room_name}`, `Preferred start date: ${prettyDate(b.date)}`]
       : [`Room: ${b.room_name}`, `Date: ${prettyDate(b.date)}`, `Time: ${timeRange(b.date, b.start_min, b.end_min)}`]),
     ...(b.due_date ? [`Delivery due: ${prettyDate(b.due_date)}`] : []),
@@ -85,11 +85,11 @@ export const emails = {
   }),
   cancelled: (_env: Env, b: BookingRow, refund: number) => ({
     subject: `Booking cancelled · ${b.ref}`,
-    text: `Hi ${b.contact_name},\n\nYour booking ${b.ref} (${when(b)}) has been cancelled.\n${refund > 0 ? `${naira(refund)} is being refunded to your original payment method within 5 to 10 working days.` : paidNet(b) > 0 ? "Under the cancellation policy this booking is not refunded." : "Nothing was charged."}`,
+    text: `Hi ${b.contact_name},\n\nYour booking ${b.ref} (${when(b)}) has been cancelled.\n${refund > 0 ? `${naira(refund)} is being refunded to your original payment method within 5 to 10 working days.` : paidNet(b) > 0 ? "Cancelling does not refund what you paid." : "Nothing was charged."}`,
   }),
   moved: (_env: Env, b: BookingRow, before: string, after: string) => ({
-    subject: `${isResidency(b) ? "Your preferred start date has moved" : "Your session has moved"} · ${b.ref}`,
-    text: `Hi ${b.contact_name},\n\n${isResidency(b) ? `The preferred start date for ${b.ref} has moved.` : `Your session ${b.ref} has moved.`}\nWas: ${before}\nNow: ${after}\nRoom: ${b.room_name}\nPackage and price are unchanged.`,
+    subject: `${isOrder(b) ? "Your start date has moved" : isResidency(b) ? "Your preferred start date has moved" : "Your session has moved"} · ${b.ref}`,
+    text: `Hi ${b.contact_name},\n\n${isOrder(b) ? `The start date for ${b.ref} has moved.` : isResidency(b) ? `The preferred start date for ${b.ref} has moved.` : `Your session ${b.ref} has moved.`}\nWas: ${before}\nNow: ${after}\n${isOrder(b) ? "" : `Room: ${b.room_name}\n`}Package and price are unchanged.`,
   }),
   delivered: (env: Env, b: BookingRow, d: { files: { title: string; version: number }[]; note: string; released: boolean; final: boolean; revisionsLeft: number; account: boolean; autoDays?: number }) => {
     const owed = balanceOf(b);

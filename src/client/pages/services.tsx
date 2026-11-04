@@ -1,6 +1,7 @@
 import { Link, Navigate, useParams } from "react-router-dom";
 import { PublicLayout, PageHero, waLink } from "../components/Layout";
 import { Icon } from "../components/brand";
+import { cardBlurb, ServiceMore } from "../components/ServiceMore";
 import { Eq } from "../components/art";
 import { Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
@@ -10,15 +11,18 @@ import { useCatalog, useContent, type Service } from "../lib/catalog";
 import { canonicalService, fixedPackages, packagesOfService } from "../lib/booking";
 
 export function ServiceTile({ s, premium }: { s: Service; premium?: boolean }) {
+  const { short, more } = cardBlurb(s.slug, s.description);
   return (
-    <Link to={`/services/${s.slug}`} className={`svtile ${premium ? "premium" : ""}`}>
-      <span className="img" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label={s.name}>{premium && <span className="svcbadge">Exclusive offer</span>}</span>
+    <article className={`svtile ${premium ? "premium" : ""}`}>
+      <Link to={`/services/${s.slug}`} className="img" style={{ backgroundImage: `url(${s.image_url})` }} aria-label={s.name}>{premium && <span className="svcbadge">Exclusive offer</span>}</Link>
       <span className="body">
-        <b>{s.name}</b>
-        <span className="d">{s.description}</span>
-        <span className="row between gap8"><span className="mono">{s.price_label}</span><span className="go">Details <Icon name="arrow" size={16} /></span></span>
+        <Link to={`/services/${s.slug}`}><b>{s.name}</b></Link>
+        <span className="d">
+          <span className="row gap8" style={{ alignItems: "flex-start" }}><span>{short}</span>{more && <ServiceMore name={s.name} text={more} />}</span>
+        </span>
+        <Link to={`/services/${s.slug}`} className="row between gap8"><span className="mono">{s.price_label}</span><span className="go">Details <Icon name="arrow" size={16} /></span></Link>
       </span>
-    </Link>
+    </article>
   );
 }
 

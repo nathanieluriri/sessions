@@ -272,8 +272,10 @@ describe("copy", () => {
     expect(body.content.contact_email).toBe("bookings@psychstudios.com");
     expect(JSON.stringify(body.content)).not.toMatch(/hello@psychrecords\.ng|booking@psychrecords\.ng/);
     const policy = (slug: string) => body.policies.find((p: any) => p.slug === slug).body;
-    expect(policy("cancellations")).toContain("full refund until the first finished files are delivered");
-    expect(policy("terms")).toContain("full refund until the first finished files are delivered");
+    expect(policy("cancellations")).toContain("does not refund");
+    expect(policy("cancellations")).not.toMatch(/full refund|50%/);
+    expect(policy("terms")).toContain("does not refund");
+    expect(policy("terms")).not.toMatch(/full refund/);
     expect(policy("approvals")).toContain("within 48 hours");
   });
   it("words the add-on and balance lines cleanly", async () => {
@@ -286,7 +288,7 @@ describe("copy", () => {
     const mail = await mailTo(paid.email, "Order confirmed%");
     expect(mail).not.toMatch(/price on request/i);
     expect(mail).not.toContain(") (");
-    const beat = await book({ serviceSlug: "beat-production", packageId: "pkg_beat_production", ...who });
+    const beat = await book({ serviceSlug: "beat-production", packageId: "pkg_beat_production", date: fresh(2), start: 0, ...who });
     expect(await mailTo(beat.email, "Order confirmed%")).toContain("Service: Beat production\n");
   });
 });
@@ -335,8 +337,8 @@ describe("every money movement happens once", () => {
       const out = await Promise.all([boss.post(`/api/admin/bookings/${id}/cancel`, { reason: "a" }), boss.post(`/api/admin/bookings/${id}/cancel`, { reason: "b" }), boss.post(`/api/admin/bookings/${id}/cancel`, { reason: "c" })]);
       expect(out.map((o) => o.status).sort()).toEqual([200, 409, 409]);
       expect(out.find((o) => o.status === 409)!.body.code).toBe("already_decided");
-      expect(await h.sql("SELECT amount_kobo FROM refunds WHERE booking_id = ?", id)).toHaveLength(1);
-      expect(await row(id)).toMatchObject({ status: "cancelled", refunded_kobo: 8_000_000 });
+      expect(await h.sql("SELECT amount_kobo FROM refunds WHERE booking_id = ?", id)).toHaveLength(0);
+      expect(await row(id)).toMatchObject({ status: "cancelled", refunded_kobo: 0 });
       expect(await h.sql("SELECT subject FROM email_outbox WHERE to_email = ? AND subject LIKE 'Booking cancelled%'", email)).toHaveLength(1);
     });
     it(`acts on a change request once when two staff approve it together (round ${round})`, async () => {
@@ -345,7 +347,7 @@ describe("every money movement happens once", () => {
       const pending = (await boss.get("/api/admin/requests")).body.find((r: any) => r.booking_id === id);
       const out = await Promise.all([boss.post(`/api/admin/requests/${pending.id}`, { approve: true }), boss.post(`/api/admin/requests/${pending.id}`, { approve: true })]);
       expect(out.map((o) => o.status).sort()).toEqual([200, 409]);
-      expect(await h.sql("SELECT amount_kobo FROM refunds WHERE booking_id = ?", id)).toHaveLength(1);
+      expect(await h.sql("SELECT amount_kobo FROM refunds WHERE booking_id = ?", id)).toHaveLength(0);
     });
     it(`lets only one of two simultaneous approvals win with an already decided answer (round ${round})`, async () => {
       const { client, email } = await h.newClient();
@@ -436,7 +438,8 @@ describe("wording and rules from round three", () => {
   it("refuses a second free reschedule", async () => {
     const { id, client } = await book(draft(REC, fresh(2), 600));
     const other = fresh(2);
-    await client.post(`/api/account/bookings/${id}/requests`, { kind: "reschedule", newDate: other, newStart: 750, reason: "" });
+    const asked = await client.post(`/api/account/bookings/${id}/requests`, { kind: "reschedule", newDate: other, newStart: 750, reason: "" });
+    expect(asked.status, JSON.stringify(asked.body)).toBe(200);
     const pending = (await boss.get("/api/admin/requests")).body.find((r: any) => r.booking_id === id);
     expect((await boss.post(`/api/admin/requests/${pending.id}`, { approve: true })).status).toBe(200);
     const again = await client.post(`/api/account/bookings/${id}/requests`, { kind: "reschedule", newDate: fresh(2), newStart: 600, reason: "" });

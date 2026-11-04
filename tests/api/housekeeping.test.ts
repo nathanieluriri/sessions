@@ -133,7 +133,7 @@ describe("expiry", () => {
     expect(await mailTo("late@example.com", "Booking released%")).toContain("The payment window for your approved booking closed.");
   });
   it("lapses a hold for a remote order like any other", async () => {
-    const hold = await h.client().post("/api/holds", draft(MIX, "", 0));
+    const hold = await h.client().post("/api/holds", draft(MIX, fresh(2), 0));
     expect(hold.status).toBe(200);
     await bookingService.housekeeping(h.env, new Date(new Date(hold.body.expiresAt).getTime() + 60_000));
     const stored = await h.client().get(`/api/holds/${hold.body.holdId}`);
@@ -144,7 +144,7 @@ describe("expiry", () => {
 describe("payments that arrive after the hold lapsed", () => {
   it("still books a remote order, since nothing can have taken its place", async () => {
     const { client, email } = await h.newClient();
-    const hold = await client.post("/api/holds", draft(MIX, "", 0, { contactEmail: email }));
+    const hold = await client.post("/api/holds", draft(MIX, fresh(2), 0, { contactEmail: email }));
     const co = await client.post("/api/checkout", { holdId: hold.body.holdId, plan: "full" });
     await bookingService.housekeeping(h.env, new Date(new Date(hold.body.expiresAt).getTime() + 60_000));
     const paid = await h.payDemo(client, co.body.reference);

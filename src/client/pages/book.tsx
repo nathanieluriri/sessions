@@ -388,7 +388,7 @@ export function BookConfirmed({ id }: { id: string }) {
   }, [b, name, site, remote]);
   if (!b) return <><Nav /><Loading /></>;
   const facts: [string, string][] = remote
-    ? [["Reference", b.ref], ["Package", b.package_name], ["Ordered", shortDate(b.date)], ["Next", isExclusivePackage ? "The studio will contact you to schedule" : b.due_date ? `Due ${shortDate(b.due_date)}, in your portal` : "In your portal"], ["Paid", naira(b.paid_kobo)], ["Balance due", b.balance_kobo > 0 ? naira(b.balance_kobo) : "Nothing"]]
+    ? [["Reference", b.ref], ["Package", b.package_name], [isExclusivePackage ? "Ordered" : "Starts", shortDate(b.date)], ["Next", isExclusivePackage ? "The studio will contact you to schedule" : b.due_date ? `Due ${shortDate(b.due_date)}, in your portal` : "In your portal"], ["Paid", naira(b.paid_kobo)], ["Balance due", b.balance_kobo > 0 ? naira(b.balance_kobo) : "Nothing"]]
     : [["Reference", b.ref], ["Package", b.package_name], ["Room", b.room_name], ["Date", shortDate(b.date)], [b.scheduling === "day" ? "Starts" : "Session", b.scheduling === "day" ? shortDate(b.date) : `${windowLabel(b.date, b.start_min, b.end_min)}${b.slot_label ? ` · ${b.slot_label}` : ""}`], ["Paid", naira(b.paid_kobo)], ["Balance due", b.balance_kobo > 0 ? naira(b.balance_kobo) : "Nothing"]];
   return (
     <div className="confpage">

@@ -120,6 +120,7 @@ export function BookingDrawer({ id, user, tab: first = "details", onClose, onCha
   const [pick, setPick] = useState<{ date: string; start: number } | null>(null);
   const [f, setF] = useState<any>(null);
   const [text, setText] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [full, setFull] = useState(false);
   const [pay, setPay] = useState({ amount: 0, method: "transfer", note: "" });
   const refresh = () => { load(); onChange(); setMode(""); setText(""); };
@@ -133,7 +134,7 @@ export function BookingDrawer({ id, user, tab: first = "details", onClose, onCha
   return (
     <Modal title={`Booking ${b.ref}`} onClose={onClose}>
       <div className="row gap8 wrapflex"><Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag>{["confirmed", "completed", "approved"].includes(b.status) && (d.payments ? <Tag tone={b.balance_kobo > 0 ? "warning" : "success"}>{payState(b)}</Tag> : b.balance_kobo > 0 && <Tag tone="warning">Balance due</Tag>)}{b.source !== "online" && <Tag>{SOURCE[b.source] ?? b.source}</Tag>}{b.rescheduled_at && <Tag>Rescheduled</Tag>}</div>
-      <span className="small muted">{remote ? `Remote order${b.due_date ? ` · due ${shortDate(b.due_date)}` : ""} · placed ${shortDate(b.date)}` : `${shortDate(b.date)} · ${timeRange(b.date, b.start_min, b.end_min)} · ${hrs(b.end_min - b.start_min)} · ${b.room_name}`}</span>
+      <span className="small muted">{remote ? `${b.category === "exclusive" ? "Remote order" : `Starts ${shortDate(b.date)}`}${b.due_date ? ` · due ${shortDate(b.due_date)}` : ""}${b.category === "exclusive" ? ` · placed ${shortDate(b.date)}` : ""}` : `${shortDate(b.date)} · ${timeRange(b.date, b.start_min, b.end_min)} · ${hrs(b.end_min - b.start_min)} · ${b.room_name}`}</span>
       {showFiles && <div className="drawtabs" role="tablist" aria-label="Booking sections">{(["details", "files"] as const).map((k) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{k === "files" ? "Files and delivery" : "Details"}</button>)}</div>}
       {onFiles && <FilesPanel id={id} user={user} onChange={() => { load(); onChange(); }} />}
       {!onFiles && <>
@@ -154,6 +155,7 @@ export function BookingDrawer({ id, user, tab: first = "details", onClose, onCha
           {b.status === "approved" && manage && <Btn size="sm" kind="neutral" onClick={() => setMode("reject")}>Decline</Btn>}
           {["pending", "approved", "confirmed", "completed"].includes(b.status) && can(user, "update_booking_details") && <Btn size="sm" kind="neutral" onClick={() => { setF({ people: b.people, artist_name: b.artist_name, contact_phone: b.contact_phone, contact_email: "", notes: b.notes, project: b.project, reference_links: b.reference_links }); setMode("edit"); }}>Edit details</Btn>}
           {["pending", "approved", "confirmed"].includes(b.status) && manage && !remote && <Btn size="sm" kind="neutral" onClick={() => setMode("move")}>Reschedule</Btn>}
+          {["pending", "approved", "confirmed"].includes(b.status) && manage && remote && b.category !== "exclusive" && <Btn size="sm" kind="neutral" onClick={() => { setStartDate(b.date); setMode("move"); }}>Change start date</Btn>}
           {!["cancelled", "rejected"].includes(b.status) && money && b.balance_kobo > 0 && <Btn size="sm" kind="neutral" onClick={() => { setPay({ amount: b.balance_kobo, method: "transfer", note: "" }); setMode("pay"); }}>Record payment</Btn>}
           {["approved", "confirmed", "completed"].includes(b.status) && money && b.balance_kobo > 0 && <Btn size="sm" kind="neutral" onClick={() => act(() => api(`/admin/bookings/${id}/payment-link`, { method: "POST" }), "Payment link emailed")}>Email payment link</Btn>}
           {d.payLink && b.balance_kobo > 0 && !["cancelled", "rejected"].includes(b.status) && <Btn size="sm" kind="neutral" onClick={copy}>Copy link</Btn>}
@@ -195,13 +197,17 @@ export function BookingDrawer({ id, user, tab: first = "details", onClose, onCha
         <Field label="Reference links" name="reference_links" value={f.reference_links} onChange={(e) => setF({ ...f, reference_links: e.target.value })} />
         <div className="row gap8"><Btn onClick={() => act(async () => { const r = await api(`/admin/bookings/${id}/details`, { method: "PUT", body: f }); if (f.contact_email) toast(r.linked ? "Email saved and linked to the client's account" : "Email saved. The client sees their files after registering with it"); }, "Details saved", refresh)}>Save details</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
       </div>}
-      {mode === "move" && <div className="stack gap12">
+      {mode === "move" && remote && b.category !== "exclusive" && <div className="stack gap12">
+        <Field label="Start date" name="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        <div className="row gap8"><Btn disabled={!startDate} onClick={() => post("reschedule", { date: startDate, start: 0 }, "Start date moved, client emailed")}>Save start date</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
+      </div>}
+      {mode === "move" && !(remote && b.category !== "exclusive") && <div className="stack gap12">
         <SlotPicker duration={b.end_min - b.start_min} room={b.room_id} value={pick} onChange={setPick} />
         <div className="row gap8"><Btn disabled={!pick} onClick={() => post("reschedule", pick, "Booking moved, client emailed")}>Move booking</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
       </div>}
       {mode === "cancel" && <div className="stack gap12">
         <Field label="Reason" name="reason" value={text} onChange={(e) => setText(e.target.value)} />
-        {b.paid_kobo > 0 && <label className="row gap8 small"><input type="checkbox" checked={full} onChange={(e) => setFull(e.target.checked)} /> Full refund of {naira(b.paid_kobo)} (studio-initiated). Otherwise the cancellation policy applies.</label>}
+        {b.paid_kobo > 0 && <label className="row gap8 small"><input type="checkbox" checked={full} onChange={(e) => setFull(e.target.checked)} /> Refund the full {naira(b.paid_kobo)} anyway. Cancelling does not refund unless you tick this.</label>}
         <HoldToConfirm block disabled={!text.trim()} confirmed="Cancelled" onConfirm={() => act(async () => { const r = await api(`/admin/bookings/${id}/cancel`, { body: { reason: text, fullRefund: full } }); if (r.manual) toast(`${naira(r.manual)} was paid in cash or transfer. Return it by hand.`); }, "Booking cancelled", refresh)}>Hold to cancel booking</HoldToConfirm>
         <Btn kind="neutral" onClick={() => setMode("")}>Back</Btn>
       </div>}

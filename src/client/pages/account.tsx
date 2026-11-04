@@ -144,8 +144,9 @@ export function AccountBookings() {
 export function AccountBooking() {
   const { id = "" } = useParams();
   const [d, setD] = useState<any>(null);
-  const [modal, setModal] = useState<"reschedule" | "cancel" | null>(null);
+  const [modal, setModal] = useState<"reschedule" | "cancel" | "start" | null>(null);
   const [pick, setPick] = useState<{ date: string; start: number } | null>(null);
+  const [startOn, setStartOn] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -154,7 +155,7 @@ export function AccountBooking() {
   const send = async () => {
     setBusy(true); setError(null);
     try {
-      await api(`/account/bookings/${id}/requests`, { body: { kind: modal, newDate: pick?.date, newStart: pick?.start, reason } });
+      await api(`/account/bookings/${id}/requests`, { body: { kind: modal === "start" ? "reschedule" : modal, newDate: modal === "start" ? startOn : pick?.date, newStart: modal === "start" ? 0 : pick?.start, reason } });
       setModal(null); toast("Request sent to the studio"); load();
     } catch (e: any) { setError(e.message); } finally { setBusy(false); }
   };
@@ -176,7 +177,7 @@ export function AccountBooking() {
           <div className="row between wrapflex gap12"><h2 className="h3">{b.package_name}</h2><div className="row gap8"><Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag>{b.rescheduled_at && <Tag>Rescheduled</Tag>}</div></div>
           <div className="grid cols-2" style={{ gap: 16 }}>
             {(isRemote
-              ? [["Service", b.service_name], ["Type", "Remote order, no studio time"], ["Ordered", longDate(b.date)], ["Due", b.due_date ? longDate(b.due_date) : "To be confirmed by the studio"], ["Artist or project", b.artist_name], ["Revisions included", b.revision_limit], ["Contact", `${b.contact_name} · ${b.contact_phone}`]]
+              ? [["Service", b.service_name], ["Type", "Remote order, no studio time"], [b.category === "exclusive" ? "Ordered" : "Starts", longDate(b.date)], ["Due", b.due_date ? longDate(b.due_date) : "To be confirmed by the studio"], ["Artist or project", b.artist_name], ["Revisions included", b.revision_limit], ["Contact", `${b.contact_name} · ${b.contact_phone}`]]
               : [["Service", b.service_name], ["Room", b.room_name], ["Date", longDate(b.date)], ["Time", timeRange(b.date, b.start_min, b.end_min)], ["Duration", hrs(b.end_min - b.start_min)], ["Artist or project", b.artist_name], ["People", b.people], ["Contact", `${b.contact_name} · ${b.contact_phone}`]]
             ).map(([k, v]) => (
               <div key={k}><div className="mono faint">{k}</div><b style={{ fontWeight: 500 }}>{v}</b></div>
@@ -185,24 +186,25 @@ export function AccountBooking() {
           {b.project && <div className="panel small"><span className="mono faint">Project</span><br />{b.project}</div>}
           {b.notes && <div className="panel small"><span className="mono faint">Special requirements</span><br />{b.notes}</div>}
           {b.reference_links && <div className="small"><span className="mono faint">Reference links</span><br /><span style={{ overflowWrap: "anywhere" }}>{b.reference_links}</span></div>}
-          {pendingRequest && <div className="panel" style={{ background: "var(--cream)" }}><b>{pendingRequest.kind === "cancel" ? "Cancellation" : "Reschedule"} request pending.</b> <span className="muted">The studio will reply by email{pendingRequest.new_date ? `. Requested ${shortDate(pendingRequest.new_date)} at ${t12(pendingRequest.new_start_min)}` : ""}.</span></div>}
+          {pendingRequest && <div className="panel" style={{ background: "var(--cream)" }}><b>{pendingRequest.kind === "cancel" ? "Cancellation" : isRemote ? "Start date" : "Reschedule"} request pending.</b> <span className="muted">The studio will reply by email{pendingRequest.new_date ? `. Requested ${shortDate(pendingRequest.new_date)}${isRemote ? "" : ` at ${t12(pendingRequest.new_start_min)}`}` : ""}.</span></div>}
           <div className="row gap12 wrapflex noprint">
             {canChange && !isRemote && <Btn kind="neutral" onClick={() => { setModal("reschedule"); setPick(null); setReason(""); }}>Request reschedule</Btn>}
+            {canChange && isRemote && b.category !== "exclusive" && <Btn kind="neutral" onClick={() => { setModal("start"); setStartOn(b.date); setReason(""); }}>Change start date</Btn>}
             {canChange && <Btn kind="danger" onClick={() => { setModal("cancel"); setReason(""); }}>Request cancellation</Btn>}
             {["pending", "approved"].includes(b.status) && b.paid_kobo === 0 && <HoldToConfirm onConfirm={withdraw} confirmed="Withdrawn">Hold to withdraw request</HoldToConfirm>}
           </div>
-          {b.status === "confirmed" && !b.delivered_final_at && <span className="caption">{isRemote ? "" : policy.freeReschedule ? "You can reschedule once for free, up to 48 hours before. " : "Free rescheduling has closed for this booking. "}If cancelled now, {Math.round(policy.refundShare * 100)}% of what you paid ({naira(policy.refundAmount)}) is refunded.</span>}
+          {b.status === "confirmed" && !b.delivered_final_at && <span className="caption">{isRemote ? (b.category === "exclusive" ? "" : "You can ask to move the start date. ") : policy.freeReschedule ? "You can reschedule once for free, up to 48 hours before. " : "Free rescheduling has closed for this booking. "}Cancelling does not refund what you have paid.</span>}
         </div>
         <Receipt b={b} payments={payments} due={due} />
       </div>
       {modal && (
-        <Modal title={modal === "cancel" ? "Request cancellation" : "Request a new time"} onClose={() => setModal(null)}>
-          {modal === "reschedule" ? <SlotPicker duration={b.end_min - b.start_min} room={b.room_id} value={pick} onChange={setPick} /> : <div className="panel small">Under the policy you accepted, cancelling now refunds {Math.round(policy.refundShare * 100)}% of what you paid, which is {naira(policy.refundAmount)}.</div>}
+        <Modal title={modal === "cancel" ? "Request cancellation" : modal === "start" ? "Change the start date" : "Request a new time"} onClose={() => setModal(null)}>
+          {modal === "reschedule" ? <SlotPicker duration={b.end_min - b.start_min} room={b.room_id} value={pick} onChange={setPick} /> : modal === "start" ? <Field label="New start date" name="startOn" type="date" value={startOn} min={lagosToday()} onChange={(e) => setStartOn(e.target.value)} /> : <div className="panel small">Cancelling does not refund what you have paid. The booking is released and that is all.</div>}
           <Area label="Reason (optional)" name="reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
           <ErrorBox error={error} />
           {modal === "cancel"
             ? <HoldToConfirm block onConfirm={send} disabled={busy} confirmed="Request sent">Hold to request cancellation</HoldToConfirm>
-            : <Btn arrow onClick={send} disabled={busy || !pick}>Send request</Btn>}
+            : <Btn arrow onClick={send} disabled={busy || (modal === "start" ? !startOn : !pick)}>Send request</Btn>}
         </Modal>
       )}
     </Shell>

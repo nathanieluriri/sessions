@@ -18,10 +18,13 @@ describe("stepsFor", () => {
   it("gives a single session package no package step", () => {
     expect(keys(stepsFor([session]))).toEqual(["service", "time", "details", "checkout"]);
   });
-  it("asks for the package when there is a choice, and for time only when the chosen package has one", () => {
+  it("asks for the package when there is a choice, and for a start date on remote orders", () => {
+    const exclusive = pkg({ id: "e", scheduling: "project", service_category: "exclusive" });
     expect(keys(stepsFor([session, other]))).toEqual(["service", "package", "time", "details", "checkout"]);
-    expect(keys(stepsFor([remote]))).toEqual(["service", "details", "checkout"]);
-    expect(keys(stepsFor([remote, session], "r"))).toEqual(["service", "package", "details", "checkout"]);
+    expect(keys(stepsFor([remote]))).toEqual(["service", "time", "details", "checkout"]);
+    expect(stepsFor([remote]).find((s) => s.key === "time")?.label).toBe("Start date");
+    expect(keys(stepsFor([exclusive]))).toEqual(["service", "package", "details", "checkout"]);
+    expect(keys(stepsFor([remote, session], "r"))).toEqual(["service", "package", "time", "details", "checkout"]);
     expect(keys(stepsFor([remote, session], "a"))).toEqual(["service", "package", "time", "details", "checkout"]);
   });
   it("calls the time step the start day for whole-day packages", () => {
@@ -43,9 +46,10 @@ describe("flowGuard", () => {
     expect(flowGuard(cat, { serviceSlug: "recording", date: "2026-10-20", start: 600 }, "checkout", today)).toBeNull();
   });
   it("skips steps that do not apply and follows the old service slugs", () => {
-    expect(flowGuard(cat, { serviceSlug: "beats" }, "time", today)).toBe("/book/details");
-    expect(flowGuard(cat, { serviceSlug: "beats" }, "package", today)).toBe("/book/details");
-    expect(flowGuard(cat, { serviceSlug: "beats" }, "checkout", today)).toBeNull();
+    expect(flowGuard(cat, { serviceSlug: "beats" }, "time", today)).toBeNull();
+    expect(flowGuard(cat, { serviceSlug: "beats" }, "package", today)).toBe("/book/time");
+    expect(flowGuard(cat, { serviceSlug: "beats" }, "checkout", today)).toBe("/book/time");
+    expect(flowGuard(cat, { serviceSlug: "beats", date: "2026-10-20" }, "checkout", today)).toBeNull();
     expect(flowGuard(cat, { serviceSlug: "vocal-recording", date: "2026-10-20", start: 750 }, "details", today)).toBeNull();
   });
   it("only accepts the night session on Saturdays", () => {

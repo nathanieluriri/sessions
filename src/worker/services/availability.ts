@@ -115,7 +115,13 @@ export const availabilityService = {
     const date = q.date;
     const pkg = q.packageId ? await packageFor(env, q.packageId) : null;
     const mode = pkg?.scheduling ?? "flex";
-    if (mode === "project") return { date: studioNow(now).date, mode, room: null, open: null, slots: [] };
+    if (mode === "project" && pkg?.service_category === "exclusive") return { date: studioNow(now).date, mode, room: null, open: null, slots: [] };
+    if (mode === "project") {
+      const rules = await loadRules(env);
+      const ahead = daysBetween(studioNow(now).date, date);
+      const open = ahead >= 0 && ahead <= rules.bookAhead;
+      return { date, mode, room: null, open: null, slots: open ? [{ id: "start", label: "Start date", kind: "day" as const, start: 0, end: 0, available: true }] : [] };
+    }
     const duration = q.duration ?? pkg?.duration_min ?? 120;
     if (mode === "flex" && !(Number.isInteger(duration) && duration > 0 && duration <= 1440)) throw badRequest("Invalid duration.");
     const room: RoomRow = pkg ? await packageRoom(env, pkg) : await roomFor(env, q.roomId ?? "");
@@ -137,7 +143,18 @@ export const availabilityService = {
     const month = q.month;
     const pkg = q.packageId ? await packageFor(env, q.packageId) : null;
     const mode = pkg?.scheduling ?? "flex";
-    if (mode === "project") return { month, mode, room: null, days: [] };
+    if (mode === "project" && pkg?.service_category === "exclusive") return { month, mode, room: null, days: [] };
+    if (mode === "project") {
+      const rules = await loadRules(env);
+      const today = studioNow(now).date;
+      const firstDay = `${month}-01`;
+      const days: { date: string; status: DayStatus; free: number; total: number }[] = [];
+      for (let d = firstDay; d.startsWith(month); d = addDays(d, 1)) {
+        const ahead = daysBetween(today, d);
+        days.push(ahead < 0 || ahead > rules.bookAhead ? { date: d, status: "past", free: 0, total: 0 } : { date: d, status: "available", free: 1, total: 1 });
+      }
+      return { month, mode, room: null, days };
+    }
     const duration = q.duration ?? pkg?.duration_min ?? 120;
     if (mode === "flex" && !(Number.isInteger(duration) && duration > 0 && duration <= 1440)) throw badRequest("Invalid duration.");
     const room: RoomRow = pkg ? await packageRoom(env, pkg) : await roomFor(env, q.roomId ?? "");

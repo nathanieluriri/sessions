@@ -180,7 +180,7 @@ export const bookingsRepo = {
   /** Atomic like the inserts: the booking only moves if the new time clears every other booking, hold and block in its room. */
   move: async (db: D1Database, m: { id: string; roomId: string; date: string; start: number; end: number; slotLabel: string; dueDate: string | null }, buffer: number, now: string, countAsReschedule: boolean) => {
     const r = await run(db, `UPDATE bookings SET date = ?1, start_min = ?2, end_min = ?3, slot_label = ?9, due_date = ?10, reschedules_used = reschedules_used + ?11,
-        rescheduled_at = ${NOW}, reminder_sent_at = NULL, updated_at = ${NOW} WHERE id = ?6 AND ${CLASH}`,
+        rescheduled_at = ${NOW}, reminder_sent_at = NULL, updated_at = ${NOW} WHERE id = ?6 AND (${m.roomId ? CLASH : "1"})`,
       m.date, m.start, m.end, buffer, now, m.id, "", m.roomId, m.slotLabel, m.dueDate, countAsReschedule ? 1 : 0);
     return r.meta.changes === 1;
   },

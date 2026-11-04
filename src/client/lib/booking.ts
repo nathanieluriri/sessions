@@ -64,12 +64,13 @@ const PATH: Record<StepKey, string> = { service: "/book", package: "/book/packag
 export function stepsFor(fixed: Package[], packageId?: string): Step[] {
   const chosen = fixed.find((p) => p.id === packageId) ?? (fixed.length === 1 ? fixed[0] : undefined);
   const candidates = chosen ? [chosen] : fixed;
-  const timed = candidates.length === 0 || candidates.some((p) => p.scheduling !== "project");
+  const dated = candidates.length === 0 || candidates.some((p) => !isExclusiveProject(p));
   const dayOnly = candidates.length > 0 && candidates.every((p) => p.scheduling === "day");
+  const startDate = candidates.length > 0 && candidates.every((p) => needsStartDate(p));
   const benefits = candidates.some((p) => p.service_category === "exclusive");
   const list: [StepKey, string][] = [["service", "Service"]];
   if (fixed.length !== 1 || benefits) list.push(["package", benefits ? "Benefits" : "Package"]);
-  if (timed) list.push(["time", dayOnly ? "Start day" : "Date & time"]);
+  if (dated) list.push(["time", dayOnly ? "Start day" : startDate ? "Start date" : "Date & time"]);
   list.push(["details", "Details"], ["checkout", "Checkout"]);
   return list.map(([key, label]) => ({ key, label, path: PATH[key] }));
 }
@@ -92,8 +93,10 @@ export function flowGuard(cat: Pick<Catalog, "services" | "packages" | "sessions
   const pkg = resolvePackage(fixed, d.packageId);
   if (!pkg) return at === "package" ? null : PATH.package;
   if (!steps.some((s) => s.key === at)) return nextPath(steps, at);
-  if ((at === "details" || at === "checkout") && pkg.scheduling !== "project") {
-    if (!d.date || d.date < today || !draftWindow(cat.sessions, pkg, d)) return PATH.time;
+  if ((at === "details" || at === "checkout") && !isExclusiveProject(pkg)) {
+    if (needsStartDate(pkg)) {
+      if (!d.date || d.date < today) return PATH.time;
+    } else if (!d.date || d.date < today || !draftWindow(cat.sessions, pkg, d)) return PATH.time;
   }
   return null;
 }
@@ -104,6 +107,10 @@ export const savings = (p: Pick<Package, "price_kobo" | "compare_at_kobo">) =>
 export const deliveryLabel = (days: number | null) => (days ? `Delivered within ${days} ${days === 1 ? "day" : "days"}` : "");
 export const revisionLabel = (n: number) => (n > 0 ? `Up to ${n} ${n === 1 ? "revision" : "revisions"}` : "");
 export const isRemote = (p?: Pick<Package, "scheduling">) => p?.scheduling === "project";
+/** EP and album are paid as a package. The studio schedules the sessions after payment, so they have no calendar. */
+export const isExclusiveProject = (p?: { scheduling?: string; service_category?: string }) => p?.scheduling === "project" && p?.service_category === "exclusive";
+/** Beats, mixes and song covers are remote orders, but the client still picks the day the work starts. */
+export const needsStartDate = (p?: { scheduling?: string; service_category?: string }) => !!p && p.scheduling === "project" && p.service_category !== "exclusive";
 
 /** Packages the home page features: flagged ones first (at most three, in order), else the first bookable ones. */
 export function featuredPackages(cat: Pick<Catalog, "packages">, max = 3) {
@@ -116,8 +123,8 @@ export function featuredPackages(cat: Pick<Catalog, "packages">, max = 3) {
 export const extrasFor = (cat: Pick<Catalog, "extras">, svc?: Pick<Service, "slug" | "category">) =>
   cat.extras.filter((e) => svc && (!e.category || e.category === svc.category) && (!e.service_slug || e.service_slug === svc.slug));
 
-export function whenLine(b: { scheduling?: string; date: string; start_min: number; end_min: number }) {
-  if (b.scheduling === "project") return `Ordered ${shortDate(b.date)}`;
+export function whenLine(b: { scheduling?: string; date: string; start_min: number; end_min: number; category?: string }) {
+  if (b.scheduling === "project") return `${b.category === "exclusive" ? "Ordered" : "Starts"} ${shortDate(b.date)}`;
   if (b.scheduling === "day") return `Starts ${shortDate(b.date)}`;
   return `${shortDate(b.date)} · ${windowLabel(b.date, b.start_min, b.end_min)}`;
 }
@@ -129,7 +136,7 @@ export const modeNoun = (m: Scheduling | undefined) => (m === "project" ? "order
 /** One plain line about how a package is scheduled, built from the session rows. */
 export function howLine(p: Pick<Package, "scheduling" | "slot_kind" | "service_category">, sessions: SessionSlot[]) {
   const rows = activeSessions(sessions).filter((s) => s.kind === p.slot_kind);
-  if (p.scheduling === "project") return p.service_category === "exclusive" ? "Pay online. The studio contacts you to schedule the sessions." : "Ordered online and delivered in your portal";
+  if (p.scheduling === "project") return p.service_category === "exclusive" ? "Pay online. The studio contacts you to schedule the sessions." : "Pick a start date, then pay. Finished work arrives in your portal.";
   if (p.scheduling === "day") return "You choose the start day and the studio confirms the schedule";
   if (p.scheduling !== "slot" || !rows.length) return "";
   if (p.slot_kind === "night") return `${rows[0].label} · ${sessionDays(rows[0])} · ${sessionWindow(rows[0])}`;

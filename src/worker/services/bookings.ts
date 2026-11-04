@@ -34,12 +34,11 @@ type Plan = "deposit" | "full" | "balance";
 
 /** Deposits are rounded to the nearest ₦100. A percentage of 0 or 100 means the package is paid in full. */
 export const depositFor = (total: number, percent: number) => (percent > 0 && percent < 100 ? Math.round((total * percent) / 1_000_000) * 10_000 : total);
-export const refundShare = (minutesBefore: number) => (minutesBefore >= 72 * 60 ? 1 : minutesBefore >= 24 * 60 ? 0.5 : 0);
+export const refundShare = (_minutesBefore: number) => 0;
 
-/** Sessions count back from their start. A remote order has no start, so it refunds in full until the studio publishes its first delivery. */
-async function refundShareOf(env: Env, b: BookingRow) {
-  if (b.scheduling !== "project") return refundShare(minutesUntil(b.date, b.start_min));
-  return (await bookingsRepo.deliveredCount(env.DB, b.id)) ? 0 : 1;
+/** Cancelling never refunds. A payment is returned only when it cannot be applied, which is a separate path. */
+async function refundShareOf(_env: Env, _b: BookingRow) {
+  return 0;
 }
 
 /** Requests and approvals hold their slot for a window, but never past the session start (remote orders have none). */
@@ -57,13 +56,20 @@ export async function priceDraft(env: Env, input: DraftInput, rules?: Rules): Pr
   if (pkg.service_category !== svc.category || (pkg.service_slug && pkg.service_slug !== svc.slug)) throw badRequest("Pick a package that fits this service.");
   const mode = pkg.scheduling;
   const remote = mode === "project";
+  const exclusive = remote && svc.category === "exclusive";
   const room = remote ? null : pkg.room_id ? await catalogRepo.roomById(env.DB, pkg.room_id) : null;
   if (!remote && (!room || !room.active)) throw badRequest("This package is not linked to an open room yet.");
   const maxPeople = room ? room.capacity || r.maxPeople : 200;
   if (input.people < 1 || input.people > maxPeople) throw badRequest(room ? `${room.name} takes up to ${maxPeople} people.` : "Enter between 1 and 200 people.");
   if (mode !== "flex" && input.extraHours) throw badRequest("Extra hours are not available on this package.");
-  const date = remote ? studioNow().date : input.date;
-  if (!isDate(date)) throw badRequest("Pick a date.");
+  const today = studioNow().date;
+  let date = input.date;
+  if (exclusive) date = today;
+  else if (remote) {
+    if (!isDate(date)) throw badRequest("Pick a start date.");
+    if (date < today) throw badRequest("Pick a start date that has not already passed.");
+    if (daysBetween(today, date) > r.bookAhead) throw badRequest("That date is too far ahead to book.");
+  } else if (!isDate(date)) throw badRequest("Pick a date.");
   let start = remote ? 0 : input.start, duration = remote ? 0 : pkg.duration_min + input.extraHours * 60, slotLabel = "";
   if (mode === "slot" || mode === "day") {
     const w = windowFor(sessions, pkg, date, input.start);
@@ -159,7 +165,14 @@ function checkLead(rules: Rules, date: string, start: number, client: boolean) {
 
 /** Where a booking lands when it moves: only a time its own mode allows, with the end that goes with it. */
 async function moveTarget(env: Env, b: BookingRow, date: string, start: number, rules: Rules) {
-  if (b.scheduling === "project") throw badRequest("Remote orders have no session time to move.");
+  if (b.scheduling === "project") {
+    if (b.category === "exclusive") throw badRequest("Remote orders have no session time to move.");
+    if (!isDate(date)) throw badRequest("Pick a new start date.");
+    const today = studioNow().date;
+    if (date < today) throw badRequest("Pick a start date that has not already passed.");
+    if (daysBetween(today, date) > rules.bookAhead) throw badRequest("That date is too far ahead to book.");
+    return { start: 0, end: 0, label: "" };
+  }
   if (!isDate(date)) throw badRequest("Pick a new date and time.");
   if (b.scheduling === "flex") {
     const hours = await settingsRepo.hoursFor(env.DB, weekday(date));
@@ -430,8 +443,8 @@ export const bookingService = {
     const draft = JSON.parse(hold.draft) as Draft;
     const rules = await loadRules(env);
     const now = new Date().toISOString();
-    if (draft.scheduling === "project") {
-      // The order is placed when it is paid, which can be the day after the hold was made.
+    if (draft.scheduling === "project" && draft.category === "exclusive") {
+      // EP and album have no start date. The order date is the day it is paid.
       draft.date = studioNow().date;
       draft.dueDate = draft.turnaroundDays ? addDays(draft.date, draft.turnaroundDays) : null;
     }
@@ -579,17 +592,25 @@ export const bookingService = {
     if (await changeRequestsRepo.pendingForBooking(env.DB, bookingId)) throw conflict("You already have a request waiting for the studio.");
     let target = "";
     if (input.kind === "reschedule") {
-      if (b.scheduling === "project") throw badRequest("Remote orders have no session time to move.");
-      if (!input.newDate || input.newStart == null) throw badRequest("Pick a new date and time.");
-      if (b.reschedules_used >= 1) throw badRequest("Your free reschedule has been used. Any further change is treated as a cancellation, so send a cancellation request or contact the studio.");
-      if (minutesUntil(b.date, b.start_min) < 48 * 60) throw badRequest("Free rescheduling closes 48 hours before your session. A later change is treated as a cancellation, so send a cancellation request or contact the studio.");
+      if (b.scheduling === "project" && b.category === "exclusive") throw badRequest("Remote orders have no session time to move.");
       const rules = await loadRules(env);
-      const t = await moveTarget(env, b, input.newDate, input.newStart, rules);
-      if (input.newDate === b.date && t.start === b.start_min) throw badRequest("That is already your session time.");
-      checkLead(rules, input.newDate, t.start, true);
-      const free = await bookingsRepo.isFree(env.DB, { date: input.newDate, start: t.start, end: t.end, roomId: b.room_id ?? "" }, rules.buffer, new Date().toISOString(), b.id);
-      if (!free) throw conflict("That time is no longer free.");
-      target = `${prettyDate(input.newDate)}, ${timeRange(input.newDate, t.start, t.end)}`;
+      if (b.scheduling === "project") {
+        if (!input.newDate) throw badRequest("Pick a new start date.");
+        const t = await moveTarget(env, b, input.newDate, 0, rules);
+        if (input.newDate === b.date) throw badRequest("That is already your start date.");
+        input.newStart = t.start;
+        target = prettyDate(input.newDate);
+      } else {
+        if (!input.newDate || input.newStart == null) throw badRequest("Pick a new date and time.");
+        if (b.reschedules_used >= 1) throw badRequest("Your free reschedule has been used. Any further change is treated as a cancellation, so send a cancellation request or contact the studio.");
+        if (minutesUntil(b.date, b.start_min) < 48 * 60) throw badRequest("Free rescheduling closes 48 hours before your session. A later change is treated as a cancellation, so send a cancellation request or contact the studio.");
+        const t = await moveTarget(env, b, input.newDate, input.newStart, rules);
+        if (input.newDate === b.date && t.start === b.start_min) throw badRequest("That is already your session time.");
+        checkLead(rules, input.newDate, t.start, true);
+        const free = await bookingsRepo.isFree(env.DB, { date: input.newDate, start: t.start, end: t.end, roomId: b.room_id ?? "" }, rules.buffer, new Date().toISOString(), b.id);
+        if (!free) throw conflict("That time is no longer free.");
+        target = `${prettyDate(input.newDate)}, ${timeRange(input.newDate, t.start, t.end)}`;
+      }
     }
     await changeRequestsRepo.create(env.DB, { id: uuid(), booking_id: b.id, user_id: user.id, kind: input.kind, new_date: input.newDate ?? null, new_start_min: input.newStart ?? null, reason: input.reason });
     await notifyStaff(env, "manage_bookings", `${input.kind === "cancel" ? "Cancellation" : "Reschedule"} request · ${b.ref}`,
@@ -684,7 +705,7 @@ export const bookingService = {
     if (!["confirmed", "approved", "pending"].includes(b.status)) throw badRequest("Only upcoming bookings can be moved.");
     const rules = await loadRules(env);
     const t = await moveTarget(env, b, date, start, rules);
-    checkLead(rules, date, t.start, false);
+    if (b.scheduling !== "project") checkLead(rules, date, t.start, false);
     const dueDate = b.due_date ? addDays(b.due_date, daysBetween(b.date, date)) : null;
     const before = when(b);
     const moved = await bookingsRepo.move(env.DB, { id: b.id, roomId: b.room_id ?? "", date, start: t.start, end: t.end, slotLabel: t.label, dueDate }, rules.buffer, new Date().toISOString(), fromRequest);
@@ -769,7 +790,9 @@ export const bookingService = {
   /** Staff bookings for phone, WhatsApp and walk-in clients. Opening hours can be overridden, clashes cannot. */
   async createManual(env: Env, actor: SessionUser, input: DraftInput & { status: "confirmed" | "approved"; source: string; ignoreHours: boolean; pastOk?: boolean; notify: boolean; payment: { amount: number; method: string; note: string } | null }) {
     const rules = await loadRules(env);
-    const draft = await priceDraft(env, input, rules);
+    const pkg = await catalogRepo.packageById(env.DB, input.packageId);
+    const dated = pkg?.scheduling === "project" && pkg.service_category !== "exclusive" && !isDate(input.date) ? { ...input, date: studioNow().date } : input;
+    const draft = await priceDraft(env, dated, rules);
     if (input.payment && input.payment.amount > draft.total) throw badRequest(`The payment is more than the ${naira(draft.total)} total.`);
     if (draft.scheduling !== "project" && minutesUntil(draft.date, draft.start + draft.duration) <= 0 && !(draft.scheduling === "flex" && input.ignoreHours && input.pastOk && hasPermission(actor, "manage_bookings"))) {
       throw badRequest("That session is already over. Pick a time that has not finished yet. Only a flex booking can be recorded after the fact, by staff who manage bookings, with the past-date box ticked.");

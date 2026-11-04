@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { Link } from "react-router-dom";
 import { PublicLayout } from "../components/Layout";
 import { Icon, Mark } from "../components/brand";
+import { cardBlurb, ServiceMore } from "../components/ServiceMore";
 import { Badge } from "../components/pill";
 import { Tactile, TactileLink, type TactileVariant } from "../components/kitchen";
 import { Split, wordCount } from "../components/Split";
@@ -306,7 +307,7 @@ function Showcase({ cat }: { cat: Catalog }) {
               <Link to={`/services/${s.slug}`} className="cimg" aria-label={s.name} tabIndex={real ? undefined : -1} draggable={false}>
                 <span style={{ backgroundImage: `url(${s.image_url})` }} />
               </Link>
-              <div className="cbody"><h3><Link to={`/services/${s.slug}`} tabIndex={real ? undefined : -1} draggable={false}>{s.name}</Link></h3><p>{s.description}</p><span className="ctag">{s.price_label}</span></div>
+              <div className="cbody">{(() => { const { short, more } = cardBlurb(s.slug, s.description); return <><h3><Link to={`/services/${s.slug}`} tabIndex={real ? undefined : -1} draggable={false}>{s.name}</Link></h3><div className="crow"><p>{short}</p>{more && real && <ServiceMore name={s.name} text={more} tone="dark" />}</div><span className="ctag">{s.price_label}</span></>; })()}</div>
             </article>
           );
         }))}

@@ -18,10 +18,10 @@ describe("depositFor", () => {
 });
 
 describe("refundShare", () => {
-  it("follows the cancellation policy", () => {
-    expect(refundShare(72 * 60)).toBe(1);
-    expect(refundShare(72 * 60 - 1)).toBe(0.5);
-    expect(refundShare(24 * 60)).toBe(0.5);
+  it("never refunds a cancellation, however far away the session is", () => {
+    expect(refundShare(72 * 60)).toBe(0);
+    expect(refundShare(72 * 60 - 1)).toBe(0);
+    expect(refundShare(24 * 60)).toBe(0);
     expect(refundShare(24 * 60 - 1)).toBe(0);
   });
 });
