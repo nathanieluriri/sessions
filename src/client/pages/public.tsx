@@ -8,30 +8,43 @@ import { TactileAnchor, TactileLink } from "../components/kitchen";
 import { RichText } from "../components/content";
 import { PHOTOS, depositOf, needsApproval, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
 import { hrs, naira } from "../lib/format";
+import { cardBlurb } from "../components/ServiceMore";
 import { activeSessions, deliveryLabel, fixedPackages, howLine, moneyOrRequest, nextPath, revisionLabel, savings, sessionDays, sessionWindow, stepsFor } from "../lib/booking";
 import { api } from "../lib/api";
 import { loadDraft, saveDraft } from "../lib/draft";
 
 export function ServiceCard({ s, on, onClick, quote, premium }: { s: Service; on?: boolean; onClick?: () => void; quote?: boolean; premium?: boolean }) {
   const isExclusive = premium || s.category === "exclusive";
+  const { more } = cardBlurb(s.slug, s.description);
+  const [open, setOpen] = useState(false);
   const label = (
     <span className="label"><b>{s.name}</b><span>{quote ? "Request a quote" : s.price_label}</span>{premium && s.duration_label && <span className="svcsub">{s.duration_label}</span>}</span>
   );
-  if (isExclusive) {
-    return (
-      <button type="button" className={`svc stackart ${on ? "on" : ""} ${premium ? "premium" : ""}`} onClick={onClick} aria-pressed={quote ? undefined : on}>
-        <span className="art" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label="" />
-        {premium && <span className="svcbadge">Exclusive offer</span>}
-        {on && <span className="check"><Icon name="check" size={18} /></span>}
-        {label}
-      </button>
-    );
-  }
-  return (
-    <button type="button" className={`svc ${on ? "on" : ""}`} style={{ backgroundImage: `url(${s.image_url})` }} onClick={onClick} aria-pressed={quote ? undefined : on}>
-      {on && <span className="check"><Icon name="check" size={18} /></span>}
-      {label}
+  const help = more ? (
+    <button type="button" className="svc-help dark onphoto" aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} the full description of ${s.name}`} onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}>
+      <Icon name="help" size={15} />
     </button>
+  ) : null;
+  const note = more ? <div className={`svc-reveal ${open ? "on" : ""}`}><div><p className="svc-card-note">{more}</p></div></div> : null;
+  const face = <>{on && <span className="check"><Icon name="check" size={18} /></span>}{label}</>;
+  return (
+    <div className="svc-wrap">
+      <div className="svc-frame">
+        {isExclusive ? (
+          <button type="button" className={`svc stackart ${on ? "on" : ""} ${premium ? "premium" : ""}`} onClick={onClick} aria-pressed={quote ? undefined : on}>
+            <span className="art" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label="" />
+            {premium && <span className="svcbadge">Exclusive offer</span>}
+            {face}
+          </button>
+        ) : (
+          <button type="button" className={`svc ${on ? "on" : ""}`} style={{ backgroundImage: `url(${s.image_url})` }} onClick={onClick} aria-pressed={quote ? undefined : on}>
+            {face}
+          </button>
+        )}
+        {help}
+      </div>
+      {note}
+    </div>
   );
 }
 
