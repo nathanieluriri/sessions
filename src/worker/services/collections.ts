@@ -44,6 +44,7 @@ export const COLLECTIONS: Record<string, Collection> = {
     fields: {
       name: required("Name", 100), category: required("Category", 40), description: required("Summary", 400), details: text(2000), deliverables: list(8, 120),
       duration_label: text(80), price_label: text(60), image_url: link, gallery: list(12, 1000), sort: int(), active: flag,
+      card_art: z.enum(["default", "icon", "photo"]).default("default"),
     },
   },
   extras: {

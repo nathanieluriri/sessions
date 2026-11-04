@@ -3,6 +3,7 @@ import { all, first, run } from "./db";
 export interface ServiceRow {
   id: string; slug: string; name: string; description: string; price_label: string; image_url: string; sort: number; active: number;
   category: string; details: string; deliverables: string; duration_label: string; gallery: string;
+  card_art: "default" | "icon" | "photo";
 }
 export interface PackageRow {
   id: string; slug: string; name: string; description: string; category: "session" | "post"; duration_min: number; price_kobo: number; includes: string;

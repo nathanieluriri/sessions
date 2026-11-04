@@ -5,7 +5,7 @@ import { Icon, serviceIconName } from "../components/brand";
 import { Area, Btn, ErrorBox, Field, Loading, Steps } from "../components/ui";
 import { ServiceCard } from "./public";
 import { Tactile, TactileLink } from "../components/kitchen";
-import { depositOf, needsApproval, roomOf, serviceArt, useCatalog, useContent, type Catalog } from "../lib/catalog";
+import { depositOf, needsApproval, roomOf, showsServiceIcon, useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { loadDraft, saveDraft, type BookingDraft } from "../lib/draft";
 import { addDays, hrs, lagosToday, longDate, naira, shortDate, t12 } from "../lib/format";
 import {
@@ -61,8 +61,9 @@ export function useGuard(cat: Catalog | null, d: BookingDraft, at: StepKey) {
 const nextLabelFor = (key: StepKey | undefined, label?: string) => (label === "Start date" ? "Choose a start date" : label === "Benefits" ? "See what's included" : key === "package" ? "Choose a package" : key === "time" ? "Choose date and time" : key === "details" ? "Continue to details" : "Review");
 
 function Summary({ cat, d, hold }: { cat: Catalog; d: BookingDraft; hold?: string | null }) {
-  const icons = serviceArt(useContent()?.content) === "icon";
+  const content = useContent()?.content;
   const { svc, pkg, mode, room, win, total, deposit, approval, extraHours, count } = priced(cat, d);
+  const icons = showsServiceIcon(content, svc);
   const when = !d.date ? "Pick a date" : win ? windowLabel(d.date, win.start, win.end) : "Pick a time";
   const exclusive = svc?.category === "exclusive";
   const rows: [string, string, string][] = mode === "project"
@@ -166,7 +167,7 @@ export function BookService() {
 
 export function BookPackage() {
   const cat = useCatalog();
-  const icons = serviceArt(useContent()?.content) === "icon";
+  const content = useContent()?.content;
   const [d, up] = useDraft();
   const nav = useNavigate();
   const blocked = useGuard(cat, d, "package");
@@ -178,6 +179,7 @@ export function BookPackage() {
   const { svc, fixed, pkg } = priced(cat, d);
   const steps = stepsFor(fixed, d.packageId);
   const exclusive = svc?.category === "exclusive";
+  const icons = showsServiceIcon(content, svc);
   const quotes = exclusive ? [] : svc ? cat.packages.filter((p) => p.pricing === "quote" && (p.service_slug ? p.service_slug === svc.slug : p.service_category === svc.category)) : [];
   const choose = (id: string) => { const changed = id !== d.packageId; up({ packageId: id, ...(changed ? { start: undefined, extraHours: 0, cartItems: d.cartItems.filter((x) => x.packageId === id) } : {}) }); };
   return (

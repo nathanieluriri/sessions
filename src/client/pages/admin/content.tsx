@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Area, Btn, Field, Loading, Modal, Tag } from "../../components/ui";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { loadSite, useCatalog } from "../../lib/catalog";
+import { loadCatalog, loadSite, useCatalog } from "../../lib/catalog";
 import { dateTime } from "../../lib/format";
 import { act, CollectionEditor, FormFields, Tabs, useApi, type FieldDef } from "./kit";
 
@@ -10,7 +10,7 @@ type Tab = "pages" | "business" | "portfolio" | "team" | "studio" | "testimonial
 
 const PAGE_GROUPS: [string, FieldDef[]][] = [
   ["Service pictures", [
-    { key: "service_card_art", label: "How services are shown", type: "select", options: [["icon", "Icon in the centre"], ["photo", "Photographs"]], hint: "Icons are the default, including anywhere a service is shown on the site. Photographs use each service's cover image. Change the code default in DEFAULT_SERVICE_ART if you want photographs before this is saved." },
+    { key: "service_card_art", label: "Default for every service", type: "select", options: [["icon", "Icon in the centre"], ["photo", "Photographs"]], hint: "Used by any service set to follow the default. A service can still be set to an icon or a photograph on its own, below. The code default is icons (DEFAULT_SERVICE_ART)." },
   ]],
   ["Home page hero", [
     { key: "hero_badge", label: "Badge above the headline", hint: "A short line. A live announcement takes its place while it runs." },
@@ -44,6 +44,34 @@ const SEO: FieldDef[] = [
   { key: "gsc_verification", label: "Google Search Console verification code", hint: "The content value of the HTML tag verification method." },
 ];
 
+function ServicePictures() {
+  const [d, load] = useApi<{ services: { id: string; name: string; sort: number; card_art?: string }[] }>("/catalog");
+  if (!d) return <Loading />;
+  const services = [...d.services].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+  const save = (card_art: "default" | "icon" | "photo", ids?: string[]) => act(
+    () => api("/admin/services/card-art", { method: "PUT", body: ids ? { card_art, ids } : { card_art } }),
+    ids ? "Service picture updated" : "Updated every service",
+    () => { load(); loadCatalog(true); loadSite(true); },
+  );
+  return <div className="card stack gap12">
+    <h3 className="h4">One service, or every service</h3>
+    <span className="small muted">Follow the default above, or pick an icon or a photograph for one service. Produce your EP and Produce your LP or album are set to their photographs. The buttons apply one choice to every service.</span>
+    <div className="row gap8 wrapflex">
+      <Btn kind="neutral" size="sm" onClick={() => save("icon")}>Icons for every service</Btn>
+      <Btn kind="neutral" size="sm" onClick={() => save("photo")}>Photographs for every service</Btn>
+      <Btn kind="neutral" size="sm" onClick={() => save("default")}>Follow the default again</Btn>
+    </div>
+    {services.map((s) => <div key={s.id} className="row between gap12" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+      <b className="small">{s.name}</b>
+      <select className="select" aria-label={`Picture for ${s.name}`} value={s.card_art || "default"} onChange={(e) => save(e.target.value as "default" | "icon" | "photo", [s.id])} style={{ maxWidth: 220 }}>
+        <option value="default">Follow the default</option>
+        <option value="icon">Icon</option>
+        <option value="photo">Photograph</option>
+      </select>
+    </div>)}
+  </div>;
+}
+
 function ContentForm({ groups, d, reload }: { groups: [string, FieldDef[]][]; d: any; reload: () => void }) {
   const [c, setC] = useState<Record<string, string>>(d.content);
   useEffect(() => setC({ ...d.content, service_card_art: d.content.service_card_art === "photo" ? "photo" : "icon" }), [d]);
@@ -68,7 +96,7 @@ export function Website() {
   const roomOptions: [string, string][] = [["", "No specific room"], ...(cat?.rooms.map((r) => [r.id, r.name] as [string, string]) ?? [])];
   return <>
     <Tabs value={tab} onChange={setTab} tabs={[["pages", "Pages"], ["business", "Business and contact"], ["portfolio", "Portfolio"], ["team", "Team"], ["studio", "Equipment and gallery"], ["testimonials", "Testimonials"], ["faqs", "FAQs"], ["announcements", "Announcements"], ["policies", "Policies and legal"], ["seo", "SEO and analytics"]]} />
-    {tab === "pages" && <ContentForm groups={PAGE_GROUPS} d={d} reload={load} />}
+    {tab === "pages" && <><ContentForm groups={PAGE_GROUPS} d={d} reload={load} /><ServicePictures /></>}
     {tab === "business" && <ContentForm groups={[["Business and contact details", BUSINESS]]} d={d} reload={load} />}
     {tab === "portfolio" && <CollectionEditor name="portfolio" noun="project" intro={<span className="small muted">Paste a YouTube, Vimeo, Spotify or SoundCloud link to embed a player. Featured projects show on the home page.</span>}
       blank={{ title: "", category: catOptions[0]?.[0] ?? "music", client: "", description: "", image_url: "", embed_url: "", link_url: "", year: String(new Date().getFullYear()), featured: 0, published: 1 }}

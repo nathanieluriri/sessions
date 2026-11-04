@@ -4,6 +4,8 @@ import { api } from "./api";
 export interface Service {
   id: string; slug: string; name: string; description: string; price_label: string; image_url: string; active: number; sort: number;
   category: string; details: string; deliverables: string[]; duration_label: string; gallery: string[];
+  /** "" is absent on older responses. "default" follows the site setting. */
+  card_art?: "" | "default" | "icon" | "photo";
 }
 export interface Package {
   id: string; slug: string; name: string; description: string; category: "session" | "post"; duration_min: number; price_kobo: number; includes: string[];
@@ -60,6 +62,13 @@ export const needsApproval = (cat: Catalog, p?: Package) => !!p && (!!p.requires
 export const DEFAULT_SERVICE_ART = "icon" as const;
 export type ServiceArt = "icon" | "photo";
 export const serviceArt = (content?: Record<string, string> | null): ServiceArt => content?.service_card_art === "photo" || content?.service_card_art === "icon" ? content.service_card_art : DEFAULT_SERVICE_ART;
+
+/** A service set to icon or photo wins. Otherwise it follows the site default. */
+export const showsServiceIcon = (content?: Record<string, string> | null, service?: { card_art?: string } | null) => {
+  if (service?.card_art === "icon") return true;
+  if (service?.card_art === "photo") return false;
+  return serviceArt(content) === "icon";
+};
 
 export const HERO_PHOTO = "https://images.unsplash.com/photo-1647881602319-f3e5964bae06?w=1800&q=72&auto=format&fit=crop";
 export const PHOTOS = {

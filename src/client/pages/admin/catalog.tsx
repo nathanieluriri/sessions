@@ -20,13 +20,15 @@ export function Catalogue() {
     <Tabs value={tab} onChange={setTab} tabs={[["packages", "Packages"], ["services", "Services"], ["sessions", "Session times"], ["rooms", "Rooms"], ["categories", "Categories"], ["extras", "Extras"], ["rules", "Deposits and approvals"]]} />
     {tab === "packages" && <PackagesTab d={d} reload={reload} />}
     {tab === "services" && <CollectionEditor name="services" noun="service" intro={<span className="small muted">Each service gets its own page. Packages in the same category are shown on it.</span>}
-      blank={{ name: "", category: catOptions[0]?.[0] ?? "music", description: "", details: "", deliverables: [], duration_label: "", price_label: "", image_url: "", gallery: [], active: 1 }}
+      blank={{ name: "", category: catOptions[0]?.[0] ?? "music", description: "", details: "", deliverables: [], duration_label: "", price_label: "", image_url: "", gallery: [], card_art: "default", active: 1 }}
       fields={[
         { key: "name", label: "Name" }, { key: "category", label: "Category", type: "select", options: catOptions },
         { key: "description", label: "Summary", type: "textarea", rows: 2 }, { key: "details", label: "Full description", type: "textarea", rows: 5 },
         { key: "deliverables", label: "Deliverables", type: "list" }, { key: "duration_label", label: "Estimated duration", hint: "For example: 2 to 3 working days" },
         { key: "price_label", label: "Price label", hint: "For example: From ₦40,000 / song, or Quote per project" },
-        { key: "image_url", label: "Main image", type: "image" }, { key: "gallery", label: "Gallery image links", type: "list" }, { key: "active", label: "Live on the website", type: "bool" },
+        { key: "image_url", label: "Main image", type: "image" }, { key: "gallery", label: "Gallery image links", type: "list" },
+        { key: "card_art", label: "Picture on the site", type: "select", options: [["default", "Follow the default"], ["icon", "Icon in the centre"], ["photo", "Photograph"]] },
+        { key: "active", label: "Live on the website", type: "bool" },
       ]}
       row={(s) => <div className="row gap12"><span className="rowthumb" style={{ backgroundImage: `url(${s.image_url})` }} /><div><b>{s.name}</b><div className="caption">{d.categories.find((c: any) => c.slug === s.category)?.name} · {s.price_label}</div></div></div>} />}
     {tab === "sessions" && <CollectionEditor name="session_slots" noun="session time" sortable

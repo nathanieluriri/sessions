@@ -195,6 +195,14 @@ r.put("/content", requirePermission("edit_content"), async (c) => {
   await contentService.saveContent(c.env, actor(c), b);
   return c.json(ok);
 });
+r.put("/services/card-art", requirePermission("edit_content"), async (c) => {
+  const b = await body(c, z.object({ card_art: z.enum(["default", "icon", "photo"]), ids: z.array(z.string().trim().min(1).max(64)).max(300).optional() }));
+  if (b.ids?.length) {
+    for (const id of b.ids) await run(c.env.DB, "UPDATE services SET card_art = ? WHERE id = ?", b.card_art, id);
+  } else await run(c.env.DB, "UPDATE services SET card_art = ?", b.card_art);
+  await audit(c.env.DB, actor(c), b.ids?.length ? "Set service pictures" : "Set every service picture", b.card_art, b.ids?.length ? `${b.ids.length} services` : "All services");
+  return c.json(ok);
+});
 
 // Image uploads go to R2 and are served from /media. Images are resized in the browser before upload.
 const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };

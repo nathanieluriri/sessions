@@ -6,7 +6,7 @@ import { Eq } from "../components/art";
 import { Area, Btn, ErrorBox, Field, Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
 import { RichText } from "../components/content";
-import { PHOTOS, depositOf, needsApproval, serviceArt, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
+import { PHOTOS, depositOf, needsApproval, showsServiceIcon, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
 import { hrs, naira } from "../lib/format";
 import { cardBlurb } from "../components/ServiceMore";
 import { activeSessions, deliveryLabel, fixedPackages, howLine, moneyOrRequest, nextPath, revisionLabel, savings, sessionDays, sessionWindow, stepsFor } from "../lib/booking";
@@ -15,7 +15,7 @@ import { loadDraft, saveDraft } from "../lib/draft";
 
 export function ServiceCard({ s, on, onClick, quote, premium }: { s: Service; on?: boolean; onClick?: () => void; quote?: boolean; premium?: boolean }) {
   const isExclusive = premium || s.category === "exclusive";
-  const icons = serviceArt(useContent()?.content) === "icon";
+  const icons = showsServiceIcon(useContent()?.content, s);
   const { more } = cardBlurb(s.slug, s.description);
   const [open, setOpen] = useState(false);
   const mark = icons ? <span className="mark" aria-hidden><Icon name={serviceIconName(s.slug)} size={34} /></span> : null;
@@ -77,7 +77,7 @@ export function PackageCard({ p, cat, service }: { p: Package; cat: Catalog; ser
   const facts = [deliveryLabel(p.turnaround_days), revisionLabel(p.revision_limit)].filter(Boolean);
   const how = quote ? "" : howLine(p, cat.sessions);
   const isExclusive = p.service_category === "exclusive" || svc?.category === "exclusive";
-  const icons = serviceArt(useContent()?.content) === "icon";
+  const icons = showsServiceIcon(useContent()?.content, svc);
   const artwork = !icons && isExclusive ? svc?.image_url ?? "" : "";
 
   return (
