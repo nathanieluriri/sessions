@@ -307,7 +307,7 @@ function Showcase({ cat }: { cat: Catalog }) {
               <Link to={`/services/${s.slug}`} className="cimg" aria-label={s.name} tabIndex={real ? undefined : -1} draggable={false}>
                 <span style={{ backgroundImage: `url(${s.image_url})` }} />
               </Link>
-              <div className="cbody">{(() => { const { short, more } = cardBlurb(s.slug, s.description); return <><h3><Link to={`/services/${s.slug}`} tabIndex={real ? undefined : -1} draggable={false}>{s.name}</Link></h3><div className="crow"><p>{short}</p>{more && real && <ServiceMore name={s.name} text={more} tone="dark" />}</div><span className="ctag">{s.price_label}</span></>; })()}</div>
+              <div className="cbody">{(() => { const { short, more } = cardBlurb(s.slug, s.description); return <><h3><Link to={`/services/${s.slug}`} tabIndex={real ? undefined : -1} draggable={false}>{s.name}</Link></h3><div className="crow">{more && real ? <ServiceMore name={s.name} short={short} text={more} tone="dark" /> : <p>{short}</p>}</div><span className="ctag">{s.price_label}</span></>; })()}</div>
             </article>
           );
         }))}

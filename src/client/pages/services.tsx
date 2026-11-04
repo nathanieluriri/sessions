@@ -18,7 +18,7 @@ export function ServiceTile({ s, premium }: { s: Service; premium?: boolean }) {
       <span className="body">
         <Link to={`/services/${s.slug}`}><b>{s.name}</b></Link>
         <span className="d">
-          <span className="row gap8" style={{ alignItems: "flex-start" }}><span>{short}</span>{more && <ServiceMore name={s.name} text={more} />}</span>
+          {more ? <ServiceMore name={s.name} short={short} text={more} /> : <span>{short}</span>}
         </span>
         <Link to={`/services/${s.slug}`} className="row between gap8"><span className="mono">{s.price_label}</span><span className="go">Details <Icon name="arrow" size={16} /></span></Link>
       </span>

@@ -13,19 +13,20 @@ import { activeSessions, deliveryLabel, fixedPackages, howLine, moneyOrRequest, 
 import { api } from "../lib/api";
 import { loadDraft, saveDraft } from "../lib/draft";
 
-export function ServiceCard({ s, on, onClick, quote, premium }: { s: Service; on?: boolean; onClick?: () => void; quote?: boolean; premium?: boolean }) {
+export function ServiceCard({ s, on, onClick, quote, premium, helpOpen, onHelp }: { s: Service; on?: boolean; onClick?: () => void; quote?: boolean; premium?: boolean; helpOpen?: boolean; onHelp?: () => void }) {
   const isExclusive = premium || s.category === "exclusive";
   const { more } = cardBlurb(s.slug, s.description);
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = onHelp ? !!helpOpen : localOpen;
   const label = (
     <span className="label"><b>{s.name}</b><span>{quote ? "Request a quote" : s.price_label}</span>{premium && s.duration_label && <span className="svcsub">{s.duration_label}</span>}</span>
   );
   const help = more ? (
-    <button type="button" className="svc-help dark onphoto" aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} the full description of ${s.name}`} onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}>
+    <button type="button" className="svc-help dark onphoto" aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} the full description of ${s.name}`} onClick={(e) => { e.stopPropagation(); if (onHelp) onHelp(); else setLocalOpen((v) => !v); }}>
       <Icon name="help" size={15} />
     </button>
   ) : null;
-  const note = more ? <div className={`svc-reveal ${open ? "on" : ""}`}><div><p className="svc-card-note">{more}</p></div></div> : null;
+  const note = onHelp || !more ? null : <div className={`svc-reveal ${open ? "on" : ""}`}><div><p className="svc-card-note">{more}</p></div></div>;
   const face = <>{on && <span className="check"><Icon name="check" size={18} /></span>}{label}</>;
   return (
     <div className="svc-wrap">

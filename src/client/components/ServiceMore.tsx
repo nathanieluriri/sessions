@@ -15,15 +15,20 @@ export const cardBlurb = (slug: string, full: string) => {
   return { short: short || full, more: short && short !== full ? full : "" };
 };
 
-/** A help control that opens the full service description under the short line. */
-export function ServiceMore({ name, text, tone = "light" }: { name: string; text: string; tone?: "light" | "dark" }) {
+/** Help control on the right. The full description eases open underneath. */
+export function ServiceMore({ name, text, short, tone = "light" }: { name: string; text: string; short?: string; tone?: "light" | "dark" }) {
   const [open, setOpen] = useState(false);
   return (
-    <>
-      <button type="button" className={`svc-help ${tone}`} aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} the full description of ${name}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); }}>
-        <Icon name="help" size={15} />
-      </button>
-      {open && <span className={`svc-full ${tone}`} role="note">{text}</span>}
-    </>
+    <span className={`svc-blurb ${tone}`}>
+      <span className="svc-blurb-row">
+        {short && <span className="svc-short">{short}</span>}
+        <button type="button" className={`svc-help ${tone}`} aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} the full description of ${name}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); }}>
+          <Icon name="help" size={15} />
+        </button>
+      </span>
+      <span className={`svc-reveal ${open ? "on" : ""}`}>
+        <span><span className={`svc-full ${tone}`} role="note">{text}</span></span>
+      </span>
+    </span>
   );
 }

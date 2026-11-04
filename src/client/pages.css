@@ -47,13 +47,22 @@ a.rate:hover { border-color: #c9c9c3; transform: translateY(-2px); }
 .svtile .body { display: flex; flex-direction: column; gap: 8px; padding: 18px 18px 20px; flex: 1; }
 .svtile b { font-size: 17px; letter-spacing: -.01em; line-height: 1.25; }
 .svtile .d { font-size: 14px; color: var(--fg2); flex: 1; }
-.svtile .d .row { flex-wrap: wrap; width: 100%; }
-.svc-help { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--fg); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.svc-blurb { display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: 100%; }
+.svc-blurb-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; width: 100%; }
+.svc-short { flex: 1; min-width: 0; }
+.svc-blurb .svc-help { margin-left: auto; }
+.svc-help { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--fg); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; transition: background .4s ease, color .4s ease, border-color .4s ease, transform .5s cubic-bezier(.2,.75,.1,1); }
+.svc-help[aria-expanded="true"] { transform: scale(1.06); }
 .svc-help[aria-expanded="true"] { background: var(--brand); color: #fff; border-color: var(--brand); }
-.svc-full { flex: 1 0 100%; font-size: 13px; line-height: 1.5; color: var(--fg); }
+.svc-blurb.dark .svc-short { font-size: 15px; line-height: 1.5; color: rgba(255,255,255,.66); }
+.svc-full { display: block; font-size: 13px; line-height: 1.5; color: var(--fg); transform: translateY(-6px); filter: blur(6px); transition: transform .6s cubic-bezier(.2,.75,.1,1), filter .5s ease; }
+.svc-reveal.on .svc-full { transform: none; filter: none; }
 .svc-help.dark { background: transparent; color: #fff; border-color: rgba(255,255,255,.28); }
 .svc-help.dark[aria-expanded="true"] { background: #fff; color: #111; border-color: #fff; }
 .svc-full.dark { color: rgba(255,255,255,.92); }
+@media (prefers-reduced-motion: reduce) {
+  .svc-full, .svc-help { transition: none; transform: none; filter: none; }
+}
 .svtile .go { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; }
 .svhero { background: var(--surface); padding: 48px 0 56px; }
 .svhero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
