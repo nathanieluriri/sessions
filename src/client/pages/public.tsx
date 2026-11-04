@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { PublicLayout, PageHero, hoursSummary, waLink } from "../components/Layout";
-import { Icon, Socials } from "../components/brand";
+import { Icon, Socials, serviceIconName } from "../components/brand";
 import { Eq } from "../components/art";
 import { Area, Btn, ErrorBox, Field, Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
 import { RichText } from "../components/content";
-import { PHOTOS, depositOf, needsApproval, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
+import { PHOTOS, depositOf, needsApproval, serviceArt, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
 import { hrs, naira } from "../lib/format";
 import { cardBlurb } from "../components/ServiceMore";
 import { activeSessions, deliveryLabel, fixedPackages, howLine, moneyOrRequest, nextPath, revisionLabel, savings, sessionDays, sessionWindow, stepsFor } from "../lib/booking";
@@ -15,8 +15,10 @@ import { loadDraft, saveDraft } from "../lib/draft";
 
 export function ServiceCard({ s, on, onClick, quote, premium }: { s: Service; on?: boolean; onClick?: () => void; quote?: boolean; premium?: boolean }) {
   const isExclusive = premium || s.category === "exclusive";
+  const icons = serviceArt(useContent()?.content) === "icon";
   const { more } = cardBlurb(s.slug, s.description);
   const [open, setOpen] = useState(false);
+  const mark = icons ? <span className="mark" aria-hidden><Icon name={serviceIconName(s.slug)} size={34} /></span> : null;
   const label = (
     <span className="label"><b>{s.name}</b><span>{quote ? "Request a quote" : s.price_label}</span>{premium && s.duration_label && <span className="svcsub">{s.duration_label}</span>}</span>
   );
@@ -31,13 +33,14 @@ export function ServiceCard({ s, on, onClick, quote, premium }: { s: Service; on
     <div className="svc-wrap">
       <div className="svc-frame">
         {isExclusive ? (
-          <button type="button" className={`svc stackart ${on ? "on" : ""} ${premium ? "premium" : ""}`} onClick={onClick} aria-pressed={quote ? undefined : on}>
-            <span className="art" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label="" />
+          <button type="button" className={`svc stackart ${icons ? "iconart" : ""} ${on ? "on" : ""} ${premium ? "premium" : ""}`} onClick={onClick} aria-pressed={quote ? undefined : on}>
+            {icons ? <span className="art mark" aria-hidden><Icon name={serviceIconName(s.slug)} size={40} /></span> : <span className="art" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label="" />}
             {premium && <span className="svcbadge">Exclusive offer</span>}
             {face}
           </button>
         ) : (
-          <button type="button" className={`svc ${on ? "on" : ""}`} style={{ backgroundImage: `url(${s.image_url})` }} onClick={onClick} aria-pressed={quote ? undefined : on}>
+          <button type="button" className={`svc ${icons ? "iconart" : ""} ${on ? "on" : ""}`} style={icons ? undefined : { backgroundImage: `url(${s.image_url})` }} onClick={onClick} aria-pressed={quote ? undefined : on}>
+            {mark}
             {face}
           </button>
         )}
@@ -74,11 +77,12 @@ export function PackageCard({ p, cat, service }: { p: Package; cat: Catalog; ser
   const facts = [deliveryLabel(p.turnaround_days), revisionLabel(p.revision_limit)].filter(Boolean);
   const how = quote ? "" : howLine(p, cat.sessions);
   const isExclusive = p.service_category === "exclusive" || svc?.category === "exclusive";
-  const artwork = isExclusive && svc?.image_url;
+  const icons = serviceArt(useContent()?.content) === "icon";
+  const artwork = !icons && isExclusive ? svc?.image_url ?? "" : "";
 
   return (
     <div className={`pkg ${f ? "featured" : ""} ${isExclusive ? "pkg-exclusive" : ""}`} id={`pkg-${p.slug}`}>
-      {artwork && (
+      {icons && isExclusive && svc ? <div className="pkg-art-wrap iconart" aria-hidden><Icon name={serviceIconName(svc.slug)} size={42} /></div> : artwork && (
         <div className="pkg-art-wrap">
           <img src={artwork} alt={p.name} className="pkg-art-img" />
         </div>

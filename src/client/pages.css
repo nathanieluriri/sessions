@@ -44,6 +44,8 @@ a.rate:hover { border-color: #c9c9c3; transform: translateY(-2px); }
 .svtile .img { position: relative; }
 .svtile:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgba(0,0,0,.08); }
 .svtile .img { display: block; aspect-ratio: 4 / 3; background: var(--brand) center / cover; }
+.svtile .img.iconart, .svhero-img.iconart, .pkg-art-wrap.iconart { display: grid; place-items: center; background: radial-gradient(120% 90% at 50% 42%, #f6f6f3, #e4e4e0); color: #111; }
+.svhero-img.iconart { min-height: 280px; }
 .svtile .body { display: flex; flex-direction: column; gap: 8px; padding: 18px 18px 20px; flex: 1; }
 .svtile b { font-size: 17px; letter-spacing: -.01em; line-height: 1.25; }
 .svtile .d { font-size: 14px; color: var(--fg2); flex: 1; }

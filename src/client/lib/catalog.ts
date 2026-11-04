@@ -56,6 +56,11 @@ export const depositOf = (cat: Catalog, p: Package, total: number) => {
 };
 export const needsApproval = (cat: Catalog, p?: Package) => !!p && (!!p.requires_approval || cat.rules.requireApproval);
 
+/** Code default for service pictures. The CEO can override this from Website → Pages. */
+export const DEFAULT_SERVICE_ART = "icon" as const;
+export type ServiceArt = "icon" | "photo";
+export const serviceArt = (content?: Record<string, string> | null): ServiceArt => content?.service_card_art === "photo" || content?.service_card_art === "icon" ? content.service_card_art : DEFAULT_SERVICE_ART;
+
 export const HERO_PHOTO = "https://images.unsplash.com/photo-1647881602319-f3e5964bae06?w=1800&q=72&auto=format&fit=crop";
 export const PHOTOS = {
   singer: "https://images.unsplash.com/photo-1617745546548-9324da9e2b7c?w=1400&q=70&auto=format&fit=crop",

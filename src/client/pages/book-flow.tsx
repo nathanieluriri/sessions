@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Nav, usePageTitle } from "../components/Layout";
-import { Icon } from "../components/brand";
+import { Icon, serviceIconName } from "../components/brand";
 import { Area, Btn, ErrorBox, Field, Loading, Steps } from "../components/ui";
 import { ServiceCard } from "./public";
 import { Tactile, TactileLink } from "../components/kitchen";
-import { depositOf, needsApproval, roomOf, useCatalog, useContent, type Catalog } from "../lib/catalog";
+import { depositOf, needsApproval, roomOf, serviceArt, useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { loadDraft, saveDraft, type BookingDraft } from "../lib/draft";
 import { addDays, hrs, lagosToday, longDate, naira, shortDate, t12 } from "../lib/format";
 import {
@@ -61,6 +61,7 @@ export function useGuard(cat: Catalog | null, d: BookingDraft, at: StepKey) {
 const nextLabelFor = (key: StepKey | undefined, label?: string) => (label === "Start date" ? "Choose a start date" : label === "Benefits" ? "See what's included" : key === "package" ? "Choose a package" : key === "time" ? "Choose date and time" : key === "details" ? "Continue to details" : "Review");
 
 function Summary({ cat, d, hold }: { cat: Catalog; d: BookingDraft; hold?: string | null }) {
+  const icons = serviceArt(useContent()?.content) === "icon";
   const { svc, pkg, mode, room, win, total, deposit, approval, extraHours, count } = priced(cat, d);
   const when = !d.date ? "Pick a date" : win ? windowLabel(d.date, win.start, win.end) : "Pick a time";
   const exclusive = svc?.category === "exclusive";
@@ -73,7 +74,7 @@ function Summary({ cat, d, hold }: { cat: Catalog; d: BookingDraft; hold?: strin
         ["users", "People", d.contactName ? `${d.people} ${d.people === 1 ? "person" : "people"}` : "Add in your details"]];
   return (
     <aside className="summary desk">
-      {svc && <div className="ph" style={{ backgroundImage: `url(${room?.image_url || svc.image_url})` }} />}
+      {svc && (room?.image_url || !icons ? <div className="ph" style={{ backgroundImage: `url(${room?.image_url || svc.image_url})` }} /> : <div className="ph iconart" aria-hidden><Icon name={serviceIconName(svc.slug)} size={36} /></div>)}
       <h3 className="h3" style={{ fontSize: 20 }}>{svc?.name ?? "Pick a service"}{pkg && pkg.name !== svc?.name ? ` · ${pkg.name}` : ""}</h3>
       {pkg && rows.map(([i, k, v]) => (
         <div key={k} className="row gap12"><span className="sumicon"><Icon name={i} size={18} /></span><div><div className="mono faint">{k}</div><b style={{ fontWeight: 500 }}>{v}</b></div></div>
@@ -118,7 +119,7 @@ export function Shell({ at, title, sub, cat, d, hold, children, back, next, next
         <div className="stickybar">
           {backTo && <TactileLink to={backTo} variant="light" size="lg" className="stickyback" aria-label="Back">‹</TactileLink>}
           <div className="grow stickyinfo"><b>{pkg ? naira(total) : "Choose"}</b><div className="caption">{caption}</div></div>
-          <Btn arrow onClick={next} disabled={nextDisabled || busy}>{busy ? "Please wait…" : (nextLabel ?? "").length > 16 ? "Continue" : nextLabel}</Btn>
+          <Btn arrow onClick={next} disabled={nextDisabled || busy}>{busy ? "Please wait…" : nextLabel}</Btn>
         </div>
       )}
     </>
@@ -165,6 +166,7 @@ export function BookService() {
 
 export function BookPackage() {
   const cat = useCatalog();
+  const icons = serviceArt(useContent()?.content) === "icon";
   const [d, up] = useDraft();
   const nav = useNavigate();
   const blocked = useGuard(cat, d, "package");
@@ -182,7 +184,7 @@ export function BookPackage() {
     <Shell at="package" title={exclusive ? "What's included." : "Pick a package."} sub={exclusive ? "These benefits come with the package. Nothing here is priced separately." : svc ? `For ${svc.name.toLowerCase()}.` : undefined} cat={cat} d={d} next={() => nav(nextPath(steps, "package"))} nextLabel={nextLabelFor(steps[steps.findIndex((s) => s.key === "package") + 1]?.key, steps[steps.findIndex((s) => s.key === "package") + 1]?.label)} nextDisabled={!pkg || !d.packageId}>
       {exclusive && pkg && (
         <div className="card stack gap16">
-          {svc?.image_url && <img src={svc.image_url} alt={pkg.name} className="pkg-art-img" style={{ borderRadius: 14, width: "100%", aspectRatio: "16 / 10", objectFit: "cover" }} />}
+          {icons ? <div className="pkg-art-wrap iconart" aria-hidden><Icon name={serviceIconName(svc?.slug ?? "")} size={42} /></div> : svc?.image_url && <img src={svc.image_url} alt={pkg.name} className="pkg-art-img" style={{ borderRadius: 14, width: "100%", aspectRatio: "16 / 10", objectFit: "cover" }} />}
           <h3 className="h3">{pkg.name}</h3>
           <p className="muted">{pkg.description}</p>
           <b>{naira(pkg.price_kobo)}{pkg.unit ? ` ${pkg.unit}` : ""}</b>

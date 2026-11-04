@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "react-router-dom";
 import { PublicLayout } from "../components/Layout";
-import { Icon, Mark } from "../components/brand";
+import { Icon, Mark, serviceIconName } from "../components/brand";
 import { cardBlurb, ServiceMore } from "../components/ServiceMore";
 import { Badge } from "../components/pill";
 import { Tactile, TactileLink, type TactileVariant } from "../components/kitchen";
@@ -10,7 +10,7 @@ import { PhoneDemo, type DemoData } from "../components/PhoneDemo";
 import { Swirl } from "../components/Swirl";
 import { Intro, introPending } from "../components/Intro";
 import { CardArt, Eq, LineArt, Pixels, Sticker } from "../components/art";
-import { HERO_PHOTO, depositOf, needsApproval, roomOf, useCatalog, useContent, type Catalog, type Package, type Service, type Site } from "../lib/catalog";
+import { HERO_PHOTO, depositOf, needsApproval, roomOf, serviceArt, useCatalog, useContent, type Catalog, type Package, type Service, type Site } from "../lib/catalog";
 import { addDays, initials, lagosToday, naira, shortDate, t12 } from "../lib/format";
 import { featuredPackages, fixedPackages, revisionLabel, deliveryLabel, savings, windowLabel, windowsOn } from "../lib/booking";
 import { api } from "../lib/api";
@@ -225,6 +225,7 @@ function Steps({ demo, photo }: { demo: DemoData; photo: string }) {
 }
 
 function Showcase({ cat }: { cat: Catalog }) {
+  const icons = serviceArt(useContent()?.content) === "icon";
   const track = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
   const moved = useRef(false);
@@ -304,8 +305,8 @@ function Showcase({ cat }: { cat: Catalog }) {
           const k = copy * n + i, real = copy === 1;
           return (
             <article key={`${copy}-${s.id}`} className={`ccard ${k === active ? "on" : ""}`} aria-hidden={!real || undefined}>
-              <Link to={`/services/${s.slug}`} className="cimg" aria-label={s.name} tabIndex={real ? undefined : -1} draggable={false}>
-                <span style={{ backgroundImage: `url(${s.image_url})` }} />
+              <Link to={`/services/${s.slug}`} className={`cimg ${icons ? "iconart" : ""}`} aria-label={s.name} tabIndex={real ? undefined : -1} draggable={false}>
+                {icons ? <Icon name={serviceIconName(s.slug)} size={54} /> : <span style={{ backgroundImage: `url(${s.image_url})` }} />}
               </Link>
               <div className="cbody">{(() => { const { short, more } = cardBlurb(s.slug, s.description); return <><h3><Link to={`/services/${s.slug}`} tabIndex={real ? undefined : -1} draggable={false}>{s.name}</Link></h3><div className="crow">{more && real ? <ServiceMore name={s.name} short={short} text={more} tone="dark" /> : <p>{short}</p>}</div><span className="ctag">{s.price_label}</span></>; })()}</div>
             </article>

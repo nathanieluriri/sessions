@@ -1,20 +1,21 @@
 import { Link, Navigate, useParams } from "react-router-dom";
 import { PublicLayout, PageHero, waLink } from "../components/Layout";
-import { Icon } from "../components/brand";
+import { Icon, serviceIconName } from "../components/brand";
 import { cardBlurb, ServiceMore } from "../components/ServiceMore";
 import { Eq } from "../components/art";
 import { Loading } from "../components/ui";
 import { TactileAnchor, TactileLink } from "../components/kitchen";
 import { PackageCard, useStartBooking } from "./public";
 import { WorkCard } from "./portfolio";
-import { useCatalog, useContent, type Service } from "../lib/catalog";
+import { serviceArt, useCatalog, useContent, type Service } from "../lib/catalog";
 import { canonicalService, fixedPackages, packagesOfService } from "../lib/booking";
 
 export function ServiceTile({ s, premium }: { s: Service; premium?: boolean }) {
+  const icons = serviceArt(useContent()?.content) === "icon";
   const { short, more } = cardBlurb(s.slug, s.description);
   return (
     <article className={`svtile ${premium ? "premium" : ""}`}>
-      <Link to={`/services/${s.slug}`} className="img" style={{ backgroundImage: `url(${s.image_url})` }} aria-label={s.name}>{premium && <span className="svcbadge">Exclusive offer</span>}</Link>
+      <Link to={`/services/${s.slug}`} className={`img ${icons ? "iconart" : ""}`} style={icons ? undefined : { backgroundImage: `url(${s.image_url})` }} aria-label={s.name}>{icons && <Icon name={serviceIconName(s.slug)} size={40} />}{premium && <span className="svcbadge">Exclusive offer</span>}</Link>
       <span className="body">
         <Link to={`/services/${s.slug}`}><b>{s.name}</b></Link>
         <span className="d">
@@ -88,7 +89,7 @@ export function ServiceDetail() {
               {wa && <TactileAnchor href={waLink(wa, `Hi, I would like to ask about ${s.name}.`)} target="_blank" rel="noreferrer" variant="light" size="lg">WhatsApp</TactileAnchor>}
             </div>
           </div>
-          <div className="svhero-img" style={{ backgroundImage: `url(${s.image_url})` }} role="img" aria-label={s.name} />
+          <div className={`svhero-img ${serviceArt(site?.content) === "icon" ? "iconart" : ""}`} style={serviceArt(site?.content) === "icon" ? undefined : { backgroundImage: `url(${s.image_url})` }} role="img" aria-label={s.name}>{serviceArt(site?.content) === "icon" && <Icon name={serviceIconName(s.slug)} size={64} />}</div>
         </div>
       </section>
       <section className="section" style={{ paddingTop: 56 }}><div className="wrap grid" style={{ gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 48, alignItems: "start" }} data-stack>

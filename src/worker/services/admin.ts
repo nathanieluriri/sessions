@@ -146,6 +146,7 @@ export const contentService = {
   async saveContent(env: Env, actor: SessionUser, entries: Record<string, string>) {
     const keys = Object.keys(entries);
     if (!keys.length) return;
+    if ("service_card_art" in entries && entries.service_card_art !== "icon" && entries.service_card_art !== "photo") throw badRequest("Choose icons or photographs for service pictures.");
     await env.DB.batch(keys.map((k) => contentRepo.setContent(env.DB, k, entries[k])));
     await audit(env.DB, actor, "Updated website content", keys.join(", "));
   },

@@ -9,6 +9,9 @@ import { act, CollectionEditor, FormFields, Tabs, useApi, type FieldDef } from "
 type Tab = "pages" | "business" | "portfolio" | "team" | "studio" | "testimonials" | "faqs" | "announcements" | "policies" | "seo";
 
 const PAGE_GROUPS: [string, FieldDef[]][] = [
+  ["Service pictures", [
+    { key: "service_card_art", label: "How services are shown", type: "select", options: [["icon", "Icon in the centre"], ["photo", "Photographs"]], hint: "Icons are the default, including anywhere a service is shown on the site. Photographs use each service's cover image. Change the code default in DEFAULT_SERVICE_ART if you want photographs before this is saved." },
+  ]],
   ["Home page hero", [
     { key: "hero_badge", label: "Badge above the headline", hint: "A short line. A live announcement takes its place while it runs." },
     { key: "hero_title", label: "Headline" }, { key: "hero_accent", label: "Second line", hint: "Its last word is shown in green." }, { key: "hero_subtitle", label: "Intro text", type: "textarea", rows: 2 },
@@ -43,7 +46,7 @@ const SEO: FieldDef[] = [
 
 function ContentForm({ groups, d, reload }: { groups: [string, FieldDef[]][]; d: any; reload: () => void }) {
   const [c, setC] = useState<Record<string, string>>(d.content);
-  useEffect(() => setC(d.content), [d]);
+  useEffect(() => setC({ ...d.content, service_card_art: d.content.service_card_art === "photo" ? "photo" : "icon" }), [d]);
   const keys = groups.flatMap(([, f]) => f.map((x) => x.key));
   const save = () => act(() => api("/admin/content", { method: "PUT", body: Object.fromEntries(keys.map((k) => [k, String(c[k] ?? "")])) }), "Website updated", () => { reload(); loadSite(true); });
   return <>
