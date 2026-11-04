@@ -23,7 +23,7 @@
   "vars": {
     "APP_URL": "https://sessions.uririnathaniel.workers.dev",
     "STUDIO_NAME": "Psych Studios",
-    "STUDIO_EMAIL": "hello@psychrecords.ng",
+    "STUDIO_EMAIL": "bookings@psychstudios.com",
     "STUDIO_PHONE": "+234 906 744 9860"
   },
   "observability": { "enabled": true }

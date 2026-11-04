@@ -161,7 +161,7 @@ export function Footer() {
         <div className="fgrid">
           <div className="fbrand">
             <Link to="/" className="flogo"><img src="/brand/footer-wordmark.png" width={340} height={170} alt={c.business_name ?? "Psych Studios"} decoding="async" style={{ maxWidth: "100%", height: "auto" }} /></Link>
-            <p>{c.footer_blurb}</p>
+            {c.footer_blurb ? <p>{c.footer_blurb}</p> : null}
           </div>
           <FootLinks title="Explore" links={[["/services", "Services"], ["/studio", "Studio and facilities"], ["/portfolio", "Portfolio"], ["/packages", "Pricing and packages"], ["/about", "About us"]]} />
           <FootLinks title="Help" links={[["/book", "Book a session"], ["/quote", "Request a quote"], ["/faq", "FAQs"], ["/packages#policies", "Booking policies"], ["/contact", "Contact"]]} />
@@ -178,7 +178,7 @@ export function Footer() {
           {c.whatsapp && <div className="fcol"><h4>Talk to us</h4><TactileAnchor variant="neon" size="md" href={waLink(c.whatsapp)} target="_blank" rel="noreferrer">WhatsApp the studio <Icon name="northeast" size={16} /></TactileAnchor></div>}
         </div>
         <div className="fbar">
-          <span>Copyright © 2026 Psych Records Entertainment Limited | Email: booking@psychrecords.ng</span>
+          <span>Copyright © 2026 Psych Records Entertainment Limited | Email: bookings@psychstudios.com</span>
           <div><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/login">Client login</Link><Link to="/staff/login">Staff sign in</Link></div>
         </div>
       </div>

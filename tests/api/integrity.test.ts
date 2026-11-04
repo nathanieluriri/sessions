@@ -263,11 +263,14 @@ describe("copy", () => {
   it("publishes hours that agree with the all night session and policies that state the remote order refund", async () => {
     const { body } = await h.client().get("/api/content");
     expect(body.content.hours_note).toBe("Recording sessions run daily from 10:00am to 7:00pm. The All night session runs on Saturdays from 11:00pm to 5:00am (Sunday).");
-    for (const key of ["hero_subtitle", "footer_blurb", "seo_description"]) {
+    for (const key of ["hero_subtitle", "seo_description"]) {
       expect(body.content[key], key).toMatch(/₦40,000 per hour/);
       expect(body.content[key], key).toMatch(/₦60,000 per hour/);
       expect(body.content[key], key).not.toMatch(/by quote/);
     }
+    expect(body.content.footer_blurb).toBe("");
+    expect(body.content.contact_email).toBe("bookings@psychstudios.com");
+    expect(JSON.stringify(body.content)).not.toMatch(/hello@psychrecords\.ng|booking@psychrecords\.ng/);
     const policy = (slug: string) => body.policies.find((p: any) => p.slug === slug).body;
     expect(policy("cancellations")).toContain("full refund until the first finished files are delivered");
     expect(policy("terms")).toContain("full refund until the first finished files are delivered");
