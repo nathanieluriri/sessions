@@ -4,7 +4,6 @@ import { Nav, usePageTitle } from "../components/Layout";
 import { Icon } from "../components/brand";
 import { Area, Btn, ErrorBox, Field, Loading, Steps } from "../components/ui";
 import { ServiceCard } from "./public";
-import { cardBlurb } from "../components/ServiceMore";
 import { Tactile, TactileLink } from "../components/kitchen";
 import { depositOf, needsApproval, roomOf, useCatalog, useContent, type Catalog } from "../lib/catalog";
 import { loadDraft, saveDraft, type BookingDraft } from "../lib/draft";
@@ -90,7 +89,7 @@ function Summary({ cat, d, hold }: { cat: Catalog; d: BookingDraft; hold?: strin
 }
 
 export function Shell({ at, title, sub, cat, d, hold, children, back, next, nextLabel, nextDisabled, busy, aside = true, stickyNote }: {
-  at: StepKey; title: string; sub?: ReactNode; cat: Catalog; d: BookingDraft; hold?: string | null; children: ReactNode;
+  at: StepKey; title: string; sub?: string; cat: Catalog; d: BookingDraft; hold?: string | null; children: ReactNode;
   back?: string; next?: () => void; nextLabel?: string; nextDisabled?: boolean; busy?: boolean; aside?: boolean; stickyNote?: string;
 }) {
   usePageTitle("Book with Psych Studios");
@@ -104,7 +103,7 @@ export function Shell({ at, title, sub, cat, d, hold, children, back, next, next
       <div className="wrap booklayout" style={aside ? undefined : { gridTemplateColumns: "1fr" }}>
         <div className="stack gap24 bookmain">
           <Steps steps={steps} at={at} />
-          <div className="stack gap8"><h1 className="h1" style={{ fontSize: "clamp(30px,3.6vw,46px)" }}>{title}</h1>{typeof sub === "string" ? (sub ? <p className="muted">{sub}</p> : null) : sub}</div>
+          <div className="stack gap8"><h1 className="h1" style={{ fontSize: "clamp(30px,3.6vw,46px)" }}>{title}</h1>{sub && <p className="muted">{sub}</p>}</div>
           {children}
           {next && (
             <div className="row between desk-actions">
@@ -128,44 +127,23 @@ export function Shell({ at, title, sub, cat, d, hold, children, back, next, next
 
 const Wait = () => <><Nav /><Loading /></>;
 
-/** The line under the booking title. It eases from one sentence to the next. */
-function RevealLine({ text }: { text: string }) {
-  const [cur, setCur] = useState(text);
-  const [on, setOn] = useState(true);
-  const latest = useRef(text);
-  latest.current = text;
-  useEffect(() => {
-    if (text === cur) { setOn(true); return; }
-    setOn(false);
-    const t = window.setTimeout(() => setCur(latest.current), 280);
-    return () => window.clearTimeout(t);
-  }, [text, cur]);
-  return <p className={`muted book-explain ${on ? "on" : ""}`} aria-live="polite">{cur}</p>;
-}
-
 export function BookService() {
   const cat = useCatalog();
   const [d, up] = useDraft();
-  const [helpSlug, setHelpSlug] = useState<string | null>(null);
   const nav = useNavigate();
   if (!cat) return <Wait />;
   const { svc, fixed } = priced(cat, d);
   const steps = stepsFor(fixed, d.packageId);
-  const helped = helpSlug ? cat.services.find((s) => s.slug === helpSlug) : undefined;
-  const helpedCopy = helped ? cardBlurb(helped.slug, helped.description) : null;
-  const picked = svc ? cardBlurb(svc.slug, svc.description) : null;
-  const subText = helpedCopy?.more ? (helped && helped.slug !== svc?.slug ? `${helped.name}. ${helpedCopy.more}` : helpedCopy.more) : picked ? picked.short : "Pick the closest match. You choose the package next.";
   const pick = (slug: string) => {
     const s = cat.services.find((x) => x.slug === slug);
     if (!s) return;
     if (isQuoteOnly(cat, s)) { nav(`/quote?service=${encodeURIComponent(s.name)}`); return; }
-    setHelpSlug(null);
     const same = svc?.slug === slug;
     up({ serviceSlug: slug, ...(same ? {} : { packageId: undefined, start: undefined, date: undefined, extras: [], extraHours: 0 }) });
   };
   const cats = [...cat.categories].sort((a, b) => a.sort - b.sort);
   return (
-    <Shell at="service" title="What are you making?" sub={<RevealLine text={subText} />} cat={cat} d={d} aside={false} next={() => nav(nextPath(steps, "service"))} nextLabel={nextLabelFor(steps[1]?.key, steps[1]?.label)} nextDisabled={!svc} stickyNote={svc?.name ?? "Pick what you are making"}>
+    <Shell at="service" title="What are you making?" cat={cat} d={d} aside={false} next={() => nav(nextPath(steps, "service"))} nextLabel={nextLabelFor(steps[1]?.key, steps[1]?.label)} nextDisabled={!svc} stickyNote={svc?.name ?? "Pick what you are making"}>
       {d.cartItems.length > 0 && <div className="panel row between wrapflex gap12"><span><b>{d.cartItems.length} {d.cartItems.length === 1 ? "session" : "sessions"} in your cart</b><span className="small muted"> Add another service or continue to checkout.</span></span><TactileLink to="/book/cart" size="md">View cart <Icon name="arrow" size={16} /></TactileLink></div>}
       {cats.map((c) => {
         const list = cat.services.filter((s) => s.category === c.slug);
@@ -175,7 +153,7 @@ export function BookService() {
           <div key={c.slug} id={c.slug} className="stack gap12">
             <div className="stack gap4"><span className="mono faint">{c.name}</span>{premium && <span className="small muted">{c.blurb}</span>}</div>
             <div className={`grid svcpick ${premium ? "cols-2 premium" : "cols-4"}`}>
-              {list.map((s) => <ServiceCard key={s.id} s={s} on={svc?.slug === s.slug} onClick={() => pick(s.slug)} quote={isQuoteOnly(cat, s)} premium={premium} helpOpen={helpSlug === s.slug} onHelp={() => setHelpSlug(helpSlug === s.slug ? null : s.slug)} />)}
+              {list.map((s) => <ServiceCard key={s.id} s={s} on={svc?.slug === s.slug} onClick={() => pick(s.slug)} quote={isQuoteOnly(cat, s)} premium={premium} />)}
             </div>
           </div>
         );
