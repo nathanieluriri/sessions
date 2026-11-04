@@ -92,7 +92,7 @@ UPDATE services SET
   active = 1,
   description = 'Five tracks recorded, mixed and mastered. Every benefit listed here is included in the package price.',
   details = 'Five tracks recorded, mixed and mastered. Every benefit on the package is included in the price. After you pay, our management team contacts you to schedule the sessions.',
-  image_url = '/media/ep-package.jpeg'
+  image_url = '/artwork/ep-package.jpeg'
 WHERE slug = 'produce-ep';
 UPDATE packages SET
   price_kobo = 150000000,
@@ -111,7 +111,7 @@ UPDATE services SET
   active = 1,
   description = 'Twelve tracks recorded, mixed and mastered. Every benefit listed here is included in the package price.',
   details = 'Twelve tracks recorded, mixed and mastered. Every benefit on the package is included in the price. After you pay, our management team contacts you to schedule the sessions.',
-  image_url = '/media/lp-package.jpeg'
+  image_url = '/artwork/lp-package.jpeg'
 WHERE slug = 'produce-album';
 UPDATE packages SET
   price_kobo = 250000000,
