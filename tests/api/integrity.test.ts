@@ -263,11 +263,10 @@ describe("copy", () => {
   it("publishes hours that agree with the all night session and policies that state the remote order refund", async () => {
     const { body } = await h.client().get("/api/content");
     expect(body.content.hours_note).toBe("Recording sessions run daily from 10:00am to 7:00pm. The All night session runs on Saturdays from 11:00pm to 5:00am (Sunday).");
-    for (const key of ["hero_subtitle", "seo_description"]) {
-      expect(body.content[key], key).toMatch(/₦40,000 per hour/);
-      expect(body.content[key], key).toMatch(/₦60,000 per hour/);
-      expect(body.content[key], key).not.toMatch(/by quote/);
-    }
+    expect(body.content.hero_subtitle).toBe("Book recording sessions, beats, mixing and mastering online, with fixed session times and live availability.");
+    expect(body.content.seo_description).toMatch(/₦40,000 per hour/);
+    expect(body.content.seo_description).toMatch(/₦60,000 per hour/);
+    expect(body.content.seo_description).not.toMatch(/by quote/);
     expect(body.content.footer_blurb).toBe("");
     expect(body.content.contact_email).toBe("bookings@psychstudios.com");
     expect(JSON.stringify(body.content)).not.toMatch(/hello@psychrecords\.ng|booking@psychrecords\.ng/);

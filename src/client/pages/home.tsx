@@ -510,7 +510,7 @@ export function Home() {
       {intro && <Intro onDone={done} />}
       <div className="landing" ref={root}>
         <Hero play={!intro && !!site} badge={badge} demo={demo} title={c.hero_title ?? "Record, shoot and create"} accent={c.hero_accent ?? "under one roof."}
-          sub={c.hero_subtitle ?? "Book recording sessions, beats, mixing and mastering online, with fixed session times and live availability. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour."} />
+          sub={c.hero_subtitle ?? "Book recording sessions, beats, mixing and mastering online, with fixed session times and live availability."} />
         <Ribbon items={cat ? cat.services.filter((s) => s.active).slice(0, 10).map((s) => s.name) : ["Recording", "Beat production", "Mixing and mastering", "Full production"]} />
         {cat && site && <>
           <Values rooms={cat.rooms.length} daily={cat.sessions.filter((s) => s.active && s.kind === "day" && s.weekday == null).length} />
