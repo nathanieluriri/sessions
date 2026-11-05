@@ -6,6 +6,7 @@ import { contentRepo, settingsRepo } from "../repositories/settings";
 import { availabilityService, loadRules } from "../services/availability";
 import { enquiryService } from "../services/admin";
 import { collectionsService } from "../services/collections";
+import { bookingService } from "../services/bookings";
 import { body, email, required, text } from "../lib/validate";
 import { studioNow } from "../lib/time";
 
@@ -46,6 +47,15 @@ const availabilityQuery = (c: Context<AppEnv>) => ({
 });
 r.get("/availability/month", async (c) => c.json(await availabilityService.month(c.env, { month: c.req.query("month") ?? "", ...availabilityQuery(c) })));
 r.get("/availability/day", async (c) => c.json(await availabilityService.day(c.env, { date: c.req.query("date") ?? "", ...availabilityQuery(c) })));
+
+// Anyone holding the receipt token (printed slip, email or WhatsApp) can read the receipt. No login, no other contact details.
+r.get("/receipts/:token", async (c) => {
+  const { payment, booking } = await bookingService.receiptByToken(c.env, c.req.param("token"));
+  return c.json({
+    payment: { reference: payment.reference, amount_kobo: payment.amount_kobo, channel: payment.channel, provider: payment.provider, kind: payment.kind, paid_at: payment.paid_at, refunded_kobo: payment.refunded_kobo },
+    booking: { ref: booking.ref, service_name: booking.service_name, package_name: booking.package_name, package_price_kobo: booking.package_price_kobo, extras: JSON.parse(booking.extras), total_kobo: booking.total_kobo, amount_paid_kobo: booking.amount_paid_kobo, refunded_kobo: booking.refunded_kobo, date: booking.date, start_min: booking.start_min, end_min: booking.end_min, room_name: booking.room_name, scheduling: booking.scheduling, slot_label: booking.slot_label, due_date: booking.due_date, contact_name: booking.contact_name, policy_version: booking.policy_version, status: booking.status },
+  });
+});
 
 r.post("/enquiries", async (c) => {
   const b = await body(c, z.object({

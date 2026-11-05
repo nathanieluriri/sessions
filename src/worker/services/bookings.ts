@@ -795,7 +795,7 @@ export const bookingService = {
     const receipt = receiptLink(env, receiptToken);
     if (notify) {
       if (confirmedNow) await mail(env, fresh, emails.confirmed(env, fresh), "Booking confirmed");
-      else await mail(env, fresh, emails.manualReceipt(env, fresh, p.amount, p.method, receipt), "Payment received");
+      else await mail(env, fresh, emails.manualReceipt(env, fresh, p.amount, p.method, receipt, await unlocks(env, fresh)), "Payment received");
     }
     await audit(env.DB, actor, "Recorded payment", b.ref, `${naira(p.amount)} by ${p.method}${p.note ? `. ${p.note}` : ""}`);
     return { booking: fresh, receipt };

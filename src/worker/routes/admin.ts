@@ -107,7 +107,7 @@ r.post("/bookings/:id/payment-link", requirePermission("record_payments"), async
 r.get("/receipts", requirePermission("print_receipts"), async (c) => {
   const { payment, booking } = await bookingService.receipt(c.env, (c.req.query("reference") ?? "").trim());
   return c.json({
-    payment: { reference: payment.reference, amount_kobo: payment.amount_kobo, channel: payment.channel, provider: payment.provider, kind: payment.kind, paid_at: payment.paid_at, refunded_kobo: payment.refunded_kobo, note: payment.note },
+    payment: { reference: payment.reference, amount_kobo: payment.amount_kobo, channel: payment.channel, provider: payment.provider, kind: payment.kind, paid_at: payment.paid_at, refunded_kobo: payment.refunded_kobo, note: payment.note, receipt_token: payment.receipt_token },
     booking: { ref: booking.ref, service_name: booking.service_name, package_name: booking.package_name, package_price_kobo: booking.package_price_kobo, extras: JSON.parse(booking.extras), total_kobo: booking.total_kobo, amount_paid_kobo: booking.amount_paid_kobo, refunded_kobo: booking.refunded_kobo, date: booking.date, start_min: booking.start_min, end_min: booking.end_min, room_name: booking.room_name, scheduling: booking.scheduling, slot_label: booking.slot_label, due_date: booking.due_date, contact_name: booking.contact_name, contact_email: booking.contact_email, contact_phone: booking.contact_phone, policy_version: booking.policy_version, status: booking.status },
   });
 });

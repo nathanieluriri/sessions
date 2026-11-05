@@ -23,18 +23,22 @@ Open any booking from Bookings, Calendar, Clients or Overview. What you can do d
 
 - **Approve**: add an optional note. The client gets an email with a secure link to pay the deposit or the full amount.
 - **Confirm without payment**: only when studio policy allows it, for example pay on arrival or a label account. The amount stays as a balance.
-- **Record payment**: for cash, bank transfer or POS. Enter the amount actually received. A receipt is emailed. Recording a payment on a request or approval confirms it.
+- **Record payment**: for cash, bank transfer or POS. Enter the amount actually received. A receipt is ready to print or share, and is emailed when the client has an email address. Recording a payment on a request or approval confirms it.
 - **Payment link**: emails a secure link for whatever is due. Copy link lets you send it by WhatsApp.
 - **Cancel**: the refund follows the cancellation policy on what the client paid (100% at 72 hours or more, 50% from 24 to 72 hours, nothing under 24 hours), or tick full refund for studio-initiated cancellations. Online payments are refunded through Paystack automatically. Cash and transfer payments are flagged so you can return them by hand.
-- **Reschedule**: pick an open time in the same room. The client is emailed.
+- **Reschedule**: three ways, whichever is quickest. In **Bookings**, click **Reschedule** on the row. In **Calendar**, drag the session to another day or time. Or open the booking and choose **Reschedule**. The current time is marked, the day can be jumped to with the Today, Tomorrow or Next week chips, and only free times can be picked. The client is emailed the new time. For remote orders with a start date you change the date instead.
 
 ### Bookings by phone, WhatsApp or walk-in
 
-Bookings, **New booking**: choose the service and package, pick an open slot (or enter a time manually to go outside opening hours), add the client's name and phone, and optionally an email. Choose **Confirmed**, or **Awaiting payment** to hold the slot and send a payment link. Tick **Record a payment now** if they already paid. The system still refuses times that clash in that room.
+**Walk-in** is the front desk screen: choose the service and package, pick an open slot (or enter a time manually to go outside opening hours), add the client's name and phone, and optionally an email. Tick **Record a payment now** when they pay at the desk, then press **Reserve and finish**. The session is reserved, the payment recorded, and a receipt appears to print or share by WhatsApp. The same flow is in Bookings, **New booking**. The system still refuses times that clash in that room.
+
+### Receipts
+
+Every successful payment, online or recorded at the studio, has a receipt. **Receipts** in the dashboard looks up any payment reference (`PR…` or `PRM…`) to print it or copy its share link. A booking's **Print receipt** button (needs print receipts) does the same for that booking's payments. The share link opens the receipt without a login, so it can go to the client by WhatsApp or email. Staff who record payments email the receipt link to the client automatically when the booking has an email address. The CEO controls who can print or share receipts in **Staff**.
 
 ## Calendar and availability
 
-- **Calendar** shows each week with bookings, live checkout holds, requests and blocked time. Filter by room. Click a booking to open it.
+- **Calendar** shows each week with bookings, live checkout holds, requests and blocked time. Filter by room. Click a booking to open it, or drag a booking to another day or time to reschedule it (you confirm the new time on the next screen).
 - **Availability** sets opening hours, the changeover buffer between sessions, the checkout hold length, minimum notice and how far ahead clients can book. **Block time** closes one room or every room for maintenance or private events. You cannot block time that already has a booking; move or cancel it first.
 
 ## Services and pricing
@@ -107,9 +111,9 @@ Create staff accounts here; there is no public staff sign up. The new staff memb
 | Role | Usual permissions |
 | --- | --- |
 | CEO, COO | Everything |
-| Accountant | View calendar, record payments, verify payments, view payments, view reports |
-| Receptionist | View calendar, manage bookings, update booking details, verify payments, assist clients |
-| Producer or engineer | View calendar, deliver files. Sees no client email, phone or payment details anywhere in the admin |
+| Accountant | View calendar, record payments, print receipts, verify payments, view payments, view reports |
+| Receptionist | View calendar, manage bookings, update booking details, print receipts, verify payments, assist clients |
+| Producer or engineer | View calendar, print receipts, deliver files. Sees no client email, phone or payment details anywhere in the admin |
 | Developer | Edit content, turn booking categories on or off, view audit log, manage staff |
 
 | Permission | Allows |
@@ -118,6 +122,7 @@ Create staff accounts here; there is no public staff sign up. The new staff memb
 | Manage bookings | Create, approve, decline, reschedule, cancel and complete bookings, decide client requests |
 | Update booking details | Edit people, notes, project and contact phone |
 | Record payments | Record cash or transfer payments and send payment links |
+| Print receipts | Print receipts and share receipt links with clients |
 | Verify payments | Look up payment reference codes and validate them |
 | View payments | Every payment and outstanding balance |
 | View reports | Financial reports and CSV export |

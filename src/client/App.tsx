@@ -19,6 +19,7 @@ import { About } from "./pages/about";
 import { Home } from "./pages/home";
 import { BookCart, BookCheckout, BookConfirmed, BookDetails, BookPackage, BookRequested, BookReview, BookService, BookTime, BookVerify, DemoPay, PayBooking } from "./pages/book";
 import { ForgotPassword, Login, Register, ResetPassword, StaffLogin, VerifyEmail } from "./pages/auth";
+import { ReceiptPage } from "./pages/receipt";
 import { Loading } from "./components/ui";
 import { PageHero, PublicLayout } from "./components/Layout";
 import { TactileLink } from "./components/kitchen";
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="/book/confirmed/:id" element={<Confirmed />} />
           <Route path="/pay/demo" element={<DemoPay />} />
           <Route path="/pay/:id" element={<PayBooking />} />
+          <Route path="/receipt/:token" element={<ReceiptPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

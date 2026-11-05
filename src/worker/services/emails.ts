@@ -72,14 +72,14 @@ export const emails = {
     subject: `Booking released · ${b.ref}`,
     text: `Hi ${b.contact_name},\n\n${reason} ${isOrder(b) ? `Your order for ${b.package_name}` : `The time on ${when(b)}`} has been released and nothing was charged.\n\nYou can book again on the website at any time.`,
   }),
-  paymentReceived: (env: Env, b: BookingRow, amount: number, unlocked = false, receipt = "") => ({
+  paymentReceived: (env: Env, b: BookingRow, amount: number, unlocked = false) => ({
     subject: `Payment received · ${b.ref}`,
-    text: `Hi ${b.contact_name},\n\nWe received ${naira(amount)} for booking ${b.ref}.\n\n${details(b)}\n${money(b)}\n\n${isResidency(b) ? `${residency}\n\n` : ""}${unlocked ? `Your finished files are now unlocked. Download them from your portal: ${b.user_id ? `${env.APP_URL}/account/bookings/${b.id}` : `${env.APP_URL}/register (create an account with this email address)`}\n\n` : ""}${receipt ? `Your receipt: ${receipt}\n` : ""}Manage your booking: ${bookingLink(env, b)}`,
+    text: `Hi ${b.contact_name},\n\nWe received ${naira(amount)} for booking ${b.ref}.\n\n${details(b)}\n${money(b)}\n\n${isResidency(b) ? `${residency}\n\n` : ""}${unlocked ? `Your finished files are now unlocked. Download them from your portal: ${b.user_id ? `${env.APP_URL}/account/bookings/${b.id}` : `${env.APP_URL}/register (create an account with this email address)`}\n\n` : ""}Manage your booking: ${bookingLink(env, b)}`,
   }),
   /** A receipt for a payment recorded at the studio: cash, transfer or POS. */
-  manualReceipt: (env: Env, b: BookingRow, amount: number, method: string, receipt: string) => ({
-    subject: `Your receipt · ${b.ref} · ${naira(amount)}`,
-    text: `Hi ${b.contact_name},\n\nThank you. We received ${naira(amount)} by ${method} for booking ${b.ref}.\n\n${details(b)}\n${money(b)}\n\nYour receipt: ${receipt}\nManage your booking: ${bookingLink(env, b)}`,
+  manualReceipt: (env: Env, b: BookingRow, amount: number, method: string, receipt: string, unlocked = false) => ({
+    subject: `Payment received · ${b.ref}`,
+    text: `Hi ${b.contact_name},\n\nThank you. We received ${naira(amount)} by ${method} for booking ${b.ref}.\n\n${details(b)}\n${money(b)}\n\n${unlocked ? `Your finished files are now unlocked. Download them from your portal: ${b.user_id ? `${env.APP_URL}/account/bookings/${b.id}` : `${env.APP_URL}/register (create an account with this email address)`}\n\n` : ""}Your receipt: ${receipt}\nManage your booking: ${bookingLink(env, b)}`,
   }),
   paymentLink: (env: Env, b: BookingRow, amount: number) => ({
     subject: `Payment for booking ${b.ref}`,

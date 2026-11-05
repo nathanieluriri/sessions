@@ -3,12 +3,13 @@ import { useSearchParams } from "react-router-dom";
 import { Empty, SlotPicker } from "../../components/Dash";
 import { Area, Btn, ErrorBox, Field, Loading, Modal, Seg, Tag, toast } from "../../components/ui";
 import { HoldToConfirm, TactileAnchor } from "../../components/kitchen";
+import { ReceiptCard, type ReceiptData } from "../../components/receipt";
 import { api } from "../../lib/api";
 import { can, useAuth, type User } from "../../lib/auth";
 import { canSeeContacts } from "../../../shared/permissions";
 import { FilesPanel } from "./files";
 import { useCatalog } from "../../lib/catalog";
-import { addDays, dateTime, hm, hrs, lagosToday, naira, payState, shortDate, statusLabel, statusTone, t12, timeRange } from "../../lib/format";
+import { addDays, dateTime, endsNextDay, hm, hrs, lagosToday, naira, payState, shortDate, statusLabel, statusTone, t12, timeRange } from "../../lib/format";
 import { act, useApi } from "./kit";
 
 const SOURCE: Record<string, string> = { online: "Online", phone: "Phone", whatsapp: "WhatsApp", walk_in: "Walk-in", email: "Email", instagram: "Instagram", other: "Other" };
@@ -27,8 +28,12 @@ export function Calendar() {
   const [open, setOpen] = useState<string | null>(null);
   const { user } = useAuth();
   const [d, load] = useApi<any>(`/admin/calendar?from=${from}&to=${addDays(from, 6)}&room=${room}`);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropDay, setDropDay] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ id: string; date: string; start: number } | null>(null);
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
   const START = 480, END = 1380, PX = 0.8;
+  const manage = can(user, "manage_bookings");
   const pos = (s: number, e: number) => ({ top: (Math.max(s, START) - START) * PX + 4, height: Math.max((Math.min(e, END) - Math.max(s, START)) * PX - 4, 18) });
   // Overlapping items (different rooms) sit side by side in lanes.
   const lanes = (items: { id: string; start: number; end: number }[]) => {
@@ -42,11 +47,27 @@ export function Calendar() {
   };
   const place = (l: { lane: Record<string, number>; count: number }, id: string, s: number, e: number) =>
     ({ ...pos(s, e), left: `calc(${(l.lane[id] / l.count) * 100}% + 4px)`, width: `calc(${100 / l.count}% - 8px)`, right: "auto" });
+  const dropOn = (date: string, e: React.DragEvent) => {
+    e.preventDefault(); setDropDay(null);
+    const id = e.dataTransfer.getData("text/booking-id") || dragId;
+    const src = d?.bookings.find((x: any) => x.id === id);
+    setDragId(null);
+    if (!src) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const y = Math.min(Math.max(e.clientY - rect.top, 0), (END - START) * PX);
+    const dur = src.end - src.start;
+    const maxStart = endsNextDay(src.end) ? END : Math.max(START, 1440 - dur);
+    const start = Math.min(Math.max(Math.round((START + y / PX) / 30) * 30, START), maxStart);
+    if (date === src.date && start === src.start) return;
+    setPending({ id: src.id, date, start });
+  };
+  const moved = () => { setPending(null); load(); };
   return <>
     <div className="row between wrapflex gap12">
       <div className="row gap8"><Btn size="sm" kind="neutral" onClick={() => setFrom(addDays(from, -7))}>Previous</Btn><Btn size="sm" kind="neutral" onClick={() => setFrom(lagosToday())}>This week</Btn><Btn size="sm" kind="neutral" onClick={() => setFrom(addDays(from, 7))}>Next</Btn></div>
       <div className="row gap8 small wrapflex"><Tag tone="brand">Confirmed</Tag><Tag tone="warning">Request</Tag><Tag tone="success">Awaiting payment</Tag><Tag>Hold or block</Tag></div>
     </div>
+    {manage && <span className="hint">Drag a session to another day or time to reschedule it, or open it and use Reschedule.</span>}
     <RoomChips value={room} onChange={setRoom} />
     {!d ? <Loading /> : (
       <div className="scrollx"><div className="week" style={{ minWidth: 900 }}>
@@ -57,9 +78,16 @@ export function Calendar() {
           const bs = d.bookings.filter((b: any) => b.date === x), hs = d.holds.filter((h: any) => h.date === x), ks = d.blocks.filter((k: any) => k.date === x);
           const l = lanes([...bs, ...hs, ...ks]);
           return (
-            <div key={x} className="col" style={{ height: (END - START) * PX }}>
+            <div key={x} className={`col${manage && dropDay === x ? " drop" : ""}`} style={{ height: (END - START) * PX }}
+              onDragOver={manage ? (e) => { if (dragId) { e.preventDefault(); setDropDay(x); } } : undefined}
+              onDragLeave={manage ? () => setDropDay((v) => (v === x ? null : v)) : undefined}
+              onDrop={manage ? (e) => dropOn(x, e) : undefined}>
               {bs.map((b: any) => (
-                <button key={b.id} type="button" className={`ev ${b.status}`} style={place(l, b.id, b.start, b.end)} onClick={() => setOpen(b.id)}><b>{t12(b.start)} {b.title}</b><div style={{ opacity: .75 }}>{b.subtitle}</div></button>
+                <button key={b.id} type="button" draggable={manage} title={manage ? "Click to open, drag to reschedule" : ""}
+                  className={`ev ${b.status}${dragId === b.id ? " drag" : ""}`} style={place(l, b.id, b.start, b.end)}
+                  onDragStart={manage ? (e) => { e.dataTransfer.setData("text/booking-id", b.id); e.dataTransfer.effectAllowed = "move"; setDragId(b.id); } : undefined}
+                  onDragEnd={manage ? () => { setDragId(null); setDropDay(null); } : undefined}
+                  onClick={() => setOpen(b.id)}><b>{t12(b.start)} {b.title}</b><div style={{ opacity: .75 }}>{b.subtitle}</div></button>
               ))}
               {hs.map((h: any) => <div key={h.id} className="ev hold" style={place(l, h.id, h.start, h.end)}><b>Hold</b><div>Checkout in progress</div></div>)}
               {ks.map((k: any) => <div key={k.id} className="ev block" style={place(l, k.id, k.start, k.end)}><b>Blocked · {k.room}</b><div>{k.reason}</div></div>)}
@@ -69,6 +97,7 @@ export function Calendar() {
       </div></div>
     )}
     {open && <BookingDrawer id={open} user={user} onClose={() => setOpen(null)} onChange={load} />}
+    {pending && <RescheduleModal id={pending.id} pick={{ date: pending.date, start: pending.start }} onClose={() => setPending(null)} onDone={moved} />}
   </>;
 }
 
@@ -82,18 +111,20 @@ export function Bookings() {
   const [room, setRoom] = useState("");
   const [list, load] = useApi<any[]>(`/admin/bookings?q=${encodeURIComponent(q)}&status=${status}&room=${room}`);
   const [open, setOpen] = useState<string | null>(params.get("open"));
+  const [resched, setResched] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const manage = can(user, "manage_bookings");
   const close = () => { setOpen(null); if (params.get("open")) setParams({}, { replace: true }); };
   return <>
     <div className="row between wrapflex gap12">
       <input className="input" style={{ maxWidth: 340 }} placeholder="Search name, email, phone or reference" value={q} onChange={(e) => setQ(e.target.value)} />
-      {can(user, "manage_bookings") && <Btn size="sm" onClick={() => setCreating(true)}>New booking</Btn>}
+      {manage && <Btn size="sm" onClick={() => setCreating(true)}>New booking</Btn>}
     </div>
     <div className="chips">{FILTERS.map(([v, l]) => <button key={v} className={`chip ${status === v ? "on" : ""}`} onClick={() => setStatus(v)}>{l}</button>)}</div>
     <RoomChips value={room} onChange={setRoom} />
     {!list ? <Loading /> : list.length === 0 ? <Empty>No bookings match.</Empty> : (
       <div className="scrollx"><table className="table">
-        <thead><tr><th>Ref</th><th>Date</th><th>Room</th><th>Client</th><th>Package</th><th>Total</th><th>Paid</th><th>Status</th></tr></thead>
+        <thead><tr><th>Ref</th><th>Date</th><th>Room</th><th>Client</th><th>Package</th><th>Total</th><th>Paid</th><th>Status</th>{manage && <th></th>}</tr></thead>
         <tbody>{list.map((b) => {
           const paid = b.amount_paid_kobo - b.refunded_kobo;
           return (
@@ -103,12 +134,16 @@ export function Bookings() {
               <td>{b.package_name}</td><td>{naira(b.total_kobo)}</td>
               <td>{naira(paid)}{["confirmed", "completed"].includes(b.status) && paid < b.total_kobo && <div className="caption" style={{ color: "#9a5b00" }}>{naira(b.total_kobo - paid)} due</div>}</td>
               <td><Tag tone={statusTone(b.status)}>{statusLabel(b.status)}</Tag></td>
+              {manage && <td className="nowrap" onClick={(e) => e.stopPropagation()}>
+                {["pending", "approved", "confirmed"].includes(b.status) && <button className="link small" onClick={() => setResched(b.id)}>Reschedule</button>}
+              </td>}
             </tr>
           );
         })}</tbody>
       </table></div>
     )}
     {open && <BookingDrawer id={open} user={user} onClose={close} onChange={load} />}
+    {resched && <RescheduleModal id={resched} onClose={() => setResched(null)} onDone={() => { setResched(null); load(); }} />}
     {creating && <NewBooking onClose={() => setCreating(false)} onDone={(id) => { setCreating(false); load(); setOpen(id); }} />}
   </>;
 }
@@ -116,11 +151,9 @@ export function Bookings() {
 export function BookingDrawer({ id, user, tab: first = "details", onClose, onChange }: { id: string; user: User | null; tab?: "details" | "files"; onClose: () => void; onChange: () => void }) {
   const [d, load] = useApi<any>(`/admin/bookings/${id}`);
   const [tab, setTab] = useState<"details" | "files">(first);
-  const [mode, setMode] = useState<"" | "edit" | "move" | "cancel" | "approve" | "reject" | "confirm" | "pay">("");
-  const [pick, setPick] = useState<{ date: string; start: number } | null>(null);
+  const [mode, setMode] = useState<"" | "edit" | "move" | "cancel" | "approve" | "reject" | "confirm" | "pay" | "receipt">("");
   const [f, setF] = useState<any>(null);
   const [text, setText] = useState("");
-  const [startDate, setStartDate] = useState("");
   const [full, setFull] = useState(false);
   const [pay, setPay] = useState({ amount: 0, method: "transfer", note: "" });
   const refresh = () => { load(); onChange(); setMode(""); setText(""); };
@@ -154,9 +187,9 @@ export function BookingDrawer({ id, user, tab: first = "details", onClose, onCha
           {["pending", "approved"].includes(b.status) && manage && <Btn size="sm" kind="neutral" onClick={() => setMode("confirm")}>Confirm without payment</Btn>}
           {b.status === "approved" && manage && <Btn size="sm" kind="neutral" onClick={() => setMode("reject")}>Decline</Btn>}
           {["pending", "approved", "confirmed", "completed"].includes(b.status) && can(user, "update_booking_details") && <Btn size="sm" kind="neutral" onClick={() => { setF({ people: b.people, artist_name: b.artist_name, contact_phone: b.contact_phone, contact_email: "", notes: b.notes, project: b.project, reference_links: b.reference_links }); setMode("edit"); }}>Edit details</Btn>}
-          {["pending", "approved", "confirmed"].includes(b.status) && manage && !remote && <Btn size="sm" kind="neutral" onClick={() => setMode("move")}>Reschedule</Btn>}
-          {["pending", "approved", "confirmed"].includes(b.status) && manage && remote && b.category !== "exclusive" && <Btn size="sm" kind="neutral" onClick={() => { setStartDate(b.date); setMode("move"); }}>Change start date</Btn>}
+          {["pending", "approved", "confirmed"].includes(b.status) && manage && b.category !== "exclusive" && <Btn size="sm" kind="neutral" onClick={() => setMode("move")}>{remote ? "Change start date" : "Reschedule"}</Btn>}
           {!["cancelled", "rejected"].includes(b.status) && money && b.balance_kobo > 0 && <Btn size="sm" kind="neutral" onClick={() => { setPay({ amount: b.balance_kobo, method: "transfer", note: "" }); setMode("pay"); }}>Record payment</Btn>}
+          {d.payments && d.payments.length > 0 && can(user, "print_receipts") && <Btn size="sm" kind="neutral" onClick={() => setMode("receipt")}>Print receipt</Btn>}
           {["approved", "confirmed", "completed"].includes(b.status) && money && b.balance_kobo > 0 && <Btn size="sm" kind="neutral" onClick={() => act(() => api(`/admin/bookings/${id}/payment-link`, { method: "POST" }), "Payment link emailed")}>Email payment link</Btn>}
           {d.payLink && b.balance_kobo > 0 && !["cancelled", "rejected"].includes(b.status) && <Btn size="sm" kind="neutral" onClick={copy}>Copy link</Btn>}
           {["confirmed", "completed", "no_show"].includes(b.status) && manage && started && !remote && <>
@@ -186,8 +219,9 @@ export function BookingDrawer({ id, user, tab: first = "details", onClose, onCha
           <div className="field"><label>Method</label><Seg value={pay.method} onChange={(v) => setPay({ ...pay, method: v })} options={[["transfer", "Transfer"], ["cash", "Cash"], ["pos", "POS"]]} /></div>
         </div>
         <Field label="Note (optional)" name="paynote" value={pay.note} onChange={(e) => setPay({ ...pay, note: e.target.value })} placeholder="Bank reference or receipt number" />
-        <div className="row gap8"><Btn disabled={pay.amount <= 0} onClick={() => post("payments", pay, "Payment recorded, receipt emailed")}>Record {naira(pay.amount)}</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
+        <div className="row gap8"><Btn disabled={pay.amount <= 0} onClick={() => act(async () => { await api(`/admin/bookings/${id}/payments`, { body: pay }); }, "Payment recorded, receipt ready", refresh)}>Record {naira(pay.amount)}</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
       </div>}
+      {mode === "receipt" && <ReceiptPane id={id} receipts={d.receipts ?? []} onBack={() => setMode("")} />}
       {mode === "edit" && <div className="stack gap12">
         <Field label="Artist or project" name="artist_name" value={f.artist_name} onChange={(e) => setF({ ...f, artist_name: e.target.value })} />
         <div className="grid cols-2" style={{ gap: 12 }}><Field label="People" name="people" type="number" value={f.people} onChange={(e) => setF({ ...f, people: Number(e.target.value) })} /><Field label="Phone" name="contact_phone" value={f.contact_phone} onChange={(e) => setF({ ...f, contact_phone: e.target.value })} /></div>
@@ -197,14 +231,9 @@ export function BookingDrawer({ id, user, tab: first = "details", onClose, onCha
         <Field label="Reference links" name="reference_links" value={f.reference_links} onChange={(e) => setF({ ...f, reference_links: e.target.value })} />
         <div className="row gap8"><Btn onClick={() => act(async () => { const r = await api(`/admin/bookings/${id}/details`, { method: "PUT", body: f }); if (f.contact_email) toast(r.linked ? "Email saved and linked to the client's account" : "Email saved. The client sees their files after registering with it"); }, "Details saved", refresh)}>Save details</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
       </div>}
-      {mode === "move" && remote && b.category !== "exclusive" && <div className="stack gap12">
-        <Field label="Start date" name="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        <div className="row gap8"><Btn disabled={!startDate} onClick={() => post("reschedule", { date: startDate, start: 0 }, "Start date moved, client emailed")}>Save start date</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
-      </div>}
-      {mode === "move" && !(remote && b.category !== "exclusive") && <div className="stack gap12">
-        <SlotPicker duration={b.end_min - b.start_min} room={b.room_id} value={pick} onChange={setPick} />
-        <div className="row gap8"><Btn disabled={!pick} onClick={() => post("reschedule", pick, "Booking moved, client emailed")}>Move booking</Btn><Btn kind="neutral" onClick={() => setMode("")}>Back</Btn></div>
-      </div>}
+      {mode === "move" && (
+        <RescheduleForm id={id} booking={b} backLabel="Back" onDone={() => { load(); onChange(); setMode(""); }} onBack={() => setMode("")} />
+      )}
       {mode === "cancel" && <div className="stack gap12">
         <Field label="Reason" name="reason" value={text} onChange={(e) => setText(e.target.value)} />
         {b.paid_kobo > 0 && <label className="row gap8 small"><input type="checkbox" checked={full} onChange={(e) => setFull(e.target.checked)} /> Refund the full {naira(b.paid_kobo)} anyway. Cancelling does not refund unless you tick this.</label>}
@@ -220,6 +249,78 @@ export function BookingDrawer({ id, user, tab: first = "details", onClose, onCha
         {d.history.slice(0, 6).map((h: any) => <div key={h.id} className="row between small"><span>{h.ref} · {shortDate(h.date)} · {h.package_name}</span><Tag tone={statusTone(h.status)}>{statusLabel(h.status)}</Tag></div>)}
       </div>}
       </>}
+    </Modal>
+  );
+}
+
+/** Pick one of the booking's payments and print or share its receipt. */
+function ReceiptPane({ id, receipts, onBack }: { id: string; receipts: { reference: string; url: string }[]; onBack: () => void }) {
+  const [ref, setRef] = useState(receipts[0]?.reference ?? "");
+  const [d, setD] = useState<ReceiptData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const link = receipts.find((r) => r.reference === ref)?.url ?? "";
+  useEffect(() => {
+    if (!ref) return;
+    setD(null); setError(null);
+    api<ReceiptData>(`/admin/receipts?reference=${encodeURIComponent(ref)}`).then(setD, (e) => setError(e.message));
+  }, [ref, id]);
+  return (
+    <div className="stack gap12">
+      {receipts.length > 1 && (
+        <div className="field"><label>Payment</label>
+          <select className="select" value={ref} onChange={(e) => setRef(e.target.value)}>{receipts.map((r) => <option key={r.reference} value={r.reference}>{r.reference}</option>)}</select>
+        </div>
+      )}
+      {error ? <ErrorBox error={error} /> : !d ? <Loading /> : <ReceiptCard d={d} />}
+      <div className="row gap8 wrapflex noprint">
+        {d && <Btn kind="neutral" onClick={() => window.print()}>Print</Btn>}
+        {link && <Btn kind="neutral" onClick={async () => { await navigator.clipboard?.writeText(link).catch(() => {}); toast("Receipt link copied"); }}>Copy receipt link</Btn>}
+        <Btn kind="neutral" onClick={onBack}>Back</Btn>
+      </div>
+    </div>
+  );
+}
+
+const QUICK_DAYS: [string, number][] = [["Today", 0], ["Tomorrow", 1], ["Next week", 7], ["In 2 weeks", 14]];
+
+function RescheduleForm({ id, booking: b, initial, backLabel, onDone, onBack }: { id: string; booking: any; initial?: { date: string; start: number }; backLabel: string; onDone: () => void; onBack: () => void }) {
+  const remote = b.scheduling === "project" && b.category !== "exclusive";
+  const today = lagosToday();
+  const [pick, setPick] = useState<{ date: string; start: number } | null>(initial ?? null);
+  const [startDate, setStartDate] = useState(initial?.date ?? b.date);
+  const [days, setDays] = useState(14);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async (body: { date: string; start: number }) => {
+    setBusy(true); setError(null);
+    try { await api(`/admin/bookings/${id}/reschedule`, { body }); toast(remote ? "Start date moved, client emailed" : "Booking moved, client emailed"); onDone(); }
+    catch (e: any) { setError(e.message); } finally { setBusy(false); }
+  };
+  if (remote) return <div className="stack gap12">
+    <div className="notice small">This order now starts <b>{shortDate(b.date)}</b>.</div>
+    <Field label="New start date" name="startDate" type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} />
+    <ErrorBox error={error} />
+    <div className="row gap8"><Btn disabled={busy || !startDate} onClick={() => save({ date: startDate, start: 0 })}>{busy ? "Saving…" : "Save start date"}</Btn><Btn kind="neutral" onClick={onBack}>{backLabel}</Btn></div>
+  </div>;
+  return <div className="stack gap12">
+    <div className="notice small">Now: <b>{shortDate(b.date)} at {timeRange(b.date, b.start_min, b.end_min)}</b> in {b.room_name}.</div>
+    <div className="chips">{QUICK_DAYS.map(([l, n]) => <button key={l} type="button" className="chip" onClick={() => setPick({ date: addDays(today, n), start: b.start_min })}>{l}</button>)}</div>
+    <SlotPicker duration={b.end_min - b.start_min} room={b.room_id} value={pick} onChange={setPick} days={days} current={{ date: b.date, start: b.start_min, end: b.end_min }} />
+    {days < 60 && <button className="link small" onClick={() => setDays(60)}>Show 60 days</button>}
+    <ErrorBox error={error} />
+    <div className="row gap8 wrapflex">
+      <Btn disabled={busy || !pick} onClick={() => save(pick!)}>{busy ? "Moving…" : pick ? `Move to ${shortDate(pick.date)} at ${t12(pick.start)}` : "Pick a new time"}</Btn>
+      <Btn kind="neutral" onClick={onBack}>{backLabel}</Btn>
+    </div>
+  </div>;
+}
+
+function RescheduleModal({ id, pick, onClose, onDone }: { id: string; pick?: { date: string; start: number }; onClose: () => void; onDone: () => void }) {
+  const [d] = useApi<any>(`/admin/bookings/${id}`);
+  if (!d) return <Modal title="Reschedule" onClose={onClose}><Loading /></Modal>;
+  return (
+    <Modal title={`Reschedule ${d.booking.ref}`} onClose={onClose}>
+      <RescheduleForm id={id} booking={d.booking} initial={pick} backLabel="Cancel" onDone={onDone} onBack={onClose} />
     </Modal>
   );
 }

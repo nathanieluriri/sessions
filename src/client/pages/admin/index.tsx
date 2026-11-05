@@ -11,6 +11,7 @@ import { addDays, dateTime, lagosToday, naira, shortDate, statusLabel, statusTon
 import { act, useApi } from "./kit";
 import { useCatalog } from "../../lib/catalog";
 import { Availability, BookingDrawer, Bookings, Calendar, Clients } from "./bookings";
+import { ReceiptLookup, WalkIn } from "./walkin";
 import { Deliveries } from "./deliveries";
 import { Catalogue } from "./catalog";
 import { Website } from "./content";
@@ -18,6 +19,7 @@ import { Website } from "./content";
 type Access = { perm?: string; any?: string[] };
 const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "", to: "/admin", label: "Overview", title: "Overview", icon: "grid", end: true },
+  { key: "walk-in", to: "/admin/walk-in", label: "Walk-in", title: "Walk-in booking and receipt", icon: "receipt", perm: "manage_bookings" },
   { key: "calendar", to: "/admin/calendar", label: "Calendar", title: "Calendar", icon: "calendar", perm: "view_calendar" },
   { key: "bookings", to: "/admin/bookings", label: "Bookings", title: "Bookings", icon: "list", perm: "view_calendar" },
   { key: "deliveries", to: "/admin/deliveries", label: "Deliveries", title: "Deliveries and production queue", icon: "music", perm: "deliver_files" },
@@ -28,6 +30,7 @@ const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "website", to: "/admin/website", label: "Website", title: "Website content", icon: "pencil", perm: "edit_content" },
   { key: "online-booking", to: "/admin/online-booking", label: "Online booking", title: "What clients can book online", icon: "calendar", perm: "toggle_booking_categories" },
   { key: "verify", to: "/admin/verify", label: "Verify payment", title: "Verify a payment reference", icon: "card", perm: "verify_payments" },
+  { key: "receipts", to: "/admin/receipts", label: "Receipts", title: "Print or share a receipt", icon: "receipt", perm: "print_receipts" },
   { key: "payments", to: "/admin/payments", label: "Payments", title: "Payments and balances", icon: "card", perm: "view_payments" },
   { key: "reports", to: "/admin/reports", label: "Reports", title: "Reports", icon: "chart", perm: "view_reports" },
   { key: "staff", to: "/admin/staff", label: "Staff", title: "Staff and permissions", icon: "shield", perm: "manage_staff" },
@@ -315,6 +318,6 @@ function Audit() {
 }
 
 const PAGES: Record<string, () => ReactNode> = {
-  "": Overview, calendar: Calendar, bookings: Bookings, deliveries: Deliveries, clients: Clients, availability: Availability, catalogue: Catalogue, enquiries: Enquiries,
-  website: Website, payments: Payments, reports: Reports, staff: Staff, audit: Audit, "online-booking": OnlineBooking, verify: Verify,
+  "": Overview, "walk-in": WalkIn, calendar: Calendar, bookings: Bookings, deliveries: Deliveries, clients: Clients, availability: Availability, catalogue: Catalogue, enquiries: Enquiries,
+  website: Website, receipts: ReceiptLookup, payments: Payments, reports: Reports, staff: Staff, audit: Audit, "online-booking": OnlineBooking, verify: Verify,
 };

@@ -18,7 +18,7 @@ export interface PaymentRow {
   id: string; reference: string; hold_id: string | null; booking_id: string | null; cart_id: string | null; user_id: string | null; amount_kobo: number;
   provider: "paystack" | "demo" | "manual"; kind: "full" | "deposit" | "balance" | "manual"; status: "pending" | "success" | "failed" | "refunded";
   channel: string | null; verified_via: string | null; note: string; recorded_by: string | null; refunded_kobo: number; paid_at: string | null; created_at: string;
-  checked_by: string | null; checked_at: string | null;
+  checked_by: string | null; checked_at: string | null; receipt_token: string | null;
 }
 export interface ChangeRequestRow { id: string; booking_id: string; user_id: string; kind: "reschedule" | "cancel"; new_date: string | null; new_start_min: number | null; reason: string; status: string; decided_by: string | null; decided_at: string | null; created_at: string }
 export interface BookingCartRow { id: string; user_id: string | null; status: "active" | "paying" | "confirmed" | "cancelled"; expires_at: string; created_at: string }
@@ -206,23 +206,24 @@ export const bookingsRepo = {
 };
 
 export const paymentsRepo = {
-  create: (db: D1Database, p: { id: string; reference: string; holdId: string | null; bookingId: string | null; cartId?: string | null; userId: string | null; amount: number; provider: PaymentRow["provider"]; kind: PaymentRow["kind"] }) =>
-    run(db, "INSERT INTO payments (id, reference, hold_id, booking_id, user_id, amount_kobo, provider, kind, status, cart_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
-      p.id, p.reference, p.holdId, p.bookingId, p.userId, p.amount, p.provider, p.kind, p.cartId ?? null),
-  manual: (db: D1Database, p: { id: string; reference: string; bookingId: string; userId: string | null; amount: number; channel: string; note: string; by: string }) =>
-    stmt(db, `INSERT INTO payments (id, reference, booking_id, user_id, amount_kobo, provider, kind, status, channel, verified_via, note, recorded_by, paid_at)
-      SELECT ?, ?, ?, ?, ?, 'manual', 'manual', 'success', ?, 'staff', ?, ?, ${NOW} WHERE (SELECT amount_paid_kobo - refunded_kobo + ? <= total_kobo FROM bookings WHERE id = ?)`,
-      p.id, p.reference, p.bookingId, p.userId, p.amount, p.channel, p.note, p.by, p.amount, p.bookingId),
+  create: (db: D1Database, p: { id: string; reference: string; holdId: string | null; bookingId: string | null; cartId?: string | null; userId: string | null; amount: number; provider: PaymentRow["provider"]; kind: PaymentRow["kind"]; receiptToken: string }) =>
+    run(db, "INSERT INTO payments (id, reference, hold_id, booking_id, user_id, amount_kobo, provider, kind, status, cart_id, receipt_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+      p.id, p.reference, p.holdId, p.bookingId, p.userId, p.amount, p.provider, p.kind, p.cartId ?? null, p.receiptToken),
+  manual: (db: D1Database, p: { id: string; reference: string; bookingId: string; userId: string | null; amount: number; channel: string; note: string; by: string; receiptToken: string }) =>
+    stmt(db, `INSERT INTO payments (id, reference, booking_id, user_id, amount_kobo, provider, kind, status, channel, verified_via, note, recorded_by, paid_at, receipt_token)
+      SELECT ?, ?, ?, ?, ?, 'manual', 'manual', 'success', ?, 'staff', ?, ?, ${NOW}, ? WHERE (SELECT amount_paid_kobo - refunded_kobo + ? <= total_kobo FROM bookings WHERE id = ?)`,
+      p.id, p.reference, p.bookingId, p.userId, p.amount, p.channel, p.note, p.by, p.receiptToken, p.amount, p.bookingId),
   byReference: (db: D1Database, ref: string) => first<PaymentRow>(db, "SELECT * FROM payments WHERE reference = ?", ref),
+  byReceiptToken: (db: D1Database, token: string) => first<PaymentRow>(db, "SELECT * FROM payments WHERE receipt_token = ?", token),
   lookup: (db: D1Database, ref: string) => first<PaymentRow & { booking_ref: string | null; client: string | null; checked_by_name: string | null }>(db,
     `SELECT p.*, b.ref booking_ref, COALESCE(u.name, b.contact_name) client, s.name checked_by_name FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id
      LEFT JOIN users u ON u.id = p.user_id LEFT JOIN users s ON s.id = p.checked_by WHERE upper(p.reference) = upper(?)`, ref),
   markChecked: (db: D1Database, ref: string, by: string) =>
     run(db, `UPDATE payments SET checked_by = ?, checked_at = ${NOW} WHERE reference = ? AND checked_by IS NULL`, by, ref),
   forBooking: (db: D1Database, bookingId: string) => all<PaymentRow>(db,
-    `SELECT p.id, p.reference, p.hold_id, p.booking_id, p.cart_id, p.user_id, a.amount_kobo, p.provider, p.kind, p.status, p.channel, p.verified_via, p.note, p.recorded_by, a.refunded_kobo, p.paid_at, p.created_at, p.checked_by, p.checked_at
+    `SELECT p.id, p.reference, p.hold_id, p.booking_id, p.cart_id, p.user_id, a.amount_kobo, p.provider, p.kind, p.status, p.channel, p.verified_via, p.note, p.recorded_by, a.refunded_kobo, p.paid_at, p.created_at, p.checked_by, p.checked_at, p.receipt_token
      FROM payments p JOIN payment_allocations a ON a.payment_id = p.id WHERE a.booking_id = ? AND p.status IN ('success', 'refunded')
-     UNION ALL SELECT p.id, p.reference, p.hold_id, p.booking_id, p.cart_id, p.user_id, p.amount_kobo, p.provider, p.kind, p.status, p.channel, p.verified_via, p.note, p.recorded_by, p.refunded_kobo, p.paid_at, p.created_at, p.checked_by, p.checked_at
+     UNION ALL SELECT p.id, p.reference, p.hold_id, p.booking_id, p.cart_id, p.user_id, p.amount_kobo, p.provider, p.kind, p.status, p.channel, p.verified_via, p.note, p.recorded_by, p.refunded_kobo, p.paid_at, p.created_at, p.checked_by, p.checked_at, p.receipt_token
        FROM payments p WHERE p.booking_id = ? AND p.cart_id IS NULL AND p.status IN ('success', 'refunded') ORDER BY paid_at`, bookingId, bookingId),
   forUser: (db: D1Database, userId: string) => all<PaymentRow & { booking_ref: string | null; package_name: string | null; booking_id: string | null }>(db,
     "SELECT p.*, b.ref booking_ref, b.package_name FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id WHERE (p.user_id = ? OR b.user_id = ?) AND p.status != 'pending' ORDER BY p.created_at DESC", userId, userId),

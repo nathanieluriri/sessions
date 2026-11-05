@@ -3,6 +3,7 @@ export const PERMISSIONS = {
   manage_bookings: "Create, approve, reject, reschedule, cancel and complete bookings, and decide client requests",
   update_booking_details: "Edit people, notes and contact details on bookings",
   record_payments: "Record cash or transfer payments and send payment links",
+  print_receipts: "Print receipts and share receipt links with clients",
   verify_payments: "Look up payment reference codes and validate payments",
   view_payments: "See every payment and outstanding balance",
   view_reports: "See financial reports and export bookings",
@@ -21,11 +22,11 @@ export type Permission = keyof typeof PERMISSIONS;
 export const LEVELS = {
   ceo: { label: "CEO", defaults: [] as Permission[] },
   coo: { label: "COO", defaults: [] as Permission[] },
-  accountant: { label: "Accountant", defaults: ["view_calendar", "record_payments", "verify_payments", "view_payments", "view_reports"] as Permission[] },
-  receptionist: { label: "Receptionist", defaults: ["view_calendar", "manage_bookings", "update_booking_details", "verify_payments", "assist_clients"] as Permission[] },
-  producer: { label: "Producer or engineer", defaults: ["view_calendar", "deliver_files"] as Permission[] },
+  accountant: { label: "Accountant", defaults: ["view_calendar", "record_payments", "print_receipts", "verify_payments", "view_payments", "view_reports"] as Permission[] },
+  receptionist: { label: "Receptionist", defaults: ["view_calendar", "manage_bookings", "update_booking_details", "print_receipts", "verify_payments", "assist_clients"] as Permission[] },
+  producer: { label: "Producer or engineer", defaults: ["view_calendar", "print_receipts", "deliver_files"] as Permission[] },
   developer: { label: "Developer", defaults: ["edit_content", "toggle_booking_categories", "view_audit", "manage_staff"] as Permission[] },
-  custom: { label: "Staff", defaults: [] as Permission[] },
+  custom: { label: "Staff", defaults: ["view_calendar", "print_receipts"] as Permission[] },
 } as const;
 
 export type Level = keyof typeof LEVELS;
