@@ -152,6 +152,14 @@ a.rate:hover { border-color: #c9c9c3; transform: translateY(-2px); }
 .svcpick .svc { aspect-ratio: 4 / 3; }
 .svcpick .svc .label b { font-size: 18px; }
 @media (max-width: 700px) { .svcpick { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } .svcpick .svc .label { left: 12px; right: 12px; bottom: 12px; } .svcpick .svc .label b { font-size: 15px; } }
+@media (max-width: 700px) {
+  .svcpick .svc.iconart { aspect-ratio: 1 / 1.08; padding-top: 38px; }
+  .svcpick .svc.iconart .label { left: auto; right: auto; bottom: auto; padding: 6px 10px 10px; }
+  .svcpick .svc.iconart .label b { font-size: 12px; }
+  .svcpick .svc.iconart .label span { font-size: 9px; }
+  .svcpick .svc.iconart .mark { width: 54px; height: 54px; }
+  .svcpick .svc.iconart .mark svg { width: 24px; height: 24px; }
+}
 .stepper { border: 1px solid var(--line); border-radius: 12px; align-self: flex-start; }
 .stepper button { width: 44px; height: 44px; color: var(--fg); font-size: 18px; }
 .stepper b { width: 40px; text-align: center; }
