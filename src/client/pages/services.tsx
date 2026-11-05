@@ -8,6 +8,7 @@ import { TactileAnchor, TactileLink } from "../components/kitchen";
 import { PackageCard, useStartBooking } from "./public";
 import { WorkCard } from "./portfolio";
 import { showsServiceIcon, useCatalog, useContent, type Service } from "../lib/catalog";
+import { illustrationFor } from "../lib/service-art";
 import { canonicalService, fixedPackages, packagesOfService } from "../lib/booking";
 
 export function ServiceTile({ s, premium }: { s: Service; premium?: boolean }) {
@@ -15,7 +16,7 @@ export function ServiceTile({ s, premium }: { s: Service; premium?: boolean }) {
   const { short, more } = cardBlurb(s.slug, s.description);
   return (
     <article className={`svtile ${premium ? "premium" : ""}`}>
-      <Link to={`/services/${s.slug}`} className={`img ${icons ? "iconart" : ""}`} style={icons ? undefined : { backgroundImage: `url(${s.image_url})` }} aria-label={s.name}>{icons && <Icon name={serviceIconName(s.slug)} size={40} />}{premium && <span className="svcbadge">Exclusive offer</span>}</Link>
+      <Link to={`/services/${s.slug}`} className={`img ${icons ? "iconart" : ""}`} style={icons ? undefined : { backgroundImage: `url(${s.image_url})` }} aria-label={s.name}>{icons && (illustrationFor(s.slug) ? <img className="svc-illus" src={illustrationFor(s.slug)} alt="" /> : <Icon name={serviceIconName(s.slug)} size={40} />)}{premium && <span className="svcbadge">Exclusive offer</span>}</Link>
       <span className="body">
         <Link to={`/services/${s.slug}`}><b>{s.name}</b></Link>
         <span className="d">
@@ -32,7 +33,7 @@ export function Services() {
   const site = useContent();
   return (
     <PublicLayout title="Services">
-      <PageHero kicker="Services" title="Everything we make, and how to order it." sub={site?.content.services_intro || "Book a recording session, a beat, a mix or full production. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour."}>
+      <PageHero kicker="Services" title="Everything we make, and how to order it." sub={site?.content.services_intro || "Book a recording session, a beat, a mix or full production. Video, podcast and photography are priced by quote."}>
         {cat && <div className="chips" style={{ marginTop: 8 }}>{cat.categories.map((c) => <a key={c.slug} href={`#${c.slug}`} className="chip">{c.name}</a>)}</div>}
       </PageHero>
       {!cat ? <Loading /> : cat.categories.map((c, i) => {
@@ -90,7 +91,7 @@ export function ServiceDetail() {
               {wa && <TactileAnchor href={waLink(wa, `Hi, I would like to ask about ${s.name}.`)} target="_blank" rel="noreferrer" variant="light" size="lg">WhatsApp</TactileAnchor>}
             </div>
           </div>
-          <div className={`svhero-img ${showsServiceIcon(site?.content, s) ? "iconart" : ""}`} style={showsServiceIcon(site?.content, s) ? undefined : { backgroundImage: `url(${s.image_url})` }} role="img" aria-label={s.name}>{showsServiceIcon(site?.content, s) && <Icon name={serviceIconName(s.slug)} size={64} />}</div>
+          <div className={`svhero-img ${showsServiceIcon(site?.content, s) ? "iconart" : ""}`} style={showsServiceIcon(site?.content, s) ? undefined : { backgroundImage: `url(${s.image_url})` }} role="img" aria-label={s.name}>{showsServiceIcon(site?.content, s) && (illustrationFor(s.slug) ? <img className="svc-illus" src={illustrationFor(s.slug)} alt="" /> : <Icon name={serviceIconName(s.slug)} size={64} />)}</div>
         </div>
       </section>
       <section className="section" style={{ paddingTop: 56 }}><div className="wrap grid" style={{ gridTemplateColumns: "minmax(0,1.3fr) minmax(0,1fr)", gap: 48, alignItems: "start" }} data-stack>

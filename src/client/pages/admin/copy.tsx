@@ -19,8 +19,8 @@ const LABELS: Record<string, string> = {
   seo_title: "Site title", seo_description: "Site description", seo_image: "Share image",
 };
 const DEFAULTS: Record<string, string> = {
-  services_intro: "Book a recording session, a beat, a mix or full production. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour.",
-  pricing_intro: "Prices are locked when you book. Recording runs as four sessions a day, and you can book more than one at once. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour.",
+  services_intro: "Book a recording session, a beat, a mix or full production. Video, podcast and photography are priced by quote.",
+  pricing_intro: "Prices are locked when you book. Recording runs as four sessions a day, and you can book more than one at once. Video, podcast and photography are priced by quote.",
 };
 
 const clip = (v: string) => v.replace(/\s+/g, " ").trim();

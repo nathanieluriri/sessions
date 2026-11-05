@@ -202,6 +202,7 @@ body.menu-open { overflow: hidden; }
 .svc.iconart::after { content: none; }
 .svc.iconart .mark, .svc.stackart.iconart .art.mark { position: relative; z-index: 1; left: auto; top: auto; translate: none; flex: none; margin: auto; width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; color: #c6a15a; background: #fafaf8; box-shadow: inset 0 0 0 1px #e6e2d8; }
 .svc.iconart .mark svg, .svc.stackart.iconart .art.mark svg { width: 30px; height: 30px; }
+.svc.iconart .svc-illus { width: auto; max-width: 86%; height: 100%; max-height: 148px; object-fit: contain; margin: auto; flex: 1 1 auto; min-height: 0; pointer-events: none; }
 .svc.iconart .label { position: static; width: 100%; padding: 8px 12px 14px; gap: 2px; background: transparent; }
 .svc.iconart .label b { font-size: 14px; line-height: 1.15; font-weight: 600; color: #1a1a1a; }
 .svc.iconart .label span { color: #8d6b16; font-size: 10px; }

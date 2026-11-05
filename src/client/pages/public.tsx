@@ -9,6 +9,7 @@ import { RichText } from "../components/content";
 import { PHOTOS, depositOf, needsApproval, showsServiceIcon, useCatalog, useContent, type Catalog, type Package, type Service } from "../lib/catalog";
 import { hrs, naira } from "../lib/format";
 import { cardBlurb } from "../components/ServiceMore";
+import { illustrationFor } from "../lib/service-art";
 import { activeSessions, deliveryLabel, fixedPackages, howLine, moneyOrRequest, nextPath, revisionLabel, savings, sessionDays, sessionWindow, stepsFor } from "../lib/booking";
 import { api } from "../lib/api";
 import { loadDraft, saveDraft } from "../lib/draft";
@@ -18,7 +19,8 @@ export function ServiceCard({ s, on, onClick, quote, premium }: { s: Service; on
   const icons = showsServiceIcon(useContent()?.content, s);
   const { more } = cardBlurb(s.slug, s.description);
   const [open, setOpen] = useState(false);
-  const mark = icons ? <span className="mark" aria-hidden><Icon name={serviceIconName(s.slug)} size={34} /></span> : null;
+  const picture = icons ? illustrationFor(s.slug) : "";
+  const mark = picture ? <img className="svc-illus" src={picture} alt="" /> : icons ? <span className="mark" aria-hidden><Icon name={serviceIconName(s.slug)} size={34} /></span> : null;
   const label = (
     <span className="label"><b>{s.name}</b><span>{quote ? "Request a quote" : s.price_label}</span>{premium && s.duration_label && <span className="svcsub">{s.duration_label}</span>}</span>
   );
@@ -130,7 +132,7 @@ export function Packages() {
   const flex = !!cat?.packages.some((p) => p.scheduling === "flex" && p.pricing === "fixed" && p.active);
   return (
     <PublicLayout title="Pricing and packages">
-      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub={site?.content.pricing_intro || "Prices are locked when you book. Recording runs as four sessions a day, and you can book more than one at once. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour."} />
+      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub={site?.content.pricing_intro || "Prices are locked when you book. Recording runs as four sessions a day, and you can book more than one at once. Video, podcast and photography are priced by quote."} />
       <section className="section" style={{ paddingTop: 40 }}><div className="wrap stack gap32">
         {!cat ? <Loading /> : <>
           {exclusiveFirst.length > 1 && <div className="chips" role="tablist">

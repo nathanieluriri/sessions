@@ -215,7 +215,8 @@ a.hbadge:hover .pbadge { background: rgba(255,255,255,.1); }
   background: linear-gradient(135deg, #7b2ff7, #e3239c 40%, #ff7a1a 70%, #ffd51c); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
 .cimg { display: block; height: 300px; margin: 10px 10px 0; overflow: hidden; border-radius: 22px;
   background: #111 linear-gradient(45deg, rgba(255,255,255,.04) 25%, transparent 25% 50%, rgba(255,255,255,.04) 50% 75%, transparent 75%) 0 0 / 22px 22px; }
-.cimg.iconart { display: grid; place-items: center; background: radial-gradient(120% 80% at 50% 40%, #242424, #111); color: var(--neon); }
+.cimg.iconart { display: grid; place-items: center; background: #f4f3f0; color: #c6a15a; }
+.cimg.iconart .svc-illus { width: 78%; height: 78%; object-fit: contain; }
 .cimg span { display: block; width: 100%; height: 100%; background: center / cover; transition: transform .8s cubic-bezier(.2,.7,.2,1); }
 .ccard.on .cimg span, .ccard:hover .cimg span { transform: scale(1.05); }
 .cbody { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 22px 24px 26px; }

@@ -13,6 +13,7 @@ import { CardArt, Eq, LineArt, Pixels, Sticker } from "../components/art";
 import { HERO_PHOTO, depositOf, needsApproval, roomOf, showsServiceIcon, useCatalog, useContent, type Catalog, type Package, type Service, type Site } from "../lib/catalog";
 import { addDays, initials, lagosToday, naira, shortDate, t12 } from "../lib/format";
 import { featuredPackages, fixedPackages, revisionLabel, deliveryLabel, savings, windowLabel, windowsOn } from "../lib/booking";
+import { illustrationFor } from "../lib/service-art";
 import { api } from "../lib/api";
 import { clamp, prefersStill, useInView, useReveal, useScrollFrame } from "../lib/motion";
 import { useStartBooking } from "./public";
@@ -306,7 +307,7 @@ function Showcase({ cat }: { cat: Catalog }) {
           return (
             <article key={`${copy}-${s.id}`} className={`ccard ${k === active ? "on" : ""}`} aria-hidden={!real || undefined}>
               <Link to={`/services/${s.slug}`} className={`cimg ${showsServiceIcon(content, s) ? "iconart" : ""}`} aria-label={s.name} tabIndex={real ? undefined : -1} draggable={false}>
-                {showsServiceIcon(content, s) ? <Icon name={serviceIconName(s.slug)} size={54} /> : <span style={{ backgroundImage: `url(${s.image_url})` }} />}
+                {showsServiceIcon(content, s) ? (illustrationFor(s.slug) ? <img className="svc-illus" src={illustrationFor(s.slug)} alt="" /> : <Icon name={serviceIconName(s.slug)} size={54} />) : <span style={{ backgroundImage: `url(${s.image_url})` }} />}
               </Link>
               <div className="cbody">{(() => { const { short, more } = cardBlurb(s.slug, s.description); return <><h3><Link to={`/services/${s.slug}`} tabIndex={real ? undefined : -1} draggable={false}>{s.name}</Link></h3><div className="crow">{more && real ? <ServiceMore name={s.name} short={short} text={more} tone="dark" /> : <p>{short}</p>}</div><span className="ctag">{s.price_label}</span></>; })()}</div>
             </article>
