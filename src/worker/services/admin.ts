@@ -8,6 +8,7 @@ import { hashPassword, randomToken, uuid } from "../lib/crypto";
 import { addDays, daysBetween, minutesUntil, studioNow, prettyDate, label12, endsNextDay, weekdayName } from "../lib/time";
 import { naira } from "../lib/money";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
+import { first, run } from "../repositories/db";
 import { LEVELS, PERMISSIONS, canSeeContacts, hasPermission, staffChangeBlocked, type Level, type Permission } from "../../shared/permissions";
 import { audit } from "./audit";
 import { windowsFor } from "./availability";
@@ -45,6 +46,37 @@ export const catalogService = {
     ].filter(Boolean).join(". ");
     await audit(env.DB, actor, before ? "Updated package" : "Created package", p.name, changes);
     return id;
+  },
+  async setPrices(env: Env, actor: SessionUser, input: { packages: { id: string; pricing: "fixed" | "quote"; priceKobo: number }[]; extras: { id: string; pricing: "fixed" | "quote"; priceKobo: number }[] }) {
+    const touched = new Set<string>();
+    const servicesLater = new Set<string>();
+    for (const p of input.packages) {
+      const row = await catalogRepo.packageById(env.DB, p.id);
+      if (!row) throw notFound("Package not found.");
+      await run(env.DB, "UPDATE packages SET pricing = ?, price_kobo = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?", p.pricing, p.pricing === "quote" ? row.price_kobo : p.priceKobo, p.id);
+      if (row.service_slug) touched.add(row.service_slug);
+      else servicesLater.add(row.service_category);
+    }
+    for (const e of input.extras) {
+      const row = await first<{ id: string; price_kobo: number }>(env.DB, "SELECT id, price_kobo FROM extras WHERE id = ?", e.id);
+      if (!row) throw notFound("Add-on not found.");
+      await run(env.DB, "UPDATE extras SET pricing = ?, price_kobo = ? WHERE id = ?", e.pricing, e.pricing === "quote" ? row.price_kobo : e.priceKobo, e.id);
+    }
+    const services = await catalogRepo.services(env.DB, true);
+    const packages = await catalogRepo.packages(env.DB, true);
+    for (const svc of services) if (servicesLater.has(svc.category)) touched.add(svc.slug);
+    const slugs = [...touched];
+    for (const slug of slugs) {
+      const svc = services.find((s) => s.slug === slug);
+      if (!svc) continue;
+      const mine = packages.filter((p) => p.active && (p.service_slug ? p.service_slug === svc.slug : p.service_category === svc.category));
+      const fixed = mine.filter((p) => p.pricing === "fixed");
+      const low = [...fixed].sort((a, b) => a.price_kobo - b.price_kobo)[0];
+      const unit = low ? low.unit.trim().toLowerCase().startsWith("per ") ? ` / ${low.unit.trim().slice(4)}` : low.unit.trim() ? ` ${low.unit.trim()}` : "" : "";
+      const label = !low ? "Request a quote" : fixed.length > 1 ? `From ${naira(low.price_kobo)}${unit}` : `${naira(low.price_kobo)}${unit}`;
+      await run(env.DB, "UPDATE services SET price_label = ? WHERE id = ?", label, svc.id);
+    }
+    await audit(env.DB, actor, "Updated prices", `${input.packages.length} packages, ${input.extras.length} add-ons`);
   },
   async deletePackage(env: Env, actor: SessionUser, id: string) {
     const p = await catalogRepo.packageById(env.DB, id);
@@ -134,6 +166,34 @@ export const contentService = {
       await settingsRepo.set(env.DB, "policy_version", String(v));
       await audit(env.DB, actor, "Saved policy", title, `Version ${v}`);
     } else await audit(env.DB, actor, "Saved page", title);
+  },
+  async saveCopy(env: Env, actor: SessionUser, input: { kind: "content" | "service" | "package" | "extra" | "faq" | "policy" | "page"; id: string; field: string; value: string }) {
+    const textFields: Record<string, { table: string; key: string; fields: string[] }> = {
+      service: { table: "services", key: "id", fields: ["name", "description", "details", "price_label", "duration_label"] },
+      package: { table: "packages", key: "id", fields: ["name", "description", "price_note", "unit"] },
+      extra: { table: "extras", key: "id", fields: ["name", "description"] },
+      faq: { table: "faqs", key: "id", fields: ["question", "answer"] },
+      page: { table: "page_meta", key: "path", fields: ["title", "description"] },
+    };
+    if (input.kind === "content") {
+      if (!/^[a-z_]{2,40}$/.test(input.id)) throw badRequest("That piece of copy cannot be saved.");
+      await contentRepo.setContent(env.DB, input.id, input.value);
+      await audit(env.DB, actor, "Updated website copy", input.id);
+      return;
+    }
+    if (input.kind === "policy") {
+      if (input.field !== "title" && input.field !== "body") throw badRequest("That field cannot be edited here.");
+      const p = await contentRepo.policy(env.DB, input.id);
+      if (!p) throw notFound("Policy not found.");
+      await this.savePolicy(env, actor, p.slug, input.field === "title" ? input.value : p.title, input.field === "body" ? input.value : p.body);
+      return;
+    }
+    const spec = textFields[input.kind];
+    if (!spec || !spec.fields.includes(input.field)) throw badRequest("That field cannot be edited here.");
+    const row = await first(env.DB, `SELECT 1 FROM ${spec.table} WHERE ${spec.key} = ?`, input.id);
+    if (!row) throw notFound("That text was not found.");
+    await run(env.DB, `UPDATE ${spec.table} SET ${input.field} = ? WHERE ${spec.key} = ?`, input.value, input.id);
+    await audit(env.DB, actor, "Updated website copy", `${input.kind} ${input.id}`, input.field);
   },
   /** Showing a policy on the website is separate from saving its text, and only the CEO may do it. */
   async setPolicyVisibility(env: Env, actor: SessionUser, slug: string, published: boolean) {

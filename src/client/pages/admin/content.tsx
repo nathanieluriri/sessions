@@ -5,8 +5,9 @@ import { useAuth } from "../../lib/auth";
 import { loadCatalog, loadSite, useCatalog } from "../../lib/catalog";
 import { dateTime } from "../../lib/format";
 import { act, CollectionEditor, FormFields, Tabs, useApi, type FieldDef } from "./kit";
+import { CopySearch } from "./copy";
 
-type Tab = "pages" | "business" | "portfolio" | "team" | "studio" | "testimonials" | "faqs" | "announcements" | "policies" | "seo";
+type Tab = "copy" | "pages" | "business" | "portfolio" | "team" | "studio" | "testimonials" | "faqs" | "announcements" | "policies" | "seo";
 
 const PAGE_GROUPS: [string, FieldDef[]][] = [
   ["Service pictures", [
@@ -86,7 +87,7 @@ function ContentForm({ groups, d, reload }: { groups: [string, FieldDef[]][]; d:
 export function Website() {
   const { user } = useAuth();
   const ceo = user?.role === "ceo";
-  const [tab, setTab] = useState<Tab>("pages");
+  const [tab, setTab] = useState<Tab>("copy");
   const [d, load] = useApi<any>("/admin/content");
   const cat = useCatalog();
   const [pol, setPol] = useState<any>(null);
@@ -95,7 +96,8 @@ export function Website() {
   const catOptions: [string, string][] = cat?.categories.map((c) => [c.slug, c.name]) ?? [];
   const roomOptions: [string, string][] = [["", "No specific room"], ...(cat?.rooms.map((r) => [r.id, r.name] as [string, string]) ?? [])];
   return <>
-    <Tabs value={tab} onChange={setTab} tabs={[["pages", "Pages"], ["business", "Business and contact"], ["portfolio", "Portfolio"], ["team", "Team"], ["studio", "Equipment and gallery"], ["testimonials", "Testimonials"], ["faqs", "FAQs"], ["announcements", "Announcements"], ["policies", "Policies and legal"], ["seo", "SEO and analytics"]]} />
+    <Tabs value={tab} onChange={setTab} tabs={[["copy", "Find copy"], ["pages", "Pages"], ["business", "Business and contact"], ["portfolio", "Portfolio"], ["team", "Team"], ["studio", "Equipment and gallery"], ["testimonials", "Testimonials"], ["faqs", "FAQs"], ["announcements", "Announcements"], ["policies", "Policies and legal"], ["seo", "SEO and analytics"]]} />
+    {tab === "copy" && <CopySearch />}
     {tab === "pages" && <><ContentForm groups={PAGE_GROUPS} d={d} reload={load} /><ServicePictures /></>}
     {tab === "business" && <ContentForm groups={[["Business and contact details", BUSINESS]]} d={d} reload={load} />}
     {tab === "portfolio" && <CollectionEditor name="portfolio" noun="project" intro={<span className="small muted">Paste a YouTube, Vimeo, Spotify or SoundCloud link to embed a player. Featured projects show on the home page.</span>}

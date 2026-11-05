@@ -130,7 +130,7 @@ export function Packages() {
   const flex = !!cat?.packages.some((p) => p.scheduling === "flex" && p.pricing === "fixed" && p.active);
   return (
     <PublicLayout title="Pricing and packages">
-      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub="Prices are locked when you book. Recording runs as four sessions a day, and you can book more than one at once. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour." />
+      <PageHero kicker="Pricing" title="Clear prices. Fair policies." sub={site?.content.pricing_intro || "Prices are locked when you book. Recording runs as four sessions a day, and you can book more than one at once. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour."} />
       <section className="section" style={{ paddingTop: 40 }}><div className="wrap stack gap32">
         {!cat ? <Loading /> : <>
           {exclusiveFirst.length > 1 && <div className="chips" role="tablist">

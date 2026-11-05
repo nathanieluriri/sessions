@@ -29,9 +29,10 @@ export function ServiceTile({ s, premium }: { s: Service; premium?: boolean }) {
 
 export function Services() {
   const cat = useCatalog();
+  const site = useContent();
   return (
     <PublicLayout title="Services">
-      <PageHero kicker="Services" title="Everything we make, and how to order it." sub="Book a recording session, a beat, a mix or full production. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour.">
+      <PageHero kicker="Services" title="Everything we make, and how to order it." sub={site?.content.services_intro || "Book a recording session, a beat, a mix or full production. Photography is ₦40,000 per hour and the podcast studio is ₦60,000 per hour."}>
         {cat && <div className="chips" style={{ marginTop: 8 }}>{cat.categories.map((c) => <a key={c.slug} href={`#${c.slug}`} className="chip">{c.name}</a>)}</div>}
       </PageHero>
       {!cat ? <Loading /> : cat.categories.map((c, i) => {

@@ -98,10 +98,19 @@ r.post("/bookings/:id/outcome", requirePermission("manage_bookings"), async (c) 
 });
 r.post("/bookings/:id/payments", requirePermission("record_payments"), async (c) => {
   const b = await body(c, z.object({ amount: z.number().int().min(1), method: z.enum(["cash", "transfer", "pos", "other"]), note: text(200).default("") }));
-  await bookingService.recordPayment(c.env, actor(c), c.req.param("id"), b);
-  return c.json(ok);
+  const r0 = await bookingService.recordPayment(c.env, actor(c), c.req.param("id"), b);
+  return c.json({ ok: true, receipt: r0.receipt });
 });
 r.post("/bookings/:id/payment-link", requirePermission("record_payments"), async (c) => c.json(await bookingService.sendPaymentLink(c.env, actor(c), c.req.param("id"))));
+
+// Receipts: any staff can print one; the CEO controls who gets the permission.
+r.get("/receipts", requirePermission("print_receipts"), async (c) => {
+  const { payment, booking } = await bookingService.receipt(c.env, (c.req.query("reference") ?? "").trim());
+  return c.json({
+    payment: { reference: payment.reference, amount_kobo: payment.amount_kobo, channel: payment.channel, provider: payment.provider, kind: payment.kind, paid_at: payment.paid_at, refunded_kobo: payment.refunded_kobo, note: payment.note },
+    booking: { ref: booking.ref, service_name: booking.service_name, package_name: booking.package_name, package_price_kobo: booking.package_price_kobo, extras: JSON.parse(booking.extras), total_kobo: booking.total_kobo, amount_paid_kobo: booking.amount_paid_kobo, refunded_kobo: booking.refunded_kobo, date: booking.date, start_min: booking.start_min, end_min: booking.end_min, room_name: booking.room_name, scheduling: booking.scheduling, slot_label: booking.slot_label, due_date: booking.due_date, contact_name: booking.contact_name, contact_email: booking.contact_email, contact_phone: booking.contact_phone, policy_version: booking.policy_version, status: booking.status },
+  });
+});
 r.get("/requests", requirePermission("manage_bookings"), async (c) => c.json(await dashboardService.requests(c.env)));
 r.post("/requests/:id", requirePermission("manage_bookings"), async (c) => {
   const b = await body(c, z.object({ approve: z.boolean() }));
@@ -149,6 +158,22 @@ const packageSchema = z.object({
   revisionLimit: z.number().int().min(0).max(20).default(0), tracks: z.number().int().min(1).max(100).nullable().default(null),
 }).refine((p) => p.pricing === "quote" || p.scheduling === "project" || p.durationMin >= 30, { message: "Duration must be at least 30 minutes.", path: ["durationMin"] });
 r.post("/packages", requirePermission("edit_packages"), async (c) => c.json({ id: await catalogService.savePackage(c.env, actor(c), await body(c, packageSchema)) }));
+const priceRow = z.object({ id: z.string().min(1).max(64), pricing: z.enum(["fixed", "quote"]), priceKobo: z.number().int().min(0).max(500_000_000) });
+r.put("/prices", requirePermission("edit_packages"), async (c) => {
+  const b = await body(c, z.object({ packages: z.array(priceRow).max(300).default([]), extras: z.array(priceRow).max(300).default([]) }));
+  await catalogService.setPrices(c.env, actor(c), b);
+  return c.json(ok);
+});
+r.put("/copy", requirePermission("edit_content"), async (c) => {
+  const b = await body(c, z.object({
+    kind: z.enum(["content", "service", "package", "extra", "faq", "policy", "page"]),
+    id: z.string().trim().min(1).max(120),
+    field: z.string().trim().min(1).max(40),
+    value: z.string().max(20000),
+  }));
+  await contentService.saveCopy(c.env, actor(c), b);
+  return c.json(ok);
+});
 r.delete("/packages/:id", requirePermission("edit_packages"), async (c) => { await catalogService.deletePackage(c.env, actor(c), c.req.param("id")); return c.json(ok); });
 r.put("/rules", requirePermission("edit_packages"), async (c) => {
   const b = await body(c, z.object({

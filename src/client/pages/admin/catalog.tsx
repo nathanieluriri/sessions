@@ -7,17 +7,18 @@ import { hrs, naira } from "../../lib/format";
 import { sessionDays, sessionWindow } from "../../lib/booking";
 import { act, CollectionEditor, Tabs, useApi } from "./kit";
 
-type Tab = "packages" | "services" | "sessions" | "rooms" | "categories" | "extras" | "rules";
+type Tab = "prices" | "packages" | "services" | "sessions" | "rooms" | "categories" | "extras" | "rules";
 
 export function Catalogue() {
-  const [tab, setTab] = useState<Tab>("packages");
+  const [tab, setTab] = useState<Tab>("prices");
   const [d, load] = useApi<any>("/admin/catalog");
   const reload = () => { load(); loadCatalog(true); };
   if (!d) return <Loading />;
   const catOptions: [string, string][] = d.categories.map((c: any) => [c.slug, c.name]);
   const serviceOptions: [string, string][] = [["", "Every service"], ...d.services.map((s: any) => [s.slug, s.name] as [string, string])];
   return <>
-    <Tabs value={tab} onChange={setTab} tabs={[["packages", "Packages"], ["services", "Services"], ["sessions", "Session times"], ["rooms", "Rooms"], ["categories", "Categories"], ["extras", "Extras"], ["rules", "Deposits and approvals"]]} />
+    <Tabs value={tab} onChange={setTab} tabs={[["prices", "Prices"], ["packages", "Packages"], ["services", "Services"], ["sessions", "Session times"], ["rooms", "Rooms"], ["categories", "Categories"], ["extras", "Extras"], ["rules", "Deposits and approvals"]]} />
+    {tab === "prices" && <PricesTab d={d} reload={reload} />}
     {tab === "packages" && <PackagesTab d={d} reload={reload} />}
     {tab === "services" && <CollectionEditor name="services" noun="service" intro={<span className="small muted">Each service gets its own page. Packages in the same category are shown on it.</span>}
       blank={{ name: "", category: catOptions[0]?.[0] ?? "music", description: "", details: "", deliverables: [], duration_label: "", price_label: "", image_url: "", gallery: [], card_art: "default", active: 1 }}
@@ -67,6 +68,51 @@ export function Catalogue() {
       row={(e) => <div><b>{e.name}</b><div className="caption">{e.pricing === "quote" ? "Price on request" : naira(e.price_kobo)} · {d.services.find((x: any) => x.slug === e.service_slug)?.name ?? d.categories.find((c: any) => c.slug === e.category)?.name ?? "Every category"}</div></div>} />}
     {tab === "rules" && <Rules rules={d.rules} reload={reload} />}
   </>;
+}
+
+function PricesTab({ d, reload }: { d: any; reload: () => void }) {
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const show = (name: string) => !needle || name.toLowerCase().includes(needle);
+  const save = (packages: { id: string; pricing: "fixed" | "quote"; priceKobo: number }[], extras: { id: string; pricing: "fixed" | "quote"; priceKobo: number }[] = []) =>
+    act(() => api("/admin/prices", { method: "PUT", body: { packages, extras } }), "Prices updated", () => { reload(); loadCatalog(true); });
+  const quoteAll = (packages: any[]) => save(packages.map((p) => ({ id: p.id, pricing: "quote" as const, priceKobo: p.price_kobo })));
+  return <div className="stack gap16">
+    <div className="card stack gap8">
+      <h3 className="h4">Prices and quotes</h3>
+      <span className="small muted">Set a price, or switch a package or add-on to Request a quote. The cards on the site use the price label that follows. Past bookings keep the price they were given.</span>
+      <Field label="Find a service" name="priceq" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Recording, podcast, album art" />
+      <div><Btn kind="neutral" size="sm" onClick={() => quoteAll(d.packages)}>Request a quote for every package</Btn></div>
+    </div>
+    {d.categories.map((c: any) => {
+      const services = d.services.filter((s: any) => s.category === c.slug && show(s.name));
+      const extras = d.extras.filter((e: any) => (e.category === c.slug || services.some((s: any) => s.slug === e.service_slug)) && (show(e.name) || services.some((s: any) => show(s.name))));
+      const packages = d.packages.filter((p: any) => services.some((s: any) => s.slug === p.service_slug || (!p.service_slug && p.service_category === c.slug)));
+      if (!services.length && !extras.length) return null;
+      return <div key={c.slug} className="card stack gap12">
+        <div className="row between wrapflex gap12"><h3 className="h4" style={{ margin: 0 }}>{c.name}</h3>{packages.length > 0 && <button className="link small" onClick={() => quoteAll(packages)}>Request a quote for {c.name}</button>}</div>
+        {services.map((s: any) => {
+          const mine = d.packages.filter((p: any) => p.service_slug === s.slug || (!p.service_slug && p.service_category === s.category));
+          return <div key={s.id} className="stack gap8" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+            <div className="row between gap12 wrapflex"><b>{s.name}</b><span className="caption">{s.price_label}</span></div>
+            {mine.map((p: any) => <PriceRow key={`${p.id}-${p.pricing}-${p.price_kobo}`} name={p.name} pricing={p.pricing} kobo={p.price_kobo} onQuote={() => save([{ id: p.id, pricing: p.pricing === "quote" ? "fixed" : "quote", priceKobo: p.price_kobo }])} onPrice={(kobo) => save([{ id: p.id, pricing: "fixed", priceKobo: kobo }])} />)}
+            {mine.length === 0 && <span className="caption">No package yet. This service already asks for a quote.</span>}
+          </div>;
+        })}
+        {extras.length > 0 && <div className="stack gap8"><span className="mono faint">Add-ons</span>{extras.map((e: any) => <PriceRow key={`${e.id}-${e.pricing}-${e.price_kobo}`} name={e.name} pricing={e.pricing} kobo={e.price_kobo} onQuote={() => save([], [{ id: e.id, pricing: e.pricing === "quote" ? "fixed" : "quote", priceKobo: e.price_kobo }])} onPrice={(kobo) => save([], [{ id: e.id, pricing: "fixed", priceKobo: kobo }])} />)}</div>}
+      </div>;
+    })}
+  </div>;
+}
+
+function PriceRow({ name, pricing, kobo, onQuote, onPrice }: { name: string; pricing: string; kobo: number; onQuote: () => void; onPrice: (kobo: number) => void }) {
+  return <div className="row between gap12 wrapflex">
+    <span className="small">{name}</span>
+    <div className="row gap8" style={{ alignItems: "center" }}>
+      {pricing === "quote" ? <Tag>Request a quote</Tag> : <input className="input" style={{ width: 140 }} type="number" aria-label={`Price for ${name}`} defaultValue={kobo / 100} onBlur={(e) => { const next = Math.round(Number(e.target.value) * 100); if (!Number.isNaN(next) && next !== kobo) onPrice(Math.max(0, next)); }} />}
+      <button className="link small" onClick={onQuote}>{pricing === "quote" ? "Set a price" : "Request a quote"}</button>
+    </div>
+  </div>;
 }
 
 function PackagesTab({ d, reload }: { d: any; reload: () => void }) {

@@ -81,7 +81,7 @@ describe("catalog", () => {
     expect(pkg("produce-ep").includes.join(" ")).not.toMatch(/price on request/i);
     expect(pkg("produce-ep").includes.length).toBeGreaterThan(3);
     expect(pkg("song-cover")).toMatchObject({ price_kobo: 18_000_000, pricing: "fixed" });
-    expect(pkg("podcast-hour")).toMatchObject({ price_kobo: 6_000_000, unit: "per hour", scheduling: "flex" });
+    expect(pkg("podcast-hour")).toMatchObject({ price_kobo: 6_000_000, unit: "per hour", scheduling: "flex", pricing: "quote" });
     expect(pkg("photo-session-2-hour")).toMatchObject({ price_kobo: 4_000_000, unit: "per hour", duration_min: 60 });
     expect(pkg("mixing-mastering-express")).toMatchObject({ scheduling: "project", price_kobo: 17_000_000, turnaround_days: 1 });
     expect(pkg("mixing-mastering-standard")).toMatchObject({ scheduling: "project", price_kobo: 10_000_000, turnaround_days: 7 });
@@ -338,10 +338,10 @@ describe("what a booking may not be", () => {
     expect((await h.client().post("/api/holds", draft(MIX, monday(), 0, { people: 200 }))).status).toBe(200);
     expect((await h.client().post("/api/quote", draft(MIX, monday(), 0, { people: 201 }))).status).toBe(400);
   });
-  it("books the podcast studio online at ₦60,000 per hour", async () => {
+  it("asks for a quote instead of booking the podcast studio online", async () => {
     const held = await h.client().post("/api/holds", draft(PODCAST, monday(), S1));
-    expect(held.status, JSON.stringify(held.body)).toBe(200);
-    expect(held.body.draft).toMatchObject({ scheduling: "flex", total: 6_000_000, duration: 60 });
+    expect(held.status, JSON.stringify(held.body)).toBe(400);
+    expect(held.body.error).toMatch(/quote/i);
   });
   it("keeps a beat's start date and refuses one that is missing or too far ahead", async () => {
     const date = addDays(studioNow().date, 4);

@@ -12,7 +12,7 @@ import { badRequest, conflict, forbidden, notFound, AppError } from "../lib/erro
 import { loadRules, windowFor } from "./availability";
 import { newReference, paymentProvider, refundBooking } from "./payments";
 import { notifyStaff, notifyUser, sendEmail } from "./notifications";
-import { balanceOf, emails, paidNet, payLink, when } from "./emails";
+import { balanceOf, emails, paidNet, payLink, receiptLink, when } from "./emails";
 import { audit } from "./audit";
 import { forStaff } from "../lib/redact";
 
@@ -45,14 +45,14 @@ async function refundShareOf(_env: Env, _b: BookingRow) {
 const windowEnd = (hours: number, b: { date: string; start_min: number; scheduling?: string }) =>
   new Date(Math.min(Date.now() + hours * 3_600_000, b.scheduling === "project" ? Infinity : Date.now() + minutesUntil(b.date, b.start_min) * 60_000)).toISOString();
 
-export async function priceDraft(env: Env, input: DraftInput, rules?: Rules): Promise<Draft> {
+export async function priceDraft(env: Env, input: DraftInput, rules?: Rules, opts?: { allowQuote?: boolean }): Promise<Draft> {
   const [svc, pkg, extras, r, sessions] = await Promise.all([
     catalogRepo.serviceBySlug(env.DB, input.serviceSlug), catalogRepo.packageById(env.DB, input.packageId), catalogRepo.extras(env.DB), rules ?? loadRules(env),
     catalogRepo.sessionSlots(env.DB),
   ]);
   if (!svc) throw badRequest("Choose a service.");
   if (!pkg || !pkg.active) throw badRequest("This package is no longer available.");
-  if (pkg.pricing === "quote") throw badRequest("This package is priced by quote. Send a quote request instead.");
+  if (pkg.pricing === "quote" && !opts?.allowQuote) throw badRequest("This package is priced by quote. Send a quote request instead.");
   if (pkg.service_category !== svc.category || (pkg.service_slug && pkg.service_slug !== svc.slug)) throw badRequest("Pick a package that fits this service.");
   const mode = pkg.scheduling;
   const remote = mode === "project";
@@ -130,7 +130,7 @@ const staffCanSeeMoney = (u: SessionUser) => ["record_payments", "verify_payment
 async function startPayment(env: Env, p: { holdId: string | null; bookingId: string | null; cartId?: string | null; userId: string | null; email: string; amount: number; kind: PaymentRow["kind"] }, origin: string) {
   const provider = paymentProvider(env);
   const reference = newReference();
-  await paymentsRepo.create(env.DB, { id: uuid(), reference, holdId: p.holdId, bookingId: p.bookingId, cartId: p.cartId, userId: p.userId, amount: p.amount, provider: provider.name, kind: p.kind });
+  await paymentsRepo.create(env.DB, { id: uuid(), reference, holdId: p.holdId, bookingId: p.bookingId, cartId: p.cartId, userId: p.userId, amount: p.amount, provider: provider.name, kind: p.kind, receiptToken: randomToken(18) });
   try {
     const url = await provider.initialize(reference, p.amount, p.email, `${origin}/book/verify?reference=${reference}`);
     return { reference, authorizationUrl: url, provider: provider.name, amount: p.amount };
@@ -580,6 +580,7 @@ export const bookingService = {
     return {
       booking: { ...forStaff(b, user), extras: JSON.parse(b.extras), paid_kobo: paidNet(b), balance_kobo: balanceOf(b) }, payments: money ? payments : null, pendingRequest: pending, due: dueNow(b),
       payLink: money ? payLink(env, b) : null,
+      receipts: money ? payments.filter((p) => p.receipt_token).map((p) => ({ reference: p.reference, url: receiptLink(env, p.receipt_token) })) : [],
       history: history.filter((h) => h.id !== b.id).map((h) => ({ id: h.id, ref: h.ref, date: h.date, start_min: h.start_min, package_name: h.package_name, status: h.status, total_kobo: h.total_kobo })),
     };
   },
@@ -732,6 +733,24 @@ export const bookingService = {
     return { refund: amount, manual };
   },
 
+  /** A receipt view of one payment. Admin sees who recorded it; the token page never leaks contacts. */
+  async receipt(env: Env, reference: string) {
+    const p = await this.lookupPayment(env, reference);
+    if (!["success", "refunded"].includes(p.status)) throw badRequest("Only a successful payment has a receipt.");
+    if (!p.booking_id) throw badRequest("This payment has no booking yet, so no receipt is available.");
+    const b = await loadBooking(env, p.booking_id);
+    return { payment: p, booking: b };
+  },
+
+  /** The client-facing receipt: whoever holds the token from the email or a printed slip. No contact details beyond the booking. */
+  async receiptByToken(env: Env, token: string) {
+    if (!token) throw notFound();
+    const p = await paymentsRepo.byReceiptToken(env.DB, token);
+    if (!p || !["success", "refunded"].includes(p.status) || !p.booking_id) throw notFound();
+    const b = await loadBooking(env, p.booking_id);
+    return { payment: p, booking: b };
+  },
+
   async lookupPayment(env: Env, reference: string) {
     if (!reference) throw badRequest("Enter a reference code.");
     const p = await paymentsRepo.lookup(env.DB, reference);
@@ -765,16 +784,21 @@ export const bookingService = {
     if (["pending", "approved"].includes(b.status) && !(await bookingsRepo.decideIfFree(env.DB, b, { status: "confirmed", by: actor.id, note: b.decision_note, expiresAt: null }, (await loadRules(env)).buffer, new Date().toISOString()))) {
       throw ["pending", "approved"].includes((await loadBooking(env, id)).status) ? taken() : alreadyDecided();
     }
+    const receiptToken = randomToken(18);
     const res = await env.DB.batch([
-      paymentsRepo.manual(env.DB, { id: uuid(), reference: newReference("PRM"), bookingId: b.id, userId: b.user_id, amount: p.amount, channel: p.method, note: p.note, by: actor.id }),
+      paymentsRepo.manual(env.DB, { id: uuid(), reference: newReference("PRM"), bookingId: b.id, userId: b.user_id, amount: p.amount, channel: p.method, note: p.note, by: actor.id, receiptToken }),
       bookingsRepo.addPaid(env.DB, b.id, p.amount),
     ]);
     if (res[0].meta.changes !== 1 || res[1].meta.changes !== 1) throw badRequest("The balance on this booking changed while you were recording. Reload and try again.");
     const fresh = await loadBooking(env, id);
     const confirmedNow = b.status !== "confirmed" && fresh.status === "confirmed";
-    if (notify) await mail(env, fresh, confirmedNow ? emails.confirmed(env, fresh) : emails.paymentReceived(env, fresh, p.amount, await unlocks(env, fresh)), confirmedNow ? "Booking confirmed" : "Payment received");
+    const receipt = receiptLink(env, receiptToken);
+    if (notify) {
+      if (confirmedNow) await mail(env, fresh, emails.confirmed(env, fresh), "Booking confirmed");
+      else await mail(env, fresh, emails.manualReceipt(env, fresh, p.amount, p.method, receipt), "Payment received");
+    }
     await audit(env.DB, actor, "Recorded payment", b.ref, `${naira(p.amount)} by ${p.method}${p.note ? `. ${p.note}` : ""}`);
-    return fresh;
+    return { booking: fresh, receipt };
   },
 
   async sendPaymentLink(env: Env, actor: SessionUser, id: string) {
@@ -792,7 +816,7 @@ export const bookingService = {
     const rules = await loadRules(env);
     const pkg = await catalogRepo.packageById(env.DB, input.packageId);
     const dated = pkg?.scheduling === "project" && pkg.service_category !== "exclusive" && !isDate(input.date) ? { ...input, date: studioNow().date } : input;
-    const draft = await priceDraft(env, dated, rules);
+    const draft = await priceDraft(env, dated, rules, { allowQuote: true });
     if (input.payment && input.payment.amount > draft.total) throw badRequest(`The payment is more than the ${naira(draft.total)} total.`);
     if (draft.scheduling !== "project" && minutesUntil(draft.date, draft.start + draft.duration) <= 0 && !(draft.scheduling === "flex" && input.ignoreHours && input.pastOk && hasPermission(actor, "manage_bookings"))) {
       throw badRequest("That session is already over. Pick a time that has not finished yet. Only a flex booking can be recorded after the fact, by staff who manage bookings, with the past-date box ticked.");
