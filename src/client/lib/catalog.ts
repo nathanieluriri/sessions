@@ -78,5 +78,5 @@ export const PHOTOS = {
   producer: "https://images.unsplash.com/photo-1648522168784-067e98df88c0?w=1400&q=70&auto=format&fit=crop",
   editing: "https://images.unsplash.com/photo-1632800237110-f9c87acc2222?w=1400&q=70&auto=format&fit=crop",
   voiceover: "https://images.unsplash.com/photo-1593697820980-a9d1a839aff7?w=1400&q=70&auto=format&fit=crop",
-  stage: "https://images.unsplash.com/photo-1612544409025-e1f6a56c1152?w=1400&q=70&auto=format&fit=crop",
+  stage: "/photos/the-stage.jpg",
 };
