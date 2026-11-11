@@ -19,9 +19,14 @@
     }
   ],
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "psych-records-media" }],
+  "workers_dev": true,
   "triggers": { "crons": ["*/5 * * * *"] },
+  "routes": [
+    { "pattern": "psychstudios.ng/*", "zone_name": "psychstudios.ng" },
+    { "pattern": "www.psychstudios.ng/*", "zone_name": "psychstudios.ng" }
+  ],
   "vars": {
-    "APP_URL": "https://sessions.uririnathaniel.workers.dev",
+    "APP_URL": "https://psychstudios.ng",
     "STUDIO_NAME": "Psych Studios",
     "STUDIO_EMAIL": "bookings@psychstudios.com",
     "STUDIO_PHONE": "+234 906 744 9860"

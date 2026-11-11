@@ -4,7 +4,7 @@ Website, online booking and studio management for Psych Studio, a music, video, 
 
 Everything runs on Cloudflare: one Worker serves the API, the React app (Workers Static Assets) and server-rendered page metadata, D1 is the database, R2 stores uploaded images and a Cron Trigger handles expiries and reminders.
 
-Live: https://sessions.uririnathaniel.workers.dev
+Live: https://psychstudios.ng
 
 Guides: [admin guide](docs/ADMIN_GUIDE.md) · [operations, costs and backups](docs/OPERATIONS.md) · [requirements coverage](docs/REQUIREMENTS.md)
 
