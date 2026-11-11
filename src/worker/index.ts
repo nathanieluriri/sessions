@@ -12,6 +12,7 @@ import { clientFileRoutes, staffFileRoutes } from "./routes/files";
 import { bookingService } from "./services/bookings";
 import { filesService } from "./services/files";
 import { media, page, robots, sitemap } from "./site";
+import { receiveEmail } from "./mail";
 
 const app = new Hono<AppEnv>().basePath("/api");
 
@@ -44,5 +45,8 @@ export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(bookingService.housekeeping(env));
     ctx.waitUntil(filesService.housekeeping(env));
+  },
+  async email(message, env) {
+    await receiveEmail(message, env);
   },
 } satisfies ExportedHandler<Env>;

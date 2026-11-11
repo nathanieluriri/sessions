@@ -56,7 +56,7 @@ export function Admin() {
 function Checklist({ setup }: { setup: Record<string, boolean> }) {
   const items: [boolean, string, string, string][] = [
     [setup.payments, "Connect Paystack", "Add the live secret key so clients pay through Paystack instead of the test checkout.", ""],
-    [setup.email, "Turn on email delivery", "Add a Resend API key so booking emails reach clients. Until then they are logged in the outbox.", "/admin/audit"],
+    [setup.email, "Turn on email delivery", "Booking mail is sent from bookings@psychstudios.ng. Until sending is on, messages are only kept in the outbox.", "/admin/audit"],
     [setup.domain, "Connect your domain", "Point your own domain at the site so links and emails use it.", ""],
     [setup.contact, "Check contact details", "Replace the sample phone, email, address and WhatsApp number.", "/admin/website"],
     [false, "Replace sample content", "Swap the sample team, equipment, portfolio, testimonials and photos for real ones.", "/admin/website"],
@@ -300,20 +300,30 @@ function Verify() {
 }
 
 function Audit() {
-  const [tab, setTab] = useState<"audit" | "outbox">("audit");
+  const [tab, setTab] = useState<"audit" | "outbox" | "inbox">("audit");
   const [log] = useApi<any[]>("/admin/audit");
   const [box] = useApi<any[]>("/admin/outbox");
+  const [inbox, reloadInbox] = useApi<any[]>("/admin/inbox");
   const [mail, setMail] = useState<any>(null);
+  const [reply, setReply] = useState("");
   return <>
-    <Seg value={tab} onChange={setTab} options={[["audit", "Audit log"], ["outbox", "Email outbox"]]} />
+    <Seg value={tab} onChange={setTab} options={[["audit", "Audit log"], ["outbox", "Email outbox"], ["inbox", "Inbox"]]} />
     {tab === "audit" ? (!log ? <Loading /> : <div className="scrollx"><table className="table">
       <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
       <tbody>{log.map((a) => <tr key={a.id}><td className="nowrap">{dateTime(a.created_at)}</td><td>{a.actor_label}</td><td><b className="small">{a.action}</b></td><td className="small">{a.target}</td><td className="small muted">{a.detail}</td></tr>)}</tbody>
-    </table></div>) : (!box ? <Loading /> : <div className="scrollx"><table className="table">
+    </table></div>) : tab === "outbox" ? (!box ? <Loading /> : <div className="scrollx"><table className="table">
       <thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
       <tbody>{box.map((m) => <tr key={m.id} className="click" onClick={() => setMail(m)}><td className="nowrap">{dateTime(m.created_at)}</td><td>{m.to_email}</td><td>{m.subject}</td><td><Tag tone={m.status === "sent" ? "success" : m.status === "failed" ? "danger" : ""}>{m.status}</Tag></td></tr>)}</tbody>
+    </table></div>) : (!inbox ? <Loading /> : <div className="scrollx"><table className="table">
+      <thead><tr><th>When</th><th>From</th><th>Subject</th></tr></thead>
+      <tbody>{inbox.map((m) => <tr key={m.id} className="click" onClick={() => { setMail(m); setReply(""); }}><td className="nowrap">{dateTime(m.created_at)}</td><td>{m.from_email}</td><td>{m.subject}</td></tr>)}</tbody>
     </table></div>)}
-    {mail && <Modal title={mail.subject} onClose={() => setMail(null)}><span className="small muted">To {mail.to_email}</span><pre className="panel small" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{mail.body}</pre></Modal>}
+    {mail && <Modal title={mail.subject} onClose={() => setMail(null)}>
+      <span className="small muted">{mail.to_email ? `To ${mail.to_email}` : `From ${mail.from_email}`}</span>
+      <pre className="panel small" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{mail.body}</pre>
+      {mail.from_email && <div className="stack gap8"><Area label="Reply" name="reply" value={reply} onChange={(e) => setReply(e.target.value)} rows={4} />
+        <Btn onClick={() => act(() => api(`/admin/inbox/${mail.id}/reply`, { method: "POST", body: { message: reply } }), "Reply sent", () => { setMail(null); reloadInbox(); })}>Send reply</Btn></div>}
+    </Modal>}
   </>;
 }
 

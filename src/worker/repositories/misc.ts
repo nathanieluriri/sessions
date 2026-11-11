@@ -19,6 +19,13 @@ export const outboxRepo = {
   latestFor: (db: D1Database, to: string, subjectLike: string) => first<{ body: string }>(db, "SELECT body FROM email_outbox WHERE to_email = ? AND subject LIKE ? ORDER BY created_at DESC LIMIT 1", to, subjectLike),
 };
 
+export const inboxRepo = {
+  add: (db: D1Database, m: { id: string; from: string; to: string; subject: string; body: string }) =>
+    run(db, "INSERT INTO inbox (id, from_email, to_email, subject, body) VALUES (?, ?, ?, ?, ?)", m.id, m.from, m.to, m.subject, m.body),
+  list: (db: D1Database) => all<{ id: string; from_email: string; to_email: string; subject: string; body: string; created_at: string }>(db, "SELECT * FROM inbox ORDER BY created_at DESC LIMIT 150"),
+  get: (db: D1Database, id: string) => first<{ id: string; from_email: string; to_email: string; subject: string; body: string }>(db, "SELECT * FROM inbox WHERE id = ?", id),
+};
+
 export interface EnquiryRow { id: string; name: string; email: string; phone: string; topic: string; message: string; status: string; kind: string; service: string; budget: string; timeline: string; links: string; created_at: string }
 
 export const enquiriesRepo = {

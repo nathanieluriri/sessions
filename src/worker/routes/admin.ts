@@ -14,7 +14,9 @@ import { run } from "../repositories/db";
 import { audit } from "../services/audit";
 import { forStaff } from "../lib/redact";
 import { draftFields } from "./booking";
-import { badRequest, forbidden } from "../lib/errors";
+import { badRequest, forbidden, notFound } from "../lib/errors";
+import { inboxRepo } from "../repositories/misc";
+import { sendEmail } from "../services/notifications";
 import { uuid } from "../lib/crypto";
 import { studioNow, addDays } from "../lib/time";
 import { can } from "../middleware/auth";
@@ -30,7 +32,7 @@ r.get("/overview", async (c) => {
   if (!isOwner(actor(c))) return c.json({ ...data, report: can(actor(c), "view_reports") ? data.report : null });
   const content = await contentRepo.content(c.env.DB);
   const setup = {
-    payments: !!c.env.PAYSTACK_SECRET_KEY, email: !!c.env.RESEND_API_KEY, domain: !new URL(c.env.APP_URL).hostname.endsWith(".workers.dev"),
+    payments: !!c.env.PAYSTACK_SECRET_KEY, email: !!c.env.EMAIL || !!c.env.RESEND_API_KEY, domain: !new URL(c.env.APP_URL).hostname.endsWith(".workers.dev"),
     contact: !!content.contact_phone && content.contact_phone !== "+234 812 555 0142", analytics: !!(content.analytics_cf || content.analytics_ga), indexing: content.seo_indexing === "1",
   };
   return c.json({ ...data, setup });
@@ -284,5 +286,20 @@ r.put("/staff/:id", requirePermission("manage_staff"), async (c) => {
 });
 r.get("/audit", requirePermission("view_audit"), async (c) => c.json(await dashboardService.audit(c.env)));
 r.get("/outbox", requirePermission("view_audit"), async (c) => c.json(await dashboardService.outbox(c.env)));
+const canReadMail = (u: ReturnType<typeof actor>) => isOwner(u) || can(u, "view_audit") || can(u, "assist_clients");
+r.get("/inbox", async (c) => {
+  if (!canReadMail(actor(c))) throw forbidden("You cannot read the studio inbox.");
+  return c.json(await inboxRepo.list(c.env.DB));
+});
+r.post("/inbox/:id/reply", async (c) => {
+  const u = actor(c);
+  if (!isOwner(u) && !can(u, "assist_clients")) throw forbidden("You cannot send email.");
+  const row = await inboxRepo.get(c.env.DB, c.req.param("id"));
+  if (!row) throw notFound("That message is not in the inbox.");
+  const { message } = await body(c, z.object({ message: required("Message", 4000) }));
+  const status = await sendEmail(c.env, row.from_email, row.subject.startsWith("Re:") ? row.subject : `Re: ${row.subject}`, `Hi,\n\n${message}`);
+  await audit(c.env.DB, u, "Replied to inbox mail", row.from_email, row.subject);
+  return c.json({ ok: true, status });
+});
 
 export default r;

@@ -23,11 +23,21 @@ export async function sendEmail(env: Env, to: string, subject: string, text: str
   const b = await brand(env);
   const body = `${text}\n\n${b.name}\n${[b.address, [b.phone, b.email].filter(Boolean).join(" · ")].filter(Boolean).join("\n")}`;
   let status: "sent" | "logged" | "failed" = "logged";
-  if (env.RESEND_API_KEY) {
+  const from = env.EMAIL_FROM || env.STUDIO_EMAIL;
+  const reply = b.email?.endsWith("@psychstudios.ng") ? b.email : from;
+  if (env.EMAIL) {
+    try {
+      await env.EMAIL.send({ to, from: { email: from, name: b.name }, replyTo: reply, subject, text: body });
+      status = "sent";
+    } catch (err) {
+      console.error(err);
+      status = "failed";
+    }
+  } else if (env.RESEND_API_KEY) {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: env.EMAIL_FROM || `${b.name} <onboarding@resend.dev>`, to, subject, text: body, reply_to: b.email || undefined }),
+      body: JSON.stringify({ from: `${b.name} <${from}>`, to, subject, text: body, reply_to: reply }),
     }).catch(() => null);
     status = res?.ok ? "sent" : "failed";
   }

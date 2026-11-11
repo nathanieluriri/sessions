@@ -268,7 +268,7 @@ describe("copy", () => {
     expect(body.content.seo_description).toBe("The World is Yours - Book Your Next Recording Session");
     expect(body.content.seo_image).toBe("/brand/share.png");
     expect(body.content.footer_blurb).toBe("");
-    expect(body.content.contact_email).toBe("bookings@psychstudios.com");
+    expect(body.content.contact_email).toBe("bookings@psychstudios.ng");
     expect(JSON.stringify(body.content)).not.toMatch(/hello@psychrecords\.ng|booking@psychrecords\.ng/);
     expect(body.policies).toEqual([]);
     for (const slug of ["cancellations", "terms", "approvals"]) {

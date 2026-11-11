@@ -20,7 +20,7 @@ function Why({ o, copy }: { o: Outcome; copy: () => void }) {
     <div className="warnbox" role="alert">
       <b>Delivered, but the artist could not be told.</b>
       {o.reason === "send_failed"
-        ? <span className="small"> The email provider refused the message. The files are on their portal, and the notice can be sent again from Resend notice below in a few minutes.</span>
+        ? <span className="small"> The email service refused the message. The files are on their portal, and the notice can be sent again from the button below in a few minutes.</span>
         : <span className="small"> This booking has no account or email on it, so nobody was notified. Ask the front desk to add the client's email under Edit details, then press Resend notice, or send the client the portal link yourself.</span>}
       <div className="row gap8 wrapflex"><Btn size="sm" kind="neutral" onClick={copy}>Copy portal link</Btn></div>
     </div>

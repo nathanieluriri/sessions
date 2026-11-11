@@ -20,8 +20,6 @@ Settings live in `wrangler.jsonc` (`vars`) and secrets are added with Wrangler s
 
 ```
 npx wrangler secret put PAYSTACK_SECRET_KEY   # sk_live_... from Paystack, Settings, API Keys
-npx wrangler secret put RESEND_API_KEY        # from Resend, API Keys
-npx wrangler secret put EMAIL_FROM            # for example: Psych Studio <bookings@your-domain.com>
 ```
 
 - `APP_URL` in `wrangler.jsonc` must be the public address, because email links use it.
@@ -34,11 +32,9 @@ npx wrangler secret put EMAIL_FROM            # for example: Psych Studio <booki
 3. Add the live secret key as above and deploy.
 4. Make a small real booking and refund it from the dashboard to check the full loop.
 
-### Resend
+### Email
 
-1. Add and verify your domain in Resend (it gives you DNS records to add in Cloudflare).
-2. Create an API key, then set `RESEND_API_KEY` and `EMAIL_FROM` (an address on the verified domain).
-3. Replies go to the contact email set in Website, Business and contact.
+Mail is sent by Cloudflare Email Sending from `bookings@psychstudios.ng`. The same address receives mail into Admin, Audit log, Inbox. Replies use that address. No separate email provider is required.
 
 ## Custom domain
 

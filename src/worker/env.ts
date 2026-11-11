@@ -9,6 +9,17 @@ export interface Env {
   PAYSTACK_SECRET_KEY?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  /** Cloudflare Email Sending. Present in production once the binding is deployed. */
+  EMAIL?: {
+    send(message: {
+      to: string | string[];
+      from: string | { email: string; name?: string };
+      replyTo?: string | { email: string; name?: string };
+      subject: string;
+      text?: string;
+      html?: string;
+    }): Promise<{ messageId: string }>;
+  };
 }
 
 export type Role = "client" | "admin" | "ceo";
