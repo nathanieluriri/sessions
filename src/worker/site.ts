@@ -59,8 +59,8 @@ export async function page(request: Request, env: Env) {
     const s = await catalogRepo.serviceBySlug(env.DB, service[1]);
     if (s) { title = `${s.name} | ${name}`; description = s.description; image = s.image_url; }
   }
-  const brandImage = !image;
-  if (brandImage) image = "/brand/og.png";
+  const brandImage = !image || image === "/brand/share.png";
+  if (!image) image = "/brand/share.png";
   if (image.startsWith("/")) image = url.origin + image;
   const hidden = content.seo_indexing !== "1" || PRIVATE_PREFIXES.some((p) => path === p || path.startsWith(p.endsWith("/") ? p : `${p}/`));
   const social = [content.social_instagram, content.social_tiktok, content.social_youtube, content.social_x].filter((s) => s && !/^https?:\/\/(www\.)?[a-z]+\.com\/?$/.test(s));

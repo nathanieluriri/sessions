@@ -118,9 +118,9 @@ def write_ico(path, frames):
     Path(path).write_bytes(head + entries + b"".join(blobs))
 
 
-def share_image(lockup_rgb):
+def share_image(art_rgb, width):
     card = Image.new("RGBA", (1200, 630), INK + (255,))
-    art = cut_out(scaled(lockup_rgb, 1020))
+    art = cut_out(scaled(art_rgb, width))
     card.alpha_composite(art, ((1200 - art.width) // 2, (630 - art.height) // 2))
     return card.convert("RGB").quantize(256, Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
 
@@ -141,7 +141,8 @@ def main(tiger, lockup):
     tile(mark, 192, 0.78).save(PUBLIC / "icon-192.png", optimize=True)
     tile(mark, 512, 0.78).save(PUBLIC / "icon-512.png", optimize=True)
     tile(mark, 512, 0.68, 0).convert("RGB").save(PUBLIC / "icon-maskable-512.png", optimize=True)
-    share_image(wordmark).save(BRAND / "og.png", optimize=True)
+    share_image(wordmark, 1020).save(BRAND / "og.png", optimize=True)
+    share_image(emblem, 540).save(BRAND / "share.png", optimize=True)
 
 
 if __name__ == "__main__":
