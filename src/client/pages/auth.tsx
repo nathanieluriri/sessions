@@ -76,7 +76,7 @@ export function Login() {
 
 export function StaffLogin() {
   return (
-    <AuthShell photo={PHOTOS.control} quote="Every session starts on time when the calendar is right." by="Psych Studios · Staff" title="Staff sign in." sub="For studio staff accounts created by the CEO. Client accounts cannot sign in here.">
+    <AuthShell photo={PHOTOS.control} quote="Every session starts on time when the calendar is right." by="Psych Studios · Staff" title="Staff sign in." sub="For studio staff accounts created by the CEO.">
       <LoginForm staff />
     </AuthShell>
   );
