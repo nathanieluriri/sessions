@@ -2,11 +2,26 @@ import { api } from "./api";
 
 export type AgentFormKind = "booking" | "quote" | "payment" | "price";
 
+export interface PreviewPayload {
+  title: string;
+  where?: string;
+  before?: string;
+  after?: string;
+  note?: string;
+  available: boolean;
+}
+
+export interface PendingChange {
+  tool: string;
+  args: Record<string, unknown>;
+  preview: PreviewPayload;
+}
+
 export interface ToolResult {
   tool: string;
   status: "ok" | "error";
   summary: string;
-  data?: { form?: AgentFormKind };
+  data?: { form?: AgentFormKind; pending?: PendingChange };
   kind?: "create" | "update" | "delete";
 }
 
@@ -22,6 +37,7 @@ export interface ChatResponse {
   toolResults: ToolResult[];
   suggestions: string[];
   form?: AgentFormKind;
+  pending?: PendingChange;
 }
 
 export interface Message {
@@ -58,8 +74,14 @@ export interface AgentCatalog {
   categories: { slug: string; name: string; bookable: number }[];
 }
 
-export const chat = (message: string, conversationId?: string, form?: { kind: AgentFormKind; values: Record<string, unknown> }) =>
-  api<ChatResponse>("/agent/chat", { method: "POST", body: { message, conversationId, form } });
+export const chat = (input: {
+  message?: string;
+  conversationId?: string;
+  form?: { kind: AgentFormKind; values: Record<string, unknown> };
+  confirm?: { tool: string; args: Record<string, unknown> };
+  decline?: boolean;
+  images?: string[];
+}) => api<ChatResponse>("/agent/chat", { method: "POST", body: input });
 
 export const agentCatalog = () => api<AgentCatalog>("/agent/catalog");
 
@@ -73,6 +95,12 @@ export const formOf = (m: Message | ChatResponse): AgentFormKind | undefined => 
   if ("form" in m && m.form) return m.form;
   const results = "toolResults" in m ? m.toolResults : m.tool_results;
   return results?.map((t) => t.data?.form).find((k): k is AgentFormKind => k === "booking" || k === "quote" || k === "payment" || k === "price");
+};
+
+export const pendingOf = (m: Message | ChatResponse): PendingChange | undefined => {
+  if ("pending" in m && m.pending) return m.pending;
+  const results = "toolResults" in m ? m.toolResults : m.tool_results;
+  return results?.map((t) => t.data?.pending).find((p): p is PendingChange => !!p?.tool);
 };
 
 export const toolLabel = (name: string) =>

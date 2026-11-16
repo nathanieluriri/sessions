@@ -23,15 +23,26 @@ describe("OpenAI tool names", () => {
   });
 });
 
+describe("copy aliases", () => {
+  it("maps email and phone to the website content keys", async () => {
+    const { aliasKey } = await import("../src/worker/services/agent/copy");
+    expect(aliasKey("email")).toBe("contact_email");
+    expect(aliasKey("studio email")).toBe("contact_email");
+    expect(aliasKey("phone")).toBe("contact_phone");
+  });
+});
+
 describe("skills", () => {
   it("loads the house skills on every turn", async () => {
     const { selectSkills, ALWAYS_ON_SKILLS } = await import("../src/worker/services/agent/skills");
     const text = selectSkills("hi");
-    expect(ALWAYS_ON_SKILLS).toBe(6);
+    expect(ALWAYS_ON_SKILLS).toBe(8);
     expect(text).toMatch(/catalogue/i);
     expect(text).toMatch(/bookings_form/);
     expect(text).toMatch(/quotes_form/);
     expect(text).toMatch(/payments_form/);
     expect(text).toMatch(/Never say you lack access/i);
+    expect(text).toMatch(/preview/i);
+    expect(text).toMatch(/content_set/);
   });
 });

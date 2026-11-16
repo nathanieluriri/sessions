@@ -24,7 +24,10 @@ r.post("/chat", requirePermission("use_agent"), async (c) => {
       kind: z.enum(["booking", "quote", "payment", "price"]),
       values: z.record(z.unknown()),
     }).optional(),
-  }).refine((x) => (x.message && x.message.trim()) || x.form, { message: "What would you like me to do?" }));
+    confirm: z.object({ tool: z.string().min(1), args: z.record(z.unknown()) }).optional(),
+    decline: z.boolean().optional(),
+    images: z.array(z.string().max(2_000_000)).max(2).optional(),
+  }).refine((x) => (x.message && x.message.trim()) || x.form || x.confirm || x.decline || (x.images && x.images.length), { message: "What would you like me to do?" }));
   return c.json(await runTurn(c.env, actor(c), b));
 });
 

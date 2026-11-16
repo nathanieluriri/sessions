@@ -33,8 +33,20 @@ payments_record adds a payment (never deletes). It emails a receipt when the boo
 receipts_send resends the receipt link. payments_link emails a Paystack link for the balance.
 If they want to record a payment and you do not have ref + amount + method, call payments_form.`;
 
+const COPY = `Skill — website copy (always on):
+The CEO can change any words on the site: studio email, phone, WhatsApp, address, headlines, service blurbs, FAQs, policies.
+- "Change the email to x" → content_set target "email" value x. A preview appears. Nothing saves until Accept.
+- Same for phone, address, headlines, and any other copy — not only contact fields.
+- If they attach a picture, read the text on it, content_find that phrase, then content_set the match. Preview, then wait.
+- If several fields match, list them and ask which one. Offer "Find another".`;
+
+const PREVIEW = `Skill — preview (always on):
+Edits and deletes must show a before/after preview. The app renders Accept / Decline.
+Never say "I've updated the site" before they Accept.
+If a preview cannot be built, say exactly: I tried to show a preview for this change but it wasn't available at this moment.`;
+
 export function selectSkills(_message: string): string {
-  return [GOLDEN, COMPLETE, CATALOG, BOOK, QUOTE, PAY].join("\n\n");
+  return [GOLDEN, COMPLETE, CATALOG, BOOK, QUOTE, PAY, COPY, PREVIEW].join("\n\n");
 }
 
-export const ALWAYS_ON_SKILLS = 6;
+export const ALWAYS_ON_SKILLS = 8;

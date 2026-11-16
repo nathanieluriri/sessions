@@ -5,6 +5,7 @@ import { catalogRepo } from "../../repositories/catalog";
 import { clientsRepo, enquiriesRepo, reportsRepo } from "../../repositories/misc";
 import { bookingService, depositFor } from "../bookings";
 import { catalogService, enquiryService, reportService } from "../admin";
+import { applyCopy, getCopy, resolveCopyTarget, searchCopy, type CopyKind } from "./copy";
 import { run } from "../../repositories/db";
 import { audit } from "../audit";
 import { emails, payLink, receiptLink } from "../emails";
@@ -127,6 +128,7 @@ const recordPaymentTool: ToolDef = {
   name: "payments_record",
   description: "Record a cash, transfer or POS payment against a booking by its reference. Money records are added, never removed.",
   risk: "write",
+  confirm: false,
   permission: "record_payments",
   schema: z.object({
     ref: z.string().min(1).describe("Booking reference, e.g. PR-ABCD-1234"),
@@ -146,6 +148,7 @@ const approveTool: ToolDef = {
   name: "bookings_approve",
   description: "Approve a pending booking request by reference so the client can pay to confirm.",
   risk: "write",
+  confirm: false,
   permission: "manage_bookings",
   schema: z.object({ ref: z.string().min(1), note: z.string().optional() }),
   execute: async (a, ctx) => {
@@ -159,6 +162,7 @@ const confirmTool: ToolDef = {
   name: "bookings_confirm",
   description: "Confirm a booking without payment (pay-on-arrival or a label account) by reference.",
   risk: "write",
+  confirm: false,
   permission: "manage_bookings",
   schema: z.object({ ref: z.string().min(1), note: z.string().optional() }),
   execute: async (a, ctx) => {
@@ -172,8 +176,13 @@ const rescheduleTool: ToolDef = {
   name: "bookings_reschedule",
   description: "Move a booking to a new date and start time by reference. Time is 24-hour HH:MM.",
   risk: "write",
+  confirm: true,
   permission: "manage_bookings",
   schema: z.object({ ref: z.string().min(1), date: z.string().describe("New date YYYY-MM-DD"), time: z.string().describe("New start time, 24-hour HH:MM") }),
+  preview: async (a, ctx) => {
+    const b = await resolveBooking(ctx.env, a.ref);
+    return { title: `Move ${b.ref}`, where: "Booking", before: describeBooking(b), after: `${prettyDate(a.date)} ${a.time}`, available: true };
+  },
   execute: async (a, ctx) => {
     const b = await resolveBooking(ctx.env, a.ref);
     await bookingService.reschedule(ctx.env, ctx.user, b.id, a.date, parseTime(a.time));
@@ -185,8 +194,13 @@ const cancelTool: ToolDef = {
   name: "bookings_cancel",
   description: "Cancel a booking by reference and refund what is owed under studio policy.",
   risk: "write",
+  confirm: true,
   permission: "manage_bookings",
   schema: z.object({ ref: z.string().min(1), reason: z.string().min(1) }),
+  preview: async (a, ctx) => {
+    const b = await resolveBooking(ctx.env, a.ref);
+    return { title: `Cancel ${b.ref}`, where: "Booking", before: describeBooking(b), after: `Cancelled · ${a.reason}`, note: "Cancelling does not refund what was paid.", available: true };
+  },
   execute: async (a, ctx) => {
     const b = await resolveBooking(ctx.env, a.ref);
     const r = await bookingService.cancel(ctx.env, ctx.user, b.id, a.reason);
@@ -198,6 +212,7 @@ const replyEnquiryTool: ToolDef = {
   name: "enquiries_reply",
   description: "Email a reply to an enquiry or quote request by the sender's email address.",
   risk: "write",
+  confirm: false,
   permission: "assist_clients",
   schema: z.object({ email: z.string().email().describe("The enquiry sender's email"), message: z.string().min(1) }),
   execute: async (a, ctx) => {
@@ -293,6 +308,7 @@ const catalogSetPriceTool: ToolDef = {
   name: "catalog_set_price",
   description: "Set a package or service to a fixed naira price (shows on the website) or switch it back to Request a quote. Past bookings keep their old price.",
   risk: "write",
+  confirm: true,
   permission: "edit_packages",
   schema: z.object({
     service: z.string().min(1).describe("Service name or slug"),
@@ -300,6 +316,13 @@ const catalogSetPriceTool: ToolDef = {
     amount_ngn: z.number().nonnegative().optional().describe("New price in naira. Required unless quote is true."),
     quote: z.boolean().optional().describe("If true, switch to Request a quote instead of a fixed price."),
   }),
+  preview: async (a, ctx) => {
+    const svc = await resolveService(ctx.env.DB, a.service);
+    if (!svc) throw new Error(`No service matches "${a.service}".`);
+    const quote = !!a.quote || !(a.amount_ngn && a.amount_ngn > 0);
+    const after = quote ? "Request a quote" : naira(Math.round((a.amount_ngn ?? 0) * 100));
+    return { title: `Website price · ${svc.name}`, where: "Services and pricing", before: svc.price_label || "Request a quote", after, available: true };
+  },
   execute: async (a, ctx) => {
     const svc = await resolveService(ctx.env.DB, a.service);
     if (!svc) throw new Error(`No service matches "${a.service}". Call catalog_list.`);
@@ -332,6 +355,7 @@ const bookingsCreateTool: ToolDef = {
   name: "bookings_create",
   description: "Create a booking for a client (phone, WhatsApp, walk-in). Emails them when notify is true. For quote packages pass amount_ngn.",
   risk: "write",
+  confirm: false,
   permission: "manage_bookings",
   schema: z.object({
     service: z.string().min(1).describe("Service slug or name"),
@@ -391,6 +415,7 @@ const quotesSendTool: ToolDef = {
   name: "quotes_send",
   description: "Email a staff-written quote to the client. By default also creates an approved booking at that price so they can pay.",
   risk: "write",
+  confirm: false,
   permission: "manage_bookings",
   schema: z.object({
     name: z.string().min(1),
@@ -441,6 +466,7 @@ const receiptsSendTool: ToolDef = {
   name: "receipts_send",
   description: "Email the latest receipt link for a booking to the client.",
   risk: "write",
+  confirm: false,
   permission: "print_receipts",
   schema: z.object({ ref: z.string().min(1) }),
   execute: async (a, ctx) => {
@@ -460,12 +486,68 @@ const paymentsLinkTool: ToolDef = {
   name: "payments_link",
   description: "Email the client a Paystack link for the amount still owed on a booking.",
   risk: "write",
+  confirm: false,
   permission: "record_payments",
   schema: z.object({ ref: z.string().min(1) }),
   execute: async (a, ctx) => {
     const b = await resolveBooking(ctx.env, a.ref);
     const r = await bookingService.sendPaymentLink(ctx.env, ctx.user, b.id);
     return { summary: `Payment link sent for ${b.ref}. ${r.link}` };
+  },
+};
+
+const contentFindTool: ToolDef = {
+  name: "content_find",
+  description: "Search website copy: studio email, phone, headlines, service text, FAQs, policies. Use after reading a photo or when they want to change words on the site.",
+  risk: "read",
+  permission: "edit_content",
+  schema: z.object({ query: z.string().min(2).describe("Words to find, e.g. email, phone, or a phrase from a screenshot") }),
+  execute: async (a, ctx) => {
+    const hits = await searchCopy(ctx.env, a.query);
+    if (!hits.length) return { summary: `No site copy matches "${a.query}".` };
+    return {
+      summary: hits.map((h, i) => `${i + 1}. ${h.where} · ${h.label} (${h.kind}/${h.id}/${h.field}): “${h.value.slice(0, 140)}${h.value.length > 140 ? "…" : ""}”`).join("\n"),
+    };
+  },
+};
+
+const contentSetTool: ToolDef = {
+  name: "content_set",
+  description: "Change website copy (studio email, phone, headlines, service blurbs, FAQs, policies). Always previewed — nothing saves until Accept.",
+  risk: "write",
+  confirm: true,
+  permission: "edit_content",
+  schema: z.object({
+    target: z.string().min(1).describe("What to change: email, phone, address, or a headline / phrase"),
+    value: z.string().min(1).describe("The new text"),
+    kind: z.enum(["content", "service", "package", "extra", "faq", "policy", "page"]).optional(),
+    id: z.string().optional(),
+    field: z.string().optional(),
+  }),
+  preview: async (a, ctx) => {
+    const hit = a.kind && a.id
+      ? await getCopy(ctx.env, a.kind as CopyKind, a.id, a.field || "value")
+      : await resolveCopyTarget(ctx.env, a.target);
+    if (!hit) throw new Error(`I could not find "${a.target}" on the site. Try content_find.`);
+    if (Array.isArray(hit)) {
+      throw new Error(`Several places match. Say which one:\n${hit.slice(0, 6).map((h, i) => `${i + 1}. ${h.where} · ${h.label}: “${h.value.slice(0, 80)}”`).join("\n")}`);
+    }
+    return {
+      title: `Change ${hit.label}`,
+      where: `${hit.where} · ${hit.label}`,
+      before: hit.value || "(empty)",
+      after: a.value,
+      available: true,
+    };
+  },
+  execute: async (a, ctx) => {
+    const hit = a.kind && a.id
+      ? { kind: a.kind as CopyKind, id: a.id, field: a.field || "value", value: a.value }
+      : await resolveCopyTarget(ctx.env, a.target);
+    if (!hit || Array.isArray(hit)) throw new Error(`I could not pick a single field for "${a.target}".`);
+    await applyCopy(ctx.env, ctx.user, { kind: hit.kind, id: hit.id, field: hit.field, value: a.value });
+    const label = "label" in hit ? `${hit.where} · ${hit.label}` : hit.id;
+    return { summary: `Updated ${hit.kind === "content" ? hit.id : label} to “${a.value}”.` };
   },
 };
 
@@ -479,6 +561,8 @@ export const studioTools: ToolDef[] = [
   catalogListTool,
   catalogPriceFormTool,
   catalogSetPriceTool,
+  contentFindTool,
+  contentSetTool,
   bookingsFormTool,
   bookingsCreateTool,
   quotesFormTool,

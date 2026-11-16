@@ -18,6 +18,21 @@ export interface ToolCall {
   args: Record<string, unknown>;
 }
 
+export interface PreviewPayload {
+  title: string;
+  where?: string;
+  before?: string;
+  after?: string;
+  note?: string;
+  available: boolean;
+}
+
+export interface PendingChange {
+  tool: string;
+  args: Record<string, unknown>;
+  preview: PreviewPayload;
+}
+
 export interface ToolExecResult {
   /** Short human summary, also stored on the message for audit. */
   summary: string;
@@ -45,6 +60,9 @@ export interface ToolDef<S extends z.ZodTypeAny = z.ZodTypeAny> {
   risk: Risk;
   permission: Permission;
   schema: S;
+  /** When true, the orchestrator shows a preview and waits for Accept. Defaults to risk !== "read". */
+  confirm?: boolean;
+  preview?: (args: z.infer<S>, ctx: ToolContext) => Promise<PreviewPayload>;
   execute: (args: z.infer<S>, ctx: ToolContext) => Promise<ToolExecResult>;
 }
 
@@ -54,6 +72,9 @@ export interface ChatTurnInput {
   message?: string;
   conversationId?: string;
   form?: { kind: AgentFormKind; values: Record<string, unknown> };
+  confirm?: { tool: string; args: Record<string, unknown> };
+  decline?: boolean;
+  images?: string[];
 }
 
 export interface ChatTurnOutput {
@@ -63,6 +84,7 @@ export interface ChatTurnOutput {
   toolResults: ToolResultSummary[];
   suggestions: string[];
   form?: AgentFormKind;
+  pending?: PendingChange;
 }
 
 export interface ConversationSummary {
