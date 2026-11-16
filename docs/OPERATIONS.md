@@ -30,7 +30,7 @@ npx wrangler secret put OPENROUTER_API_KEY    # OpenRouter key for the AI assist
 
 The staff assistant (Admin, Assistant, or the floating button) answers questions and acts on bookings, payments, reports and enquiries through OpenRouter. Each action is gated by the same staff permissions as the rest of the dashboard:
 
-- Set `OPENROUTER_API_KEY` as above. Optional: `OPENROUTER_MODEL` (default `openai/gpt-4o-mini`) and `OPENROUTER_FALLBACK_MODEL`. Chat requests cap `max_tokens` so a flagship model cannot fail with a 402 for requesting a 65k output budget.
+- Set `OPENROUTER_API_KEY` as above. Optional: `OPENROUTER_MODEL` (default `openai/gpt-6-astra`) and `OPENROUTER_FALLBACK_MODEL` (default `openai/gpt-6-luna`, which accepts tools). Chat requests cap `max_tokens` so a flagship model cannot fail with a 402 for requesting a 65k output budget.
 - Grant the **Use the AI assistant** permission from Staff and permissions. The CEO and COO have it automatically.
 - Without a key the assistant replies that it is not configured; it never acts.
 

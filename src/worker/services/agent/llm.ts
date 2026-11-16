@@ -5,6 +5,9 @@ import type { ToolRegistry } from "./registry";
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 const MAX_TOKENS = 2048;
 const TIMEOUT_MS = 25000;
+const DEFAULT_MODEL = "openai/gpt-6-astra";
+/** Fast GPT-6 tier: tools + tool_choice, cheap enough to survive when Astra 402s. */
+const DEFAULT_FALLBACK = "openai/gpt-6-luna";
 
 const SYSTEM_PROMPT = `You are the Psych Studios assistant, for the studio's own staff. You help run a music, video, podcast and photography studio.
 
@@ -29,8 +32,8 @@ export async function callLLM(
 ): Promise<{ text: string; toolCalls: ToolCall[] }> {
   const apiKey = trim(env.OPENROUTER_API_KEY);
   if (!apiKey) throw new Error("no key");
-  const model = trim(env.OPENROUTER_MODEL) || "openai/gpt-4o-mini";
-  const fallback = trim(env.OPENROUTER_FALLBACK_MODEL) || "openai/gpt-4o-mini";
+  const model = trim(env.OPENROUTER_MODEL) || DEFAULT_MODEL;
+  const fallback = trim(env.OPENROUTER_FALLBACK_MODEL) || DEFAULT_FALLBACK;
 
   const tools = opts.allowTools ? registry.toOpenAITools() : [];
   const body = {
@@ -81,7 +84,13 @@ async function post(env: Env, body: Record<string, unknown>, fallback?: string):
         const res = await fetch(ENDPOINT, {
           method: "POST",
           headers,
-          body: JSON.stringify({ ...body, model, max_tokens }),
+          body: JSON.stringify({
+            ...body,
+            model,
+            max_tokens,
+            // Chat Completions + tools on Luna only works with reasoning off.
+            ...(model.includes("gpt-6-luna") ? { reasoning: { effort: "none" } } : {}),
+          }),
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
         if (res.ok) {
