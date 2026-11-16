@@ -10,6 +10,10 @@ import { notFound } from "../lib/errors";
 const r = new Hono<AppEnv>();
 const actor = (c: Context<AppEnv>) => c.get("user") as SessionUser;
 
+const parseJson = <T>(raw: string, fallback: T): T => {
+  try { return JSON.parse(raw || "") as T; } catch { return fallback; }
+};
+
 r.post("/chat", requirePermission("use_agent"), async (c) => {
   const b = await body(c, z.object({ message: z.string().min(1), conversationId: z.string().optional() }));
   return c.json(await runTurn(c.env, actor(c), b));
@@ -30,7 +34,9 @@ r.get("/conversations/:id", requirePermission("use_agent"), async (c) => {
     updated_at: convo.updated_at,
     messages: messages.map((m) => ({
       id: m.id, role: m.role, text: m.text, created_at: m.created_at,
-      steps: JSON.parse(m.steps || "[]"), tool_results: JSON.parse(m.tool_results || "[]"), suggestions: JSON.parse(m.suggestions || "[]"),
+      steps: parseJson<string[]>(m.steps, []),
+      tool_results: parseJson(m.tool_results, []),
+      suggestions: parseJson<string[]>(m.suggestions, []),
     })),
   });
 });

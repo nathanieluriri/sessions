@@ -17,17 +17,42 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [cid, setCid] = useState(conversationId);
+  const prev = useRef<string | undefined>(undefined);
   const bottom = useRef<HTMLDivElement>(null);
 
+  useEffect(() => { setCid(conversationId); }, [conversationId]);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, busy]);
 
   useEffect(() => {
-    if (!conversationId) { setMessages([]); return; }
+    if (!cid) {
+      setMessages([]);
+      setError("");
+      setLoading(false);
+      prev.current = undefined;
+      return;
+    }
+    const switching = Boolean(prev.current && prev.current !== cid);
+    prev.current = cid;
     let alive = true;
-    getConversation(conversationId).then((c) => { if (alive) setMessages(c.messages); }).catch(() => {});
+    if (switching) setMessages([]);
+    setLoading(true);
+    getConversation(cid)
+      .then((c) => { if (alive) { setMessages(c.messages); setError(""); } })
+      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : "Could not open this chat."); })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [conversationId]);
+  }, [cid]);
+
+  const adopt = (id: string) => {
+    if (id && id !== cid) {
+      prev.current = id;
+      setCid(id);
+      onConversationId?.(id);
+    }
+  };
 
   const send = async (text: string) => {
     const value = text.trim();
@@ -38,10 +63,10 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
     const mine: Message = { id: `local-${Date.now()}`, role: "user", text: value, steps: [], tool_results: [], suggestions: [], created_at: new Date().toISOString() };
     setMessages((m) => [...m, mine]);
     try {
-      const r = await chat(value, conversationId);
+      const r = await chat(value, cid);
       const reply: Message = { id: `local-${Date.now()}-a`, role: "assistant", text: r.text, steps: r.steps.map((s) => s.label), tool_results: r.toolResults, suggestions: r.suggestions, created_at: new Date().toISOString() };
       setMessages((m) => [...m, reply]);
-      if (!conversationId && r.conversationId) onConversationId?.(r.conversationId);
+      adopt(r.conversationId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "It didn't work.");
     } finally {
@@ -49,14 +74,22 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
     }
   };
 
+  const empty = messages.length === 0 && !busy && !loading;
+
   return (
     <div className={`agent-surface ${layout}`}>
       <div className="agent-scroll">
-        {messages.length === 0 && !busy && (
+        {loading && empty && <p className="muted small" style={{ textAlign: "center", padding: 24 }}>Opening chat…</p>}
+        {empty && !loading && !cid && (
           <div className="agent-empty">
             <span className="agent-mark"><Icon name="chat" size={22} /></span>
             <p><b>Studio assistant</b></p>
             <p className="muted">Ask about bookings, payments, clients or reports, or ask me to record a payment, approve a request, or reply to an enquiry. I only do what your permissions allow.</p>
+          </div>
+        )}
+        {empty && !loading && cid && (
+          <div className="agent-empty">
+            <p className="muted">This chat has no saved messages yet. Send one below and it will stay here.</p>
           </div>
         )}
         {messages.map((m) => (
@@ -66,7 +99,7 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
               {m.tool_results?.length > 0 && <div className="agent-tools">{m.tool_results.map((t, i) => <ToolLine key={i} t={t} />)}</div>}
               <div className="agent-text">{renderMarkdown(m.text)}</div>
               {m.suggestions?.length > 0 && (
-                <div className="agent-suggs">{m.suggestions.map((s, i) => <button key={i} className="chip" onClick={() => send(s)} disabled={busy}>{s}</button>)}</div>
+                <div className="agent-suggs">{m.suggestions.map((s, i) => <button key={i} type="button" className="chip" onClick={() => send(s)} disabled={busy}>{s}</button>)}</div>
               )}
             </div>
           </div>
@@ -84,7 +117,7 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
           rows={1}
           disabled={busy}
         />
-        <button className="agent-send" onClick={() => send(input)} disabled={busy || !input.trim()} aria-label="Send">
+        <button type="button" className="agent-send" onClick={() => send(input)} disabled={busy || !input.trim()} aria-label="Send">
           <Icon name="arrow" size={16} />
         </button>
       </div>

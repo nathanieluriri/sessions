@@ -23,5 +23,11 @@ export const agentRepo = {
     run(db, "INSERT INTO agent_messages (id, conversation_id, role, text, steps, tool_results, suggestions) VALUES (?, ?, ?, ?, ?, ?, ?)",
       m.id, m.conversationId, m.role, m.text, m.steps, m.toolResults, m.suggestions),
 
-  delete: (db: D1Database, id: string, ownerId: string) => run(db, "DELETE FROM agent_conversations WHERE id = ? AND owner_id = ?", id, ownerId),
+  async delete(db: D1Database, id: string, ownerId: string) {
+    const own = await first<ConversationRow>(db, "SELECT * FROM agent_conversations WHERE id = ? AND owner_id = ?", id, ownerId);
+    if (!own) return;
+    await run(db, "DELETE FROM agent_messages WHERE conversation_id = ?", id);
+    await run(db, "DELETE FROM agent_conversations WHERE id = ? AND owner_id = ?", id, ownerId);
+  },
+
 };

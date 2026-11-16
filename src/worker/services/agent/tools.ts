@@ -3,10 +3,9 @@ import type { ToolDef } from "./types";
 import { bookingsRepo } from "../../repositories/bookings";
 import { clientsRepo, enquiriesRepo, reportsRepo } from "../../repositories/misc";
 import { bookingService } from "../bookings";
-import { reportService } from "../admin";
-import { enquiryService } from "../admin";
+import { enquiryService, reportService } from "../admin";
 import { naira } from "../../lib/money";
-import { addDays, label12, prettyDate, studioNow, timeRange } from "../../lib/time";
+import { addDays, prettyDate, studioNow, timeRange } from "../../lib/time";
 
 /** Find a booking by its public reference (PR…). The agent works with refs, never raw ids. */
 async function resolveBooking(env: { DB: D1Database }, ref: string) {
@@ -29,27 +28,37 @@ function parseTime(t: string): number {
 const describeBooking = (b: { ref: string; date: string; start_min: number; end_min: number; scheduling: string; contact_name: string; package_name: string; service_name: string; status: string; total_kobo: number; amount_paid_kobo: number; refunded_kobo: number }) =>
   `${b.ref} — ${b.contact_name || "no name"} · ${b.service_name} / ${b.package_name}${b.scheduling !== "project" ? ` · ${prettyDate(b.date)} ${timeRange(b.date, b.start_min, b.end_min)}` : ""} · ${b.status} · ${naira(b.total_kobo)}${b.amount_paid_kobo - b.refunded_kobo > 0 ? ` (paid ${naira(b.amount_paid_kobo - b.refunded_kobo)})` : ""}`;
 
-// ---------------------------------------------------------------------------
-// Read tools
-// ---------------------------------------------------------------------------
-
 const listBookingsTool: ToolDef = {
-  name: "bookings.list",
-  description: "List bookings by date or status. Leave both empty for today's upcoming sessions.",
+  name: "bookings_list",
+  description: "List bookings by date or status. Leave both empty for the next few weeks from yesterday.",
   risk: "read",
   permission: "view_calendar",
-  schema: z.object({ date: z.string().optional(), status: z.enum(["pending", "approved", "confirmed", "completed", "cancelled", "no_show"]).optional() }),
+  schema: z.object({ date: z.string().optional().describe("YYYY-MM-DD"), status: z.enum(["pending", "approved", "confirmed", "completed", "cancelled", "no_show"]).optional() }),
   execute: async (a, ctx) => {
     const today = studioNow().date;
     const from = a.date ?? addDays(today, -1);
     const rows = await bookingsRepo.list(ctx.env.DB, { from, to: a.date ?? addDays(from, 30), status: a.status });
     if (rows.length === 0) return { summary: "No bookings match." };
-    return { summary: rows.map(describeBooking).join("\n"), data: rows };
+    const shown = rows.slice(0, 25);
+    const extra = rows.length > shown.length ? `\n…and ${rows.length - shown.length} more.` : "";
+    return { summary: shown.map(describeBooking).join("\n") + extra };
+  },
+};
+
+const getBookingTool: ToolDef = {
+  name: "bookings_get",
+  description: "Look up one booking by its public reference (PR…).",
+  risk: "read",
+  permission: "view_calendar",
+  schema: z.object({ ref: z.string().min(1).describe("Booking reference, e.g. PR-ABCD-1234") }),
+  execute: async (a, ctx) => {
+    const b = await resolveBooking(ctx.env, a.ref);
+    return { summary: describeBooking(b) };
   },
 };
 
 const outstandingTool: ToolDef = {
-  name: "payments.outstanding",
+  name: "payments_outstanding",
   description: "List bookings that still owe money (outstanding balances).",
   risk: "read",
   permission: "view_payments",
@@ -57,15 +66,14 @@ const outstandingTool: ToolDef = {
   execute: async (_a, ctx) => {
     const rows = await reportsRepo.outstanding(ctx.env.DB);
     if (rows.length === 0) return { summary: "No outstanding balances." };
-    return {
-      summary: rows.map((r) => `${r.ref} — ${r.contact_name || "no name"} · ${r.package_name} · balance ${naira(r.balance)}`).join("\n"),
-      data: rows,
-    };
+    const shown = rows.slice(0, 25);
+    const extra = rows.length > shown.length ? `\n…and ${rows.length - shown.length} more.` : "";
+    return { summary: shown.map((r) => `${r.ref} — ${r.contact_name || "no name"} · ${r.package_name} · balance ${naira(r.balance)}`).join("\n") + extra };
   },
 };
 
 const overviewTool: ToolDef = {
-  name: "reports.overview",
+  name: "reports_overview",
   description: "Monthly studio overview: bookings, revenue collected, outstanding, refunds and utilisation.",
   risk: "read",
   permission: "view_reports",
@@ -76,13 +84,12 @@ const overviewTool: ToolDef = {
     const r = await reportService.overview(ctx.env, monthStart, addDays(monthStart, 30));
     return {
       summary: `This month: ${r.bookings} bookings, ${naira(r.collected)} collected, ${naira(r.outstanding)} outstanding, ${naira(r.refunds.total)} refunded, ${r.utilisation}% room utilisation.`,
-      data: r,
     };
   },
 };
 
 const findClientTool: ToolDef = {
-  name: "clients.find",
+  name: "clients_find",
   description: "Find a client by name, email or phone and show their bookings and balance.",
   risk: "read",
   permission: "assist_clients",
@@ -92,13 +99,12 @@ const findClientTool: ToolDef = {
     if (rows.length === 0) return { summary: `No client matches "${a.query.trim()}".` };
     return {
       summary: rows.slice(0, 8).map((r) => `${r.name || r.email || r.phone} — ${r.bookings} booking(s), ${naira(r.paid)} paid, ${naira(r.balance)} balance`).join("\n"),
-      data: rows.slice(0, 8),
     };
   },
 };
 
 const listEnquiriesTool: ToolDef = {
-  name: "enquiries.list",
+  name: "enquiries_list",
   description: "List recent enquiries and quote requests that are still open.",
   risk: "read",
   permission: "assist_clients",
@@ -108,17 +114,12 @@ const listEnquiriesTool: ToolDef = {
     if (rows.length === 0) return { summary: "No open enquiries." };
     return {
       summary: rows.map((e) => `${e.name} (${e.email}) — ${e.kind === "quote" ? `Quote for ${e.service || "a project"}` : e.topic}`).join("\n"),
-      data: rows,
     };
   },
 };
 
-// ---------------------------------------------------------------------------
-// Write tools — each maps to an existing permissioned service. No deletes.
-// ---------------------------------------------------------------------------
-
 const recordPaymentTool: ToolDef = {
-  name: "payments.record",
+  name: "payments_record",
   description: "Record a cash, transfer or POS payment against a booking by its reference. Money records are added, never removed.",
   risk: "write",
   permission: "record_payments",
@@ -132,12 +133,12 @@ const recordPaymentTool: ToolDef = {
     const b = await resolveBooking(ctx.env, a.ref);
     const kobo = Math.round(a.amount_ngn * 100);
     const r = await bookingService.recordPayment(ctx.env, ctx.user, b.id, { amount: kobo, method: a.method, note: a.note ?? "" });
-    return { summary: `Recorded ${naira(kobo)} by ${a.method} on ${b.ref}.${r.receipt ? ` Receipt: ${r.receipt}` : ""}`, data: { ref: b.ref, amount_kobo: kobo } };
+    return { summary: `Recorded ${naira(kobo)} by ${a.method} on ${b.ref}.${r.receipt ? ` Receipt: ${r.receipt}` : ""}` };
   },
 };
 
 const approveTool: ToolDef = {
-  name: "bookings.approve",
+  name: "bookings_approve",
   description: "Approve a pending booking request by reference so the client can pay to confirm.",
   risk: "write",
   permission: "manage_bookings",
@@ -150,7 +151,7 @@ const approveTool: ToolDef = {
 };
 
 const confirmTool: ToolDef = {
-  name: "bookings.confirm",
+  name: "bookings_confirm",
   description: "Confirm a booking without payment (pay-on-arrival or a label account) by reference.",
   risk: "write",
   permission: "manage_bookings",
@@ -163,7 +164,7 @@ const confirmTool: ToolDef = {
 };
 
 const rescheduleTool: ToolDef = {
-  name: "bookings.reschedule",
+  name: "bookings_reschedule",
   description: "Move a booking to a new date and start time by reference. Time is 24-hour HH:MM.",
   risk: "write",
   permission: "manage_bookings",
@@ -176,7 +177,7 @@ const rescheduleTool: ToolDef = {
 };
 
 const cancelTool: ToolDef = {
-  name: "bookings.cancel",
+  name: "bookings_cancel",
   description: "Cancel a booking by reference and refund what is owed under studio policy.",
   risk: "write",
   permission: "manage_bookings",
@@ -189,7 +190,7 @@ const cancelTool: ToolDef = {
 };
 
 const replyEnquiryTool: ToolDef = {
-  name: "enquiries.reply",
+  name: "enquiries_reply",
   description: "Email a reply to an enquiry or quote request by the sender's email address.",
   risk: "write",
   permission: "assist_clients",
@@ -205,6 +206,7 @@ const replyEnquiryTool: ToolDef = {
 
 export const studioTools: ToolDef[] = [
   listBookingsTool,
+  getBookingTool,
   outstandingTool,
   overviewTool,
   findClientTool,

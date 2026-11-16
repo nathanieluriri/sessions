@@ -58,7 +58,9 @@ export const deleteConversation = (id: string) => api<{ deleted: boolean }>(`/ag
 
 export const toolLabel = (name: string) =>
   name
-    .split(".")
-    .pop()!
-    .replace(/[_-]/g, " ")
+    .split(/[._]/)
+    .filter(Boolean)
+    .slice(-2)
+    .join(" ")
+    .replace(/-/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());

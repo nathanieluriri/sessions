@@ -54,7 +54,7 @@ export function Admin() {
       <DashShell dark items={SECTIONS.map((x) => ({ ...x, locked: !allowed(user, x) }))} title={s.title}>
         {allowed(user, s) ? <Page /> : <Restricted what={s.title.toLowerCase()} />}
       </DashShell>
-      {can(user, "use_agent") && <AgentPanel />}
+      {can(user, "use_agent") && section !== "chat" && <AgentPanel />}
     </>
   );
 }

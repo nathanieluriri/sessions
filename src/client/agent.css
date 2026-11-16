@@ -129,19 +129,30 @@
 }
 .agent-send:disabled { opacity: 0.4; cursor: default; }
 
-/* Full page */
-.agent-page { display: grid; grid-template-columns: 260px 1fr; height: calc(100vh - 80px); background: #fff; }
-.agent-history { border-right: 1px solid var(--line); padding: 16px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+/* Full page — cancel the dashboard content padding so the thread fills the pane */
+.content:has(.agent-page) {
+  padding: 0;
+  gap: 0;
+  height: calc(100vh - 80px);
+  overflow: hidden;
+}
+.agent-page { display: grid; grid-template-columns: 260px 1fr; height: 100%; min-height: 0; background: #fff; }
+.agent-history { border-right: 1px solid var(--line); padding: 16px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .agent-history-head { display: flex; align-items: center; justify-content: space-between; }
-.agent-thread { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.agent-threads { display: flex; flex-direction: column; gap: 4px; }
+.agent-thread { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; }
 .agent-thread:hover { background: var(--surface); }
 .agent-thread.on { background: var(--brand); color: #fff; }
 .agent-thread.on .link { color: #fff; }
 .agent-thread .caption { flex: none; }
-.agent-main { min-width: 0; display: flex; flex-direction: column; }
+.agent-thread .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
 @media (max-width: 900px) {
-  .agent-page { grid-template-columns: 1fr; }
-  .agent-history { display: none; }
+  .content:has(.agent-page) { height: calc(100vh - 120px); }
+  .agent-page { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .agent-history { border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; }
+  .agent-threads { flex-direction: row; }
+  .agent-thread { flex: none; max-width: 220px; }
   .agent-panel { right: 12px; bottom: 12px; }
 }

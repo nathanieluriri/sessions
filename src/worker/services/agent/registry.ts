@@ -14,6 +14,16 @@ interface OpenAIFunction {
   };
 }
 
+/** OpenAI / OpenRouter reject dots in function names. */
+export const openAiToolName = (name: string) => name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+
+function fieldDescription(field: z.ZodTypeAny): string | undefined {
+  const desc = (field as { description?: string }).description;
+  if (typeof desc === "string" && desc) return desc;
+  const def = (field as { _def?: { description?: string } })._def;
+  return def?.description;
+}
+
 /** Convert a flat zod object schema into an OpenAI-compatible JSON-schema parameters object. */
 function zodToParams(schema: z.ZodTypeAny): OpenAIFunction["function"]["parameters"] {
   const properties: OpenAIFunction["function"]["parameters"]["properties"] = {};
@@ -24,7 +34,7 @@ function zodToParams(schema: z.ZodTypeAny): OpenAIFunction["function"]["paramete
     let optional = false;
     while (field instanceof z.ZodOptional || field instanceof z.ZodNullable || field instanceof z.ZodDefault) {
       if (field instanceof z.ZodOptional || field instanceof z.ZodDefault) optional = true;
-      field = (field as any)._def.innerType ?? (field as any).unwrap?.() ?? field;
+      field = (field as { _def?: { innerType?: z.ZodTypeAny } })._def?.innerType ?? (field as { unwrap?: () => z.ZodTypeAny }).unwrap?.() ?? field;
       if (!field) break;
     }
     let type = "string";
@@ -37,10 +47,12 @@ function zodToParams(schema: z.ZodTypeAny): OpenAIFunction["function"]["paramete
       items = { type: "string" };
     } else if (field instanceof z.ZodEnum) {
       type = "string";
-      en = (field as z.ZodEnum<any>).options as string[];
+      en = (field as z.ZodEnum<[string, ...string[]]>).options as string[];
     }
     const prop: OpenAIFunction["function"]["parameters"]["properties"][string] = items ? { type, items } : { type };
     if (en) prop.enum = en;
+    const desc = fieldDescription(raw) ?? fieldDescription(field);
+    if (desc) prop.description = desc;
     properties[key] = prop;
     if (!optional) required.push(key);
   }
@@ -56,7 +68,9 @@ export class ToolRegistry {
   }
 
   get(name: string): ToolDef | undefined {
-    return this.tools.get(name);
+    return this.tools.get(name)
+      ?? this.tools.get(name.replace(/_/g, "."))
+      ?? this.all().find((t) => openAiToolName(t.name) === name);
   }
 
   all(): ToolDef[] {
@@ -66,7 +80,7 @@ export class ToolRegistry {
   toOpenAITools(): OpenAIFunction[] {
     return this.all().map((t) => ({
       type: "function" as const,
-      function: { name: t.name, description: t.description, parameters: zodToParams(t.schema) },
+      function: { name: openAiToolName(t.name), description: t.description, parameters: zodToParams(t.schema) },
     }));
   }
 }
