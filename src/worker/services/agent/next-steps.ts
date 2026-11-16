@@ -10,6 +10,7 @@ export function nextSteps(
   if (pending) return pending.tool === "content_set" ? ["Find another place this appears"] : [];
   if (form) return [];
   const q = userText.toLowerCase();
+  if (tools.includes("catalog_set_price")) return [];
   if (tools.includes("catalog_list")) {
     return ["Send a quote to a client", "Put a naira price on one of these", "What's on today?"];
   }

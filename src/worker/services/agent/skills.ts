@@ -12,9 +12,10 @@ const COMPLETE = `Skill — finish the job (always on):
 - If several bookings or clients could match, ask "Which one?" instead of guessing.`;
 
 const CATALOG = `Skill — catalogue (always on):
-To answer anything about services, packages, prices, or "request a quote", call catalog_list first. If they only want Request a quote items, call catalog_list with quote_only true.
-A service whose price_label is "Request a quote" (or a package with pricing "quote") is quoted by staff — we set the price and email the client with quotes_form / quotes_send.
-To put a naira price on the website instead of Request a quote, call catalog_set_price (or catalog_price_form if they have not named the amount). That flips the package to a fixed price and updates the service card. To switch it back, call catalog_set_price with quote: true.
+If they named a service and a naira amount, call catalog_set_price only. The service argument is the official name (Music videos), never the rest of the sentence. Do not call catalog_list for a price change, and do not list the catalogue again if you already listed it this chat.
+Only call catalog_list when they ask to list or see services. If they only want Request a quote items, pass quote_only true.
+A service whose price_label is "Request a quote" is quoted by staff with quotes_form / quotes_send.
+catalog_set_price (or catalog_price_form if they have not named the amount) puts a naira price on the website. quote: true switches it back.
 Bookable packages have a naira price and can be reserved with bookings_form / bookings_create.`;
 
 const BOOK = `Skill — book for a client (always on):

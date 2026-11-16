@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState, type ClipboardEvent } from "react";
 import { isAccept, isDecline, lastOpenPending } from "../../../shared/agent-confirm";
-import { chat, formOf, getConversation, type AgentFormKind, type ChatResponse, type Message } from "../../lib/agent";
+import { chat, formOf, getConversation, type AgentFormKind, type AgentTable, type ChatResponse, type Message } from "../../lib/agent";
 import { Icon } from "../brand";
 import { AgentForm } from "./AgentForm";
 import { PreviewCard } from "./PreviewCard";
 import { ActivityBlock, ResultTable, tablesOf } from "./ToolRow";
 import { renderMarkdown, stripMdTables } from "./markdown";
+
+function visibleTables(thread: Message[], m: Message): AgentTable[] {
+  const tools = m.tool_results ?? [];
+  if (tools.some((t) => t.tool === "catalog_set_price" || t.tool === "content_set" || t.status === "error")) return [];
+  const tables = tablesOf(tools);
+  if (!tables.length) return [];
+  const i = thread.findIndex((x) => x.id === m.id);
+  const catalogAgain = tools.some((t) => t.tool === "catalog_list")
+    && thread.slice(0, Math.max(0, i)).some((x) => x.tool_results?.some((t) => t.tool === "catalog_list" && t.data?.table));
+  return catalogAgain ? [] : tables;
+}
 
 async function readImage(file: File): Promise<string> {
   const bmp = await createImageBitmap(file);
@@ -178,7 +189,7 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
           }
           const showForm = lastAssistant?.id === m.id && openForm;
           const showPreview = lastAssistant?.id === m.id && pending;
-          const tables = tablesOf(m.tool_results);
+          const tables = visibleTables(messages, m);
           const body = tables.length ? stripMdTables(m.text) : m.text;
           return (
             <div key={m.id} className="agent-msg assistant">

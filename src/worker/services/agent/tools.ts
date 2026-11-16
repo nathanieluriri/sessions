@@ -255,8 +255,13 @@ const replyEnquiryTool: ToolDef = {
 async function resolveService(db: D1Database, slugOrName: string) {
   const q = slugOrName.trim().toLowerCase();
   const services = await catalogRepo.services(db, true);
-  return services.find((s) => s.slug.toLowerCase() === q || s.name.toLowerCase() === q)
-    ?? services.find((s) => s.name.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q));
+  const exact = services.find((s) => s.slug.toLowerCase() === q || s.name.toLowerCase() === q);
+  if (exact) return exact;
+  const inside = services
+    .filter((s) => q.includes(s.name.toLowerCase()) || q.includes(s.slug.toLowerCase().replace(/-/g, " ")))
+    .sort((a, b) => b.name.length - a.name.length);
+  if (inside[0]) return inside[0];
+  return services.find((s) => s.name.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q));
 }
 
 async function resolvePackage(db: D1Database, idOrName: string, serviceSlug?: string) {
@@ -270,7 +275,7 @@ async function resolvePackage(db: D1Database, idOrName: string, serviceSlug?: st
 
 const catalogListTool: ToolDef = {
   name: "catalog_list",
-  description: "List studio services and packages, including Request a Quote items. Use this before answering anything about the catalogue. Pass quote_only when they only want services that still need a staff quote.",
+  description: "List studio services and packages. Use ONLY when they ask to list or see the catalogue. Do not call this when they named a service and a price — use catalog_set_price with the official service name only (e.g. Music videos).",
   risk: "read",
   permission: "view_calendar",
   schema: z.object({

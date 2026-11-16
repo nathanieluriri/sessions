@@ -5,7 +5,7 @@ import { uuid } from "../../lib/crypto";
 import { agentRepo } from "../../repositories/agent";
 import { callLLM, friendlyLlmError } from "./llm";
 import { ToolRegistry } from "./registry";
-import { isAccept, isDecline, lastOpenPending, lastPriceRequest, priceChangeOf, pendingGist } from "../../../shared/agent-confirm";
+import { isAccept, isDecline, isListRequest, lastOpenPending, pendingGist, resolvePriceJob } from "../../../shared/agent-confirm";
 import { nextSteps } from "./next-steps";
 import { selectSkills } from "./skills";
 import { studioTools } from "./tools";
@@ -49,13 +49,13 @@ function pendingOf(results: ToolResultSummary[]): PendingChange | undefined {
   }
 }
 
-function slim(results: ToolResultSummary[]): ToolResultSummary[] {
+function slim(results: ToolResultSummary[], keepTables = false): ToolResultSummary[] {
   return results.map((r) => {
     const d = (r.data ?? {}) as { form?: AgentFormKind; pending?: PendingChange; table?: { columns: string[]; rows: string[][] }; args?: Record<string, unknown> };
     const data: Record<string, unknown> = {};
     if (d.form) data.form = d.form;
     if (d.pending) data.pending = d.pending;
-    if (d.table?.columns?.length) data.table = d.table;
+    if (keepTables && d.table?.columns?.length) data.table = d.table;
     if (d.args && Object.keys(d.args).length) data.args = d.args;
     return { tool: r.tool, status: r.status, summary: r.summary, ...(Object.keys(data).length ? { data } : {}) };
   });
@@ -109,7 +109,7 @@ async function executeCall(reg: ToolRegistry, call: { name: string; args: Record
       preview = tool.preview ? await tool.preview(parsed.data, ctx) : fallbackPreview(tool.name, args);
     } catch (e) {
       const msg = e instanceof Error ? e.message : MISSING_PREVIEW;
-      if (hardPreviewFail(msg)) return { tool: tool.name, status: "error", summary: msg };
+      if (hardPreviewFail(msg)) return { tool: tool.name, status: "error", summary: msg, data: withMeta({}, args) };
       preview = { ...fallbackPreview(tool.name, args), available: true, note: msg };
     }
     if (!preview.available) {
@@ -129,7 +129,7 @@ async function executeCall(reg: ToolRegistry, call: { name: string; args: Record
     return { tool: call.name, status: "ok", summary: exec.summary, data: withMeta(exec.data, parsed.data as Record<string, unknown>) };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "It didn't work.";
-    return { tool: call.name, status: "error", summary: msg };
+    return { tool: call.name, status: "error", summary: msg, data: withMeta({}, parsed.data as Record<string, unknown>) };
   }
 }
 
@@ -157,10 +157,12 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
   }));
   const prior = history.slice(-16).map((m) => ({ role: m.role, text: m.text }));
   const open = lastOpenPending(history);
-  const inferred = lastPriceRequest(history) ?? priceChangeOf(message);
+  const priceJob = resolvePriceJob(message, history);
   const acceptJob = input.confirm
     ?? (isAccept(message) && open ? { tool: open.tool, args: open.args } : undefined)
-    ?? (isAccept(message) && inferred ? { tool: "catalog_set_price", args: inferred } : undefined);
+    ?? (isAccept(message) && priceJob ? { tool: "catalog_set_price", args: priceJob } : undefined);
+  const alreadyListed = history.some((m) => m.tool_results?.some((r) => r.tool === "catalog_list" && r.status === "ok"));
+  const listedThisTurn = isListRequest(message);
 
   const userText = input.decline || isDecline(message)
     ? "Decline the preview."
@@ -190,6 +192,17 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
         steps.push({ label: r.tool, status: r.status === "ok" ? "done" : "active" });
         text = r.status === "ok" ? `Done.\n\n${r.summary}` : r.summary;
       }
+    } else if (priceJob) {
+      const apply = history.some((m) => m.role === "user" && isAccept(m.text));
+      const r = await executeCall(reg, { name: "catalog_set_price", args: priceJob }, ctx, apply);
+      toolResults.push(r);
+      steps.push({ label: r.tool, status: r.status === "ok" ? "done" : "active" });
+      const pendingNow = pendingOf(toolResults);
+      text = apply && r.status === "ok"
+        ? `Done.\n\n${r.summary}`
+        : pendingNow
+          ? `Check the preview. Accept saves ${pendingGist(pendingNow)}.`
+          : r.summary;
     } else if (input.form) {
       const name = FORM_TOOLS[input.form.kind];
       const r = await executeCall(reg, { name, args: input.form.values }, ctx, false);
@@ -205,6 +218,7 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
         rounds++;
         for (const call of turn.toolCalls) {
           if (ONCE.has(call.name) && toolResults.some((r) => r.tool === call.name && r.status === "ok")) continue;
+          if (call.name === "catalog_list" && alreadyListed && !listedThisTurn) continue;
           const r = await executeCall(reg, call, ctx, false);
           toolResults.push(r);
           steps.push({ label: r.tool, status: r.status === "ok" ? "done" : "active" });
@@ -219,9 +233,8 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
         });
         if (turn.toolCalls.length === 0) break;
       }
-      const want = priceChangeOf(userText);
-      if (want && !pendingOf(toolResults) && !toolResults.some((r) => r.tool === "catalog_set_price")) {
-        const r = await executeCall(reg, { name: "catalog_set_price", args: want }, ctx, false);
+      if (priceJob && !pendingOf(toolResults) && !toolResults.some((r) => r.tool === "catalog_set_price" && r.status === "ok")) {
+        const r = await executeCall(reg, { name: "catalog_set_price", args: priceJob }, ctx, false);
         toolResults.push(r);
         steps.push({ label: r.tool, status: r.status === "ok" ? "done" : "active" });
       }
@@ -245,7 +258,7 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
   const form = formOf(toolResults);
   const pending = pendingOf(toolResults);
   const suggestions = nextSteps(userText, toolResults.map((r) => r.tool), pending, form);
-  const stored = slim(toolResults);
+  const stored = slim(toolResults, listedThisTurn);
   try {
     await agentRepo.addMessage(env.DB, {
       id: uuid(), conversationId, role: "assistant", text,
