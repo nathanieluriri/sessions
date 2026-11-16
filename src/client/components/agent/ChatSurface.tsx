@@ -37,12 +37,29 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [cid, setCid] = useState(conversationId);
+  const [menu, setMenu] = useState(false);
   const prev = useRef<string | undefined>(undefined);
   const bottom = useRef<HTMLDivElement>(null);
   const file = useRef<HTMLInputElement>(null);
+  const plus = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setCid(conversationId); }, [conversationId]);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, busy]);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent) => { if (!plus.current?.contains(e.target as Node)) setMenu(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
+  }, [menu]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u") { e.preventDefault(); file.current?.click(); }
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, []);
 
   useEffect(() => {
     if (!cid) {
@@ -178,36 +195,61 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
         {error && <div className="agent-msg error"><div className="agent-bubble">{error}</div></div>}
         <div ref={bottom} />
       </div>
-      {pics.length > 0 && (
-        <div className="agent-thumbs">
-          {pics.map((src, i) => (
-            <button key={i} type="button" className="agent-thumb" onClick={() => setPics((p) => p.filter((_, j) => j !== i))} aria-label="Remove picture">
-              <img src={src} alt="" />
+      <div className="agent-dock">
+        <div className="agent-box" onPaste={onPaste}>
+          {pics.length > 0 && (
+            <div className="agent-thumbs">
+              {pics.map((src, i) => (
+                <button key={i} type="button" className="agent-thumb" onClick={() => setPics((p) => p.filter((_, j) => j !== i))} aria-label="Remove picture">
+                  <img src={src} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onPaste={onPaste}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
+            placeholder="Ask anything, + for actions, paste a screenshot…"
+            rows={2}
+            disabled={busy}
+          />
+          <div className="agent-bar">
+            <div className="agent-pluswrap" ref={plus}>
+              <input ref={file} type="file" accept="image/*" hidden onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) addPic(f);
+              }} />
+              <button type="button" className={`agent-plus ${menu ? "on" : ""}`} onClick={() => setMenu((v) => !v)} disabled={busy} aria-label="Actions" aria-expanded={menu}>
+                <Icon name="plus" size={16} />
+              </button>
+              {menu && (
+                <div className="agent-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); file.current?.click(); }}>
+                    <span>Images and files</span><kbd>Ctrl+U</kbd>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); send("Create a booking"); }}>
+                    <span>Create a booking</span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); send("Send a quote"); }}>
+                    <span>Send a quote</span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); send("Change site copy"); }}>
+                    <span>Change site copy</span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); send("Record a payment"); }}>
+                    <span>Record a payment</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <button type="button" className="agent-send" onClick={() => send(input)} disabled={busy || (!input.trim() && !pics.length)} aria-label="Send">
+              <Icon name="arrow" size={16} />
             </button>
-          ))}
+          </div>
         </div>
-      )}
-      <div className="agent-composer" onPaste={onPaste}>
-        <input ref={file} type="file" accept="image/*" hidden onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (f) addPic(f);
-        }} />
-        <button type="button" className="agent-attach" onClick={() => file.current?.click()} disabled={busy} aria-label="Attach a picture">
-          <Icon name="image" size={16} />
-        </button>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onPaste={onPaste}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
-          placeholder="Ask, paste a screenshot, or attach one…"
-          rows={1}
-          disabled={busy}
-        />
-        <button type="button" className="agent-send" onClick={() => send(input)} disabled={busy || (!input.trim() && !pics.length)} aria-label="Send">
-          <Icon name="arrow" size={16} />
-        </button>
       </div>
     </div>
   );
