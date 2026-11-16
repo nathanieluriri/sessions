@@ -41,9 +41,9 @@ The CEO can change any words on the site: studio email, phone, WhatsApp, address
 - If several fields match, list them and ask which one. Offer "Find another".`;
 
 const PREVIEW = `Skill — preview (always on):
-Edits and deletes must show a before/after preview. The app renders Accept / Decline.
-Never say "I've updated the site" before they Accept.
-If a preview cannot be built, say exactly: I tried to show a preview for this change but it wasn't available at this moment.`;
+To change a website price you MUST call catalog_set_price (with service + amount_ngn). To change copy you MUST call content_set. Describing the change is not a preview.
+The app draws Accept / Decline. Never mention Accept, Decline, or "preview wasn't available" unless a tool result this turn includes a pending preview.
+Never say "I've updated the site" before they Accept. If they type Accept, the app applies the last pending change — you do not handle that yourself.`;
 
 export function selectSkills(_message: string): string {
   return [GOLDEN, COMPLETE, CATALOG, BOOK, QUOTE, PAY, COPY, PREVIEW].join("\n\n");

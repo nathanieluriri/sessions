@@ -7,7 +7,7 @@ export function nextSteps(
   pending?: { tool: string } | null,
   form?: string | null,
 ): string[] {
-  if (pending) return ["Find another place this appears"];
+  if (pending) return pending.tool === "content_set" ? ["Find another place this appears"] : [];
   if (form) return [];
   const q = userText.toLowerCase();
   if (tools.includes("catalog_list")) {

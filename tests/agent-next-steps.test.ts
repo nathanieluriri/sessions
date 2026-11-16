@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import { nextSteps } from "../src/worker/services/agent/next-steps";
 
 describe("nextSteps", () => {
-  it("asks to find another field while a preview is pending", () => {
+  it("asks to find another field while a copy preview is pending", () => {
     expect(nextSteps("change the email", ["content_set"], { tool: "content_set" })).toEqual([
       "Find another place this appears",
     ]);
+  });
+
+  it("hides chips while a price preview is waiting on Accept", () => {
+    expect(nextSteps("set music videos to 190000", ["catalog_set_price"], { tool: "catalog_set_price" })).toEqual([]);
   });
 
   it("hides chips when a form is already on screen", () => {

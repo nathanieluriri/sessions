@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ClipboardEvent } from "react";
-import { chat, formOf, getConversation, pendingOf, type AgentFormKind, type ChatResponse, type Message } from "../../lib/agent";
+import { isAccept, isDecline, lastOpenPending } from "../../../shared/agent-confirm";
+import { chat, formOf, getConversation, type AgentFormKind, type ChatResponse, type Message } from "../../lib/agent";
 import { Icon } from "../brand";
 import { AgentForm } from "./AgentForm";
 import { PreviewCard } from "./PreviewCard";
@@ -127,6 +128,15 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
     setInput("");
     const images = pics;
     setPics([]);
+    const waiting = lastOpenPending(messages);
+    if (waiting && isAccept(value)) {
+      await post("Accept the preview.", { confirm: { tool: waiting.tool, args: waiting.args } });
+      return;
+    }
+    if (waiting && isDecline(value)) {
+      await post("Decline the preview.", { decline: true });
+      return;
+    }
     await post(value || "Read this picture.", { message: value, images: images.length ? images : undefined });
   };
 
@@ -137,7 +147,7 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const openForm = lastAssistant ? formOf(lastAssistant) : undefined;
-  const pending = lastAssistant ? pendingOf(lastAssistant) : undefined;
+  const pending = lastOpenPending(messages);
   const empty = messages.length === 0 && !busy && !loading;
 
   return (

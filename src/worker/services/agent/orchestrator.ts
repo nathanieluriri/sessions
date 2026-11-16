@@ -5,6 +5,7 @@ import { uuid } from "../../lib/crypto";
 import { agentRepo } from "../../repositories/agent";
 import { callLLM, friendlyLlmError } from "./llm";
 import { ToolRegistry } from "./registry";
+import { isAccept, isDecline, lastOpenPending, lastPriceRequest, priceChangeOf, pendingGist } from "../../../shared/agent-confirm";
 import { nextSteps } from "./next-steps";
 import { selectSkills } from "./skills";
 import { studioTools } from "./tools";
@@ -65,6 +66,32 @@ function withMeta(data: unknown, args: Record<string, unknown>) {
   return { ...base, args };
 }
 
+function parseResults(raw: string): ToolResultSummary[] {
+  try { return JSON.parse(raw || "[]") as ToolResultSummary[]; } catch { return []; }
+}
+
+function fallbackPreview(tool: string, args: Record<string, unknown>): PreviewPayload {
+  const gist = pendingGist({ tool, args });
+  if (tool === "catalog_set_price") {
+    const after = args.quote ? "Request a quote" : typeof args.amount_ngn === "number" ? `₦${Number(args.amount_ngn).toLocaleString("en-NG")}` : "a new price";
+    return { title: `Website price · ${String(args.service || "service")}`, where: "Services and pricing", after, available: true, note: "Accept saves this on the site." };
+  }
+  if (tool === "content_set") {
+    return { title: `Change ${String(args.target || "copy")}`, after: String(args.value ?? gist), available: true };
+  }
+  if (tool === "bookings_reschedule") {
+    return { title: `Move ${String(args.ref || "booking")}`, after: `${args.date ?? ""} ${args.time ?? ""}`.trim(), available: true };
+  }
+  if (tool === "bookings_cancel") {
+    return { title: `Cancel ${String(args.ref || "booking")}`, after: String(args.reason || "Cancel"), available: true };
+  }
+  return { title: gist, after: gist, available: false, note: MISSING_PREVIEW };
+}
+
+function hardPreviewFail(msg: string): boolean {
+  return /could not find|no service matches|no package matches|several places match|no booking matches/i.test(msg);
+}
+
 async function executeCall(reg: ToolRegistry, call: { name: string; args: Record<string, unknown> }, ctx: ToolContext, apply: boolean): Promise<ToolResultSummary> {
   const tool = reg.get(call.name);
   if (!tool) return { tool: call.name, status: "error", summary: "I couldn't find a way to do that." };
@@ -76,21 +103,26 @@ async function executeCall(reg: ToolRegistry, call: { name: string; args: Record
     return { tool: call.name, status: "error", summary: parsed.error.issues[0]?.message ?? "More detail needed." };
   }
   if (!apply && wantsConfirm(tool)) {
+    const args = parsed.data as Record<string, unknown>;
+    let preview: PreviewPayload;
     try {
-      const preview: PreviewPayload = tool.preview
-        ? await tool.preview(parsed.data, ctx)
-        : { title: tool.name, available: false, note: MISSING_PREVIEW };
-      const pending: PendingChange = { tool: tool.name, args: parsed.data as Record<string, unknown>, preview };
-      return {
-        tool: tool.name,
-        status: "ok",
-        summary: preview.available ? `Preview ready: ${preview.title}` : MISSING_PREVIEW,
-        data: withMeta({ pending }, parsed.data as Record<string, unknown>),
-      };
+      preview = tool.preview ? await tool.preview(parsed.data, ctx) : fallbackPreview(tool.name, args);
     } catch (e) {
       const msg = e instanceof Error ? e.message : MISSING_PREVIEW;
-      return { tool: tool.name, status: "error", summary: msg };
+      if (hardPreviewFail(msg)) return { tool: tool.name, status: "error", summary: msg };
+      preview = { ...fallbackPreview(tool.name, args), available: true, note: msg };
     }
+    if (!preview.available) {
+      const fb = fallbackPreview(tool.name, args);
+      preview = { ...fb, ...preview, available: Boolean(preview.after || preview.before || fb.after), note: preview.note || fb.note };
+    }
+    const pending: PendingChange = { tool: tool.name, args, preview };
+    return {
+      tool: tool.name,
+      status: "ok",
+      summary: preview.available ? `Preview ready: ${preview.title}` : MISSING_PREVIEW,
+      data: withMeta({ pending }, args),
+    };
   }
   try {
     const exec = await tool.execute(parsed.data, ctx);
@@ -118,10 +150,21 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
     if (!own) throw forbidden("That conversation is not yours.");
   }
 
-  const prior = (await agentRepo.messages(env.DB, conversationId)).slice(-16).map((m) => ({ role: m.role, text: m.text }));
-  const userText = input.decline
+  const history = (await agentRepo.messages(env.DB, conversationId)).map((m) => ({
+    role: m.role,
+    text: m.text,
+    tool_results: parseResults(m.tool_results),
+  }));
+  const prior = history.slice(-16).map((m) => ({ role: m.role, text: m.text }));
+  const open = lastOpenPending(history);
+  const inferred = lastPriceRequest(history) ?? priceChangeOf(message);
+  const acceptJob = input.confirm
+    ?? (isAccept(message) && open ? { tool: open.tool, args: open.args } : undefined)
+    ?? (isAccept(message) && inferred ? { tool: "catalog_set_price", args: inferred } : undefined);
+
+  const userText = input.decline || isDecline(message)
     ? "Decline the preview."
-    : input.confirm
+    : input.confirm || isAccept(message)
       ? "Accept the preview."
       : input.form
         ? `Submitted the ${input.form.kind} form${message ? `: ${message}` : "."}`
@@ -136,13 +179,17 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
   const skills = selectSkills(userText);
 
   try {
-    if (input.decline) {
-      text = "No change. Nothing was saved.";
-    } else if (input.confirm) {
-      const r = await executeCall(reg, { name: input.confirm.tool, args: input.confirm.args }, ctx, true);
-      toolResults.push(r);
-      steps.push({ label: r.tool, status: r.status === "ok" ? "done" : "active" });
-      text = r.status === "ok" ? `Done.\n\n${r.summary}` : r.summary;
+    if (input.decline || isDecline(message)) {
+      text = (input.decline || open) ? "No change. Nothing was saved." : "There's nothing to decline.";
+    } else if (input.confirm || isAccept(message)) {
+      if (!acceptJob) {
+        text = "There's nothing waiting to accept. Tell me the change again — I'll show a preview, then Accept saves it.";
+      } else {
+        const r = await executeCall(reg, { name: acceptJob.tool, args: acceptJob.args }, ctx, true);
+        toolResults.push(r);
+        steps.push({ label: r.tool, status: r.status === "ok" ? "done" : "active" });
+        text = r.status === "ok" ? `Done.\n\n${r.summary}` : r.summary;
+      }
     } else if (input.form) {
       const name = FORM_TOOLS[input.form.kind];
       const r = await executeCall(reg, { name, args: input.form.values }, ctx, false);
@@ -165,14 +212,27 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
         const facts = toolResults.map((r) => `${r.tool}: ${r.summary}`).join("\n");
         const pending = pendingOf(toolResults);
         turn = await callLLM(env, reg, {
-          message: `Tool results:\n${facts}\n\nAnswer the user's original request ("${userText}") in plain language.${pending ? " A preview is on screen. Tell them to Accept to save, Decline to cancel, or say if they meant a different field." : ""} Do not claim a change is saved until they Accept. Do not reprint a catalogue or booking list as markdown — the app already shows it as a table. One or two sentences is enough.`,
+          message: `Tool results:\n${facts}\n\nAnswer the user's original request ("${userText}") in plain language.${pending ? " A preview card is on screen. Tell them to Accept to save or Decline to cancel." : " Do not mention Accept, Decline, or a missing preview — you did not open one."} Do not claim a change is saved until they Accept. Do not reprint a catalogue or booking list as markdown — the app already shows it as a table. One or two sentences is enough.`,
           history: prior,
           allowTools: rounds < 3 && !pending,
           extraSystem: skills,
         });
         if (turn.toolCalls.length === 0) break;
       }
-      text = turn.text.trim() || toolResults.map((r) => r.summary).join("\n");
+      const want = priceChangeOf(userText);
+      if (want && !pendingOf(toolResults) && !toolResults.some((r) => r.tool === "catalog_set_price")) {
+        const r = await executeCall(reg, { name: "catalog_set_price", args: want }, ctx, false);
+        toolResults.push(r);
+        steps.push({ label: r.tool, status: r.status === "ok" ? "done" : "active" });
+      }
+      const pendingNow = pendingOf(toolResults);
+      const raw = turn.text.trim();
+      const lied = /preview[^.]*wasn't available|nothing is saved until you accept/i.test(raw);
+      if (pendingNow && (!raw || lied)) {
+        text = `Check the preview. Accept saves ${pendingGist(pendingNow)}.`;
+      } else {
+        text = raw || toolResults.map((r) => r.summary).join("\n");
+      }
       if (!text) text = "I looked, but I have nothing to add. Try asking another way.";
     } else {
       text = "The assistant is not configured. Add OPENROUTER_API_KEY as a Worker secret to turn on the full assistant. Until then I cannot look anything up or act.";
