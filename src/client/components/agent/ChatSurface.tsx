@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent } from "react";
 import { chat, formOf, getConversation, pendingOf, toolLabel, type AgentFormKind, type ChatResponse, type Message, type ToolResult } from "../../lib/agent";
 import { Icon } from "../brand";
 import { AgentForm } from "./AgentForm";
@@ -83,6 +83,20 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
     created_at: new Date().toISOString(),
   });
 
+  const addPic = async (blob: Blob) => {
+    try {
+      const data = await readImage(blob instanceof File ? blob : new File([blob], "paste.jpg", { type: blob.type || "image/jpeg" }));
+      setPics((p) => [...p, data].slice(0, 2));
+    } catch { setError("Could not read that picture."); }
+  };
+
+  const onPaste = (e: ClipboardEvent) => {
+    const files = [...e.clipboardData.items].filter((i) => i.type.startsWith("image/")).map((i) => i.getAsFile()).filter(Boolean) as File[];
+    if (!files.length) return;
+    e.preventDefault();
+    files.slice(0, 2).forEach((f) => { addPic(f); });
+  };
+
   const post = async (label: string, body: Parameters<typeof chat>[0]) => {
     setBusy(true);
     setError("");
@@ -119,7 +133,7 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
   const empty = messages.length === 0 && !busy && !loading;
 
   return (
-    <div className={`agent-surface ${layout}`}>
+    <div className={`agent-surface ${layout}`} onPaste={onPaste}>
       <div className="agent-scroll">
         {loading && empty && <p className="muted small" style={{ textAlign: "center", padding: 24 }}>Opening chat…</p>}
         {empty && !loading && !cid && (
@@ -173,15 +187,11 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
           ))}
         </div>
       )}
-      <div className="agent-composer">
-        <input ref={file} type="file" accept="image/*" hidden onChange={async (e) => {
+      <div className="agent-composer" onPaste={onPaste}>
+        <input ref={file} type="file" accept="image/*" hidden onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = "";
-          if (!f) return;
-          try {
-            const data = await readImage(f);
-            setPics((p) => [...p, data].slice(0, 2));
-          } catch { setError("Could not read that picture."); }
+          if (f) addPic(f);
         }} />
         <button type="button" className="agent-attach" onClick={() => file.current?.click()} disabled={busy} aria-label="Attach a picture">
           <Icon name="image" size={16} />
@@ -189,8 +199,9 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onPaste={onPaste}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
-          placeholder="Ask, or attach a screenshot…"
+          placeholder="Ask, paste a screenshot, or attach one…"
           rows={1}
           disabled={busy}
         />
