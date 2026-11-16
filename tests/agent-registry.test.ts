@@ -22,3 +22,16 @@ describe("OpenAI tool names", () => {
     expect(r.toOpenAITools()[0].function.name).toMatch(/^[a-zA-Z0-9_-]+$/);
   });
 });
+
+describe("skills", () => {
+  it("loads the house skills on every turn", async () => {
+    const { selectSkills, ALWAYS_ON_SKILLS } = await import("../src/worker/services/agent/skills");
+    const text = selectSkills("hi");
+    expect(ALWAYS_ON_SKILLS).toBe(6);
+    expect(text).toMatch(/catalogue/i);
+    expect(text).toMatch(/bookings_form/);
+    expect(text).toMatch(/quotes_form/);
+    expect(text).toMatch(/payments_form/);
+    expect(text).toMatch(/Never say you lack access/i);
+  });
+});

@@ -1,10 +1,12 @@
 import { api } from "./api";
 
+export type AgentFormKind = "booking" | "quote" | "payment";
+
 export interface ToolResult {
   tool: string;
   status: "ok" | "error";
   summary: string;
-  data?: unknown;
+  data?: { form?: AgentFormKind };
   kind?: "create" | "update" | "delete";
 }
 
@@ -19,6 +21,7 @@ export interface ChatResponse {
   steps: Step[];
   toolResults: ToolResult[];
   suggestions: string[];
+  form?: AgentFormKind;
 }
 
 export interface Message {
@@ -29,6 +32,7 @@ export interface Message {
   tool_results: ToolResult[];
   suggestions: string[];
   created_at: string;
+  form?: AgentFormKind;
 }
 
 export interface Conversation {
@@ -47,14 +51,29 @@ export interface ConversationSummary {
   updated_at: string | null;
 }
 
-export const chat = (message: string, conversationId?: string) =>
-  api<ChatResponse>("/agent/chat", { method: "POST", body: { message, conversationId } });
+export interface AgentCatalog {
+  services: { slug: string; name: string; category: string; price_label: string }[];
+  packages: { id: string; slug: string; name: string; service_slug: string; service_category: string; pricing: "fixed" | "quote"; price_kobo: number; price_label: string; scheduling: string; room_id: string | null }[];
+  rooms: { id: string; name: string }[];
+  categories: { slug: string; name: string; bookable: number }[];
+}
+
+export const chat = (message: string, conversationId?: string, form?: { kind: AgentFormKind; values: Record<string, unknown> }) =>
+  api<ChatResponse>("/agent/chat", { method: "POST", body: { message, conversationId, form } });
+
+export const agentCatalog = () => api<AgentCatalog>("/agent/catalog");
 
 export const listConversations = () => api<ConversationSummary[]>("/agent/conversations");
 
 export const getConversation = (id: string) => api<Conversation>(`/agent/conversations/${id}`);
 
 export const deleteConversation = (id: string) => api<{ deleted: boolean }>(`/agent/conversations/${id}`, { method: "DELETE" });
+
+export const formOf = (m: Message | ChatResponse): AgentFormKind | undefined => {
+  if ("form" in m && m.form) return m.form;
+  const results = "toolResults" in m ? m.toolResults : m.tool_results;
+  return results?.map((t) => t.data?.form).find((k): k is AgentFormKind => k === "booking" || k === "quote" || k === "payment");
+};
 
 export const toolLabel = (name: string) =>
   name

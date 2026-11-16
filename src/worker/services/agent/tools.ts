@@ -1,9 +1,12 @@
 import { z } from "zod";
 import type { ToolDef } from "./types";
-import { bookingsRepo } from "../../repositories/bookings";
+import { bookingsRepo, paymentsRepo } from "../../repositories/bookings";
+import { catalogRepo } from "../../repositories/catalog";
 import { clientsRepo, enquiriesRepo, reportsRepo } from "../../repositories/misc";
-import { bookingService } from "../bookings";
+import { bookingService, depositFor } from "../bookings";
 import { enquiryService, reportService } from "../admin";
+import { emails, payLink, receiptLink } from "../emails";
+import { sendEmail } from "../notifications";
 import { naira } from "../../lib/money";
 import { addDays, prettyDate, studioNow, timeRange } from "../../lib/time";
 
@@ -204,6 +207,218 @@ const replyEnquiryTool: ToolDef = {
   },
 };
 
+async function resolveService(db: D1Database, slugOrName: string) {
+  const q = slugOrName.trim().toLowerCase();
+  const services = await catalogRepo.services(db, true);
+  return services.find((s) => s.slug.toLowerCase() === q || s.name.toLowerCase() === q)
+    ?? services.find((s) => s.name.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q));
+}
+
+async function resolvePackage(db: D1Database, idOrName: string, serviceSlug?: string) {
+  const q = idOrName.trim().toLowerCase();
+  const packages = await catalogRepo.packages(db, true);
+  const scoped = serviceSlug ? packages.filter((p) => !p.service_slug || p.service_slug === serviceSlug) : packages;
+  return scoped.find((p) => p.id === idOrName || p.slug.toLowerCase() === q)
+    ?? scoped.find((p) => p.name.toLowerCase() === q)
+    ?? scoped.find((p) => p.name.toLowerCase().includes(q));
+}
+
+const catalogListTool: ToolDef = {
+  name: "catalog_list",
+  description: "List every studio service and package, including Request a Quote items. Use this before answering anything about the catalogue.",
+  risk: "read",
+  permission: "view_calendar",
+  schema: z.object({}),
+  execute: async (_a, ctx) => {
+    const [services, packages, categories] = await Promise.all([
+      catalogRepo.services(ctx.env.DB, true),
+      catalogRepo.packages(ctx.env.DB, true),
+      catalogRepo.categories(ctx.env.DB),
+    ]);
+    const quoteServices = services.filter((s) => /quote/i.test(s.price_label) || packages.filter((p) => (p.service_slug ? p.service_slug === s.slug : p.service_category === s.category) && p.active).every((p) => p.pricing === "quote" || p.price_kobo === 0));
+    const lines = services.filter((s) => s.active).map((s) => {
+      const pkgs = packages.filter((p) => p.active && (p.service_slug ? p.service_slug === s.slug : p.service_category === s.category));
+      const cat = categories.find((c) => c.slug === s.category);
+      const bookable = cat?.bookable ? "online booking open" : "quote only (not booked online)";
+      const pkgBit = pkgs.length
+        ? pkgs.map((p) => `${p.name} (${p.pricing === "quote" ? "staff quote" : naira(p.price_kobo)})`).join("; ")
+        : "no packages";
+      return `${s.name} [${s.slug}] — ${s.price_label || "no price"} · ${bookable} · ${pkgBit}`;
+    });
+    return {
+      summary: `${services.filter((s) => s.active).length} services. ${quoteServices.filter((s) => s.active).length} are Request a Quote (staff set the price).\n${lines.join("\n")}`,
+    };
+  },
+};
+
+const bookingsFormTool: ToolDef = {
+  name: "bookings_form",
+  description: "Open the in-chat booking form (service, package, date, client, email confirmation). Call this when staff want to create a booking and have not given every field.",
+  risk: "read",
+  permission: "manage_bookings",
+  schema: z.object({}),
+  execute: async () => ({ summary: "Open the booking form and fill it in. Lists are the live catalogue.", data: { form: "booking" } }),
+};
+
+const quotesFormTool: ToolDef = {
+  name: "quotes_form",
+  description: "Open the in-chat quote form. Staff set the price and we email the client. Call this for Request a Quote work.",
+  risk: "read",
+  permission: "manage_bookings",
+  schema: z.object({}),
+  execute: async () => ({ summary: "Open the quote form. You set the price; we email the client.", data: { form: "quote" } }),
+};
+
+const paymentsFormTool: ToolDef = {
+  name: "payments_form",
+  description: "Open the in-chat payment form (booking reference, amount, method, send receipt).",
+  risk: "read",
+  permission: "record_payments",
+  schema: z.object({}),
+  execute: async () => ({ summary: "Open the payment form.", data: { form: "payment" } }),
+};
+
+const bookingsCreateTool: ToolDef = {
+  name: "bookings_create",
+  description: "Create a booking for a client (phone, WhatsApp, walk-in). Emails them when notify is true. For quote packages pass amount_ngn.",
+  risk: "write",
+  permission: "manage_bookings",
+  schema: z.object({
+    service: z.string().min(1).describe("Service slug or name"),
+    package: z.string().min(1).describe("Package id, slug or name"),
+    contact_name: z.string().min(1),
+    contact_phone: z.string().min(1),
+    contact_email: z.string().optional(),
+    artist_name: z.string().optional(),
+    date: z.string().optional().describe("YYYY-MM-DD"),
+    time: z.string().optional().describe("24-hour HH:MM"),
+    people: z.number().int().min(1).max(200).optional(),
+    source: z.enum(["phone", "whatsapp", "walk_in", "email", "instagram", "other"]).optional(),
+    status: z.enum(["confirmed", "approved"]).optional(),
+    notify: z.boolean().optional(),
+    amount_ngn: z.number().positive().optional().describe("Quoted total in naira, required for quote packages"),
+    pay_amount_ngn: z.number().positive().optional(),
+    pay_method: z.enum(["cash", "transfer", "pos", "other"]).optional(),
+    notes: z.string().optional(),
+    project: z.string().optional(),
+  }),
+  execute: async (a, ctx) => {
+    const svc = await resolveService(ctx.env.DB, a.service);
+    if (!svc) throw new Error(`No service matches "${a.service}". Call catalog_list.`);
+    const pkg = await resolvePackage(ctx.env.DB, a.package, svc.slug);
+    if (!pkg) throw new Error(`No package matches "${a.package}" for ${svc.name}.`);
+    const remote = pkg.scheduling === "project";
+    const date = a.date || studioNow().date;
+    const start = remote ? 0 : a.time ? parseTime(a.time) : 10 * 60;
+    const quoted = a.amount_ngn ? Math.round(a.amount_ngn * 100) : 0;
+    if (pkg.pricing === "quote" && quoted <= 0) throw new Error("This package is priced by quote. Enter the amount in naira.");
+    const created = await bookingService.createManual(ctx.env, ctx.user, {
+      serviceSlug: svc.slug, packageId: pkg.id, date, start, extraHours: 0, extras: [], people: a.people ?? 1,
+      artistName: a.artist_name || a.contact_name, contactName: a.contact_name, contactEmail: a.contact_email ?? "",
+      contactPhone: a.contact_phone, project: a.project ?? "", notes: a.notes ?? "", links: "",
+      status: a.status ?? "confirmed", source: a.source ?? "other", ignoreHours: true, pastOk: true,
+      notify: false, payment: null,
+    });
+    if (quoted > 0) {
+      const deposit = depositFor(quoted, pkg.deposit_percent ?? 100);
+      await bookingsRepo.setQuotedTotal(ctx.env.DB, created.id, quoted, quoted, deposit < quoted ? deposit : 0);
+    }
+    if (a.pay_amount_ngn && a.pay_method) {
+      await bookingService.recordPayment(ctx.env, ctx.user, created.id, { amount: Math.round(a.pay_amount_ngn * 100), method: a.pay_method, note: "" }, false);
+    }
+    const fresh = await bookingsRepo.byId(ctx.env.DB, created.id);
+    const b = fresh ?? created;
+    const notify = a.notify !== false;
+    if (notify && b.contact_email) {
+      const mail = b.status === "approved" ? emails.approved(ctx.env, b) : emails.confirmed(ctx.env, b);
+      await sendEmail(ctx.env, b.contact_email, mail.subject, mail.text);
+    }
+    return { summary: `Created ${b.ref} for ${b.contact_name} · ${b.service_name} / ${b.package_name} · ${naira(b.total_kobo)} · ${b.status}${notify && b.contact_email ? `. Emailed ${b.contact_email}` : notify ? ". No email on the booking, so nothing was sent." : ""}.` };
+  },
+};
+
+const quotesSendTool: ToolDef = {
+  name: "quotes_send",
+  description: "Email a staff-written quote to the client. By default also creates an approved booking at that price so they can pay.",
+  risk: "write",
+  permission: "manage_bookings",
+  schema: z.object({
+    name: z.string().min(1),
+    email: z.string().email(),
+    phone: z.string().optional(),
+    service: z.string().min(1),
+    package: z.string().optional(),
+    amount_ngn: z.number().positive(),
+    details: z.string().optional(),
+    create_booking: z.boolean().optional(),
+    date: z.string().optional(),
+    time: z.string().optional(),
+  }),
+  execute: async (a, ctx) => {
+    const svc = await resolveService(ctx.env.DB, a.service);
+    if (!svc) throw new Error(`No service matches "${a.service}". Call catalog_list.`);
+    const packages = await catalogRepo.packages(ctx.env.DB, true);
+    const pkg = a.package
+      ? await resolvePackage(ctx.env.DB, a.package, svc.slug)
+      : packages.find((p) => p.active && (p.service_slug ? p.service_slug === svc.slug : p.service_category === svc.category));
+    const kobo = Math.round(a.amount_ngn * 100);
+    const create = a.create_booking !== false && !!pkg;
+    let ref = "";
+    let pay = "";
+    if (create && pkg) {
+      const remote = pkg.scheduling === "project";
+      const created = await bookingService.createManual(ctx.env, ctx.user, {
+        serviceSlug: svc.slug, packageId: pkg.id, date: a.date || studioNow().date, start: remote ? 0 : a.time ? parseTime(a.time) : 10 * 60,
+        extraHours: 0, extras: [], people: 1, artistName: a.name, contactName: a.name, contactEmail: a.email,
+        contactPhone: a.phone ?? "", project: a.details ?? "", notes: "", links: "",
+        status: "approved", source: "email", ignoreHours: true, pastOk: true, notify: false, payment: null,
+      });
+      const deposit = depositFor(kobo, pkg.deposit_percent ?? 100);
+      await bookingsRepo.setQuotedTotal(ctx.env.DB, created.id, kobo, kobo, deposit < kobo ? deposit : 0);
+      const fresh = await bookingsRepo.byId(ctx.env.DB, created.id);
+      if (fresh) {
+        ref = fresh.ref;
+        pay = `\n\nPay to confirm: ${payLink(ctx.env, fresh)}`;
+      }
+    }
+    const body = `Hi ${a.name.split(" ")[0]},\n\nHere is our quote for ${svc.name}${pkg ? ` · ${pkg.name}` : ""}.\n\n${a.details ? `${a.details}\n\n` : ""}Total: ${naira(kobo)}${ref ? `\nBooking reference: ${ref}` : ""}${pay}\n\nReply to this email if you want to change anything.`;
+    await sendEmail(ctx.env, a.email, `Quote from Psych Studios · ${svc.name}`, body);
+    return { summary: `Quoted ${naira(kobo)} for ${svc.name} to ${a.email}${ref ? `. Booking ${ref} is approved, waiting for payment` : ""}.` };
+  },
+};
+
+const receiptsSendTool: ToolDef = {
+  name: "receipts_send",
+  description: "Email the latest receipt link for a booking to the client.",
+  risk: "write",
+  permission: "print_receipts",
+  schema: z.object({ ref: z.string().min(1) }),
+  execute: async (a, ctx) => {
+    const b = await resolveBooking(ctx.env, a.ref);
+    const pays = await paymentsRepo.forBooking(ctx.env.DB, b.id);
+    const p = [...pays].reverse().find((x) => x.receipt_token);
+    if (!p?.receipt_token) throw new Error(`No receipt on ${b.ref} yet. Record a payment first.`);
+    if (!b.contact_email) throw new Error(`${b.ref} has no email. Add one, or copy the receipt link ${receiptLink(ctx.env, p.receipt_token)}.`);
+    const link = receiptLink(ctx.env, p.receipt_token);
+    const mail = emails.manualReceipt(ctx.env, b, p.amount_kobo, p.channel || "card", link);
+    await sendEmail(ctx.env, b.contact_email, mail.subject, mail.text);
+    return { summary: `Receipt for ${naira(p.amount_kobo)} on ${b.ref} emailed to ${b.contact_email}. ${link}` };
+  },
+};
+
+const paymentsLinkTool: ToolDef = {
+  name: "payments_link",
+  description: "Email the client a Paystack link for the amount still owed on a booking.",
+  risk: "write",
+  permission: "record_payments",
+  schema: z.object({ ref: z.string().min(1) }),
+  execute: async (a, ctx) => {
+    const b = await resolveBooking(ctx.env, a.ref);
+    const r = await bookingService.sendPaymentLink(ctx.env, ctx.user, b.id);
+    return { summary: `Payment link sent for ${b.ref}. ${r.link}` };
+  },
+};
+
 export const studioTools: ToolDef[] = [
   listBookingsTool,
   getBookingTool,
@@ -211,10 +426,19 @@ export const studioTools: ToolDef[] = [
   overviewTool,
   findClientTool,
   listEnquiriesTool,
+  catalogListTool,
+  bookingsFormTool,
+  bookingsCreateTool,
+  quotesFormTool,
+  quotesSendTool,
+  paymentsFormTool,
   recordPaymentTool,
+  receiptsSendTool,
+  paymentsLinkTool,
   approveTool,
   confirmTool,
   rescheduleTool,
   cancelTool,
   replyEnquiryTool,
 ];
+

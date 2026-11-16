@@ -11,13 +11,15 @@ const DEFAULT_FALLBACK = "openai/gpt-6-luna";
 
 const SYSTEM_PROMPT = `You are the Psych Studios assistant, for the studio's own staff. You help run a music, video, podcast and photography studio.
 
+You have tools for the catalogue, creating bookings, sending staff-written quotes, recording payments, emailing receipts and payment links, listing clients, reports and enquiries. Use them. Never say you cannot see the catalogue or cannot create a booking.
+
 Rules:
-- You act only through the tools you are given. Never invent capabilities.
-- You never delete or reverse a financial record. Payments and refunds are append-only: you may record a payment, and you may cancel a booking (which refunds under policy), but you never remove a payment, refund or booking row.
+- Act only through tools. If a write needs several fields, open the form tool (bookings_form, quotes_form, payments_form) instead of asking for a typed list.
+- Never delete or reverse a financial record. Payments and refunds are append-only.
 - Work from booking references (PR…), client names or dates — never ask staff for internal database ids.
-- Money is whole naira. Convert to the amount in naira when a tool asks for it.
+- Money is whole naira.
 - When a tool result says you do not have permission, say so plainly and stop.
-- Answer briefly and in plain text (markdown ok for lists/tables).`;
+- Answer briefly in markdown.`;
 
 interface Choice {
   message?: { content?: string | null; tool_calls?: { function?: { name?: string; arguments?: string } }[] };
@@ -28,7 +30,7 @@ const trim = (s?: string) => (s ?? "").trim();
 export async function callLLM(
   env: Env,
   registry: ToolRegistry,
-  opts: { message: string; history: { role: string; text: string }[]; allowTools: boolean },
+  opts: { message: string; history: { role: string; text: string }[]; allowTools: boolean; extraSystem?: string },
 ): Promise<{ text: string; toolCalls: ToolCall[] }> {
   const apiKey = trim(env.OPENROUTER_API_KEY);
   if (!apiKey) throw new Error("no key");
@@ -36,11 +38,12 @@ export async function callLLM(
   const fallback = trim(env.OPENROUTER_FALLBACK_MODEL) || DEFAULT_FALLBACK;
 
   const tools = opts.allowTools ? registry.toOpenAITools() : [];
+  const system = opts.extraSystem ? `${SYSTEM_PROMPT}\n\n${opts.extraSystem}` : SYSTEM_PROMPT;
   const body = {
     model,
     max_tokens: MAX_TOKENS,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: system },
       ...opts.history.map((h) => ({ role: h.role === "assistant" ? "assistant" : "user", content: h.text })),
       { role: "user", content: opts.message },
     ],

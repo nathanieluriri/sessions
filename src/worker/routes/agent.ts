@@ -3,9 +3,11 @@ import { z } from "zod";
 import type { AppEnv, SessionUser } from "../env";
 import { requirePermission } from "../middleware/auth";
 import { agentRepo } from "../repositories/agent";
+import { catalogRepo } from "../repositories/catalog";
 import { runTurn } from "../services/agent/orchestrator";
 import { body } from "../lib/validate";
 import { notFound } from "../lib/errors";
+import { naira } from "../lib/money";
 
 const r = new Hono<AppEnv>();
 const actor = (c: Context<AppEnv>) => c.get("user") as SessionUser;
@@ -15,8 +17,34 @@ const parseJson = <T>(raw: string, fallback: T): T => {
 };
 
 r.post("/chat", requirePermission("use_agent"), async (c) => {
-  const b = await body(c, z.object({ message: z.string().min(1), conversationId: z.string().optional() }));
+  const b = await body(c, z.object({
+    message: z.string().optional(),
+    conversationId: z.string().optional(),
+    form: z.object({
+      kind: z.enum(["booking", "quote", "payment"]),
+      values: z.record(z.unknown()),
+    }).optional(),
+  }).refine((x) => (x.message && x.message.trim()) || x.form, { message: "What would you like me to do?" }));
   return c.json(await runTurn(c.env, actor(c), b));
+});
+
+r.get("/catalog", requirePermission("use_agent"), async (c) => {
+  const [services, packages, rooms, categories] = await Promise.all([
+    catalogRepo.services(c.env.DB, true),
+    catalogRepo.packages(c.env.DB, true),
+    catalogRepo.rooms(c.env.DB, true),
+    catalogRepo.categories(c.env.DB),
+  ]);
+  return c.json({
+    services: services.filter((s) => s.active).map((s) => ({ slug: s.slug, name: s.name, category: s.category, price_label: s.price_label })),
+    packages: packages.filter((p) => p.active).map((p) => ({
+      id: p.id, slug: p.slug, name: p.name, service_slug: p.service_slug, service_category: p.service_category,
+      pricing: p.pricing, price_kobo: p.price_kobo, price_label: p.pricing === "quote" ? "Staff quote" : naira(p.price_kobo),
+      scheduling: p.scheduling, room_id: p.room_id,
+    })),
+    rooms: rooms.filter((x) => x.active).map((x) => ({ id: x.id, name: x.name })),
+    categories,
+  });
 });
 
 r.get("/conversations", requirePermission("use_agent"), async (c) =>

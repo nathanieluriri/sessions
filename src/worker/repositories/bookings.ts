@@ -191,6 +191,9 @@ export const bookingsRepo = {
   addPaid: (db: D1Database, id: string, amount: number) =>
     stmt(db, `UPDATE bookings SET amount_paid_kobo = amount_paid_kobo + ?, status = CASE WHEN status IN ('pending', 'approved') THEN 'confirmed' ELSE status END,
       expires_at = CASE WHEN status IN ('pending', 'approved') THEN NULL ELSE expires_at END, updated_at = ${NOW} WHERE id = ? AND amount_paid_kobo - refunded_kobo + ? <= total_kobo`, amount, id, amount),
+  /** Staff quote: set the price on an unpaid booking just created. Never touches a paid row. */
+  setQuotedTotal: (db: D1Database, id: string, total: number, packagePrice: number, deposit: number) =>
+    run(db, `UPDATE bookings SET total_kobo = ?, package_price_kobo = ?, deposit_kobo = ?, updated_at = ${NOW} WHERE id = ? AND amount_paid_kobo = 0`, total, packagePrice, deposit, id),
   addRefunded: (db: D1Database, id: string, amount: number) => stmt(db, `UPDATE bookings SET refunded_kobo = refunded_kobo + ?, updated_at = ${NOW} WHERE id = ?`, amount, id),
   markReminded: (db: D1Database, id: string) => run(db, `UPDATE bookings SET reminder_sent_at = ${NOW} WHERE id = ?`, id),
   linkGuestBookings: (db: D1Database, userId: string, email: string) => run(db, "UPDATE bookings SET user_id = ? WHERE user_id IS NULL AND lower(contact_email) = lower(?)", userId, email),

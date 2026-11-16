@@ -48,9 +48,12 @@ export interface ToolDef<S extends z.ZodTypeAny = z.ZodTypeAny> {
   execute: (args: z.infer<S>, ctx: ToolContext) => Promise<ToolExecResult>;
 }
 
+export type AgentFormKind = "booking" | "quote" | "payment";
+
 export interface ChatTurnInput {
-  message: string;
+  message?: string;
   conversationId?: string;
+  form?: { kind: AgentFormKind; values: Record<string, unknown> };
 }
 
 export interface ChatTurnOutput {
@@ -59,6 +62,7 @@ export interface ChatTurnOutput {
   steps: Step[];
   toolResults: ToolResultSummary[];
   suggestions: string[];
+  form?: AgentFormKind;
 }
 
 export interface ConversationSummary {
