@@ -1,6 +1,6 @@
 import { api } from "./api";
 
-export type AgentFormKind = "booking" | "quote" | "payment";
+export type AgentFormKind = "booking" | "quote" | "payment" | "price";
 
 export interface ToolResult {
   tool: string;
@@ -72,7 +72,7 @@ export const deleteConversation = (id: string) => api<{ deleted: boolean }>(`/ag
 export const formOf = (m: Message | ChatResponse): AgentFormKind | undefined => {
   if ("form" in m && m.form) return m.form;
   const results = "toolResults" in m ? m.toolResults : m.tool_results;
-  return results?.map((t) => t.data?.form).find((k): k is AgentFormKind => k === "booking" || k === "quote" || k === "payment");
+  return results?.map((t) => t.data?.form).find((k): k is AgentFormKind => k === "booking" || k === "quote" || k === "payment" || k === "price");
 };
 
 export const toolLabel = (name: string) =>

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { DashShell, Empty, Restricted, Stat, type NavEntry } from "../../components/Dash";
-import { Area, Btn, Field, Loading, Modal, Seg, Tag } from "../../components/ui";
+import { Area, Btn, Drawer, Field, Loading, Modal, Seg, Tag } from "../../components/ui";
 import { TactileAnchor } from "../../components/kitchen";
 import { Icon } from "../../components/brand";
 import { api } from "../../lib/api";
@@ -138,29 +138,50 @@ function Overview() {
 function Enquiries() {
   const [list, load] = useApi<any[]>("/admin/enquiries");
   const [tab, setTab] = useState<"open" | "quote" | "all">("open");
-  const [reply, setReply] = useState<any>(null);
+  const [open, setOpen] = useState<any>(null);
   const [msg, setMsg] = useState("");
+  const [amount, setAmount] = useState("");
   if (!list) return <Loading />;
   const shown = list.filter((e) => (tab === "all" ? true : tab === "quote" ? e.kind === "quote" : e.status !== "closed"));
+  const send = () => {
+    const quoteBit = open?.kind === "quote" && amount ? `Quote: ₦${Number(amount).toLocaleString("en-NG")}\n\n` : "";
+    const body = `${quoteBit}${msg}`.trim();
+    if (!body) return;
+    act(() => api(`/admin/enquiries/${open.id}/reply`, { body: { message: body } }), "Sent to the client", () => { setOpen(null); setMsg(""); setAmount(""); load(); });
+  };
   return <>
     <Seg value={tab} onChange={setTab} options={[["open", "Open"], ["quote", "Quote requests"], ["all", "All"]]} />
-    {shown.length === 0 ? <Empty>Nothing here.</Empty> : shown.map((e) => (
-      <div key={e.id} className="card stack gap8">
-        <div className="row between wrapflex gap8"><b>{e.kind === "quote" ? `Quote · ${e.service || "Project"}` : `${e.topic}${e.service ? ` · ${e.service}` : ""}`} · {e.name}</b><div className="row gap8"><span className="caption">{dateTime(e.created_at)}</span>{e.kind === "quote" && <Tag tone="brand">Quote</Tag>}<Tag tone={statusTone(e.status)}>{e.status}</Tag></div></div>
-        <span className="small muted">{e.email}{e.phone ? ` · ${e.phone}` : ""}{e.budget ? ` · Budget ${e.budget}` : ""}{e.timeline ? ` · ${e.timeline}` : ""}</span>
-        <p className="small" style={{ whiteSpace: "pre-wrap" }}>{e.message}</p>
-        {e.links && <span className="small" style={{ overflowWrap: "anywhere" }}>Links: {e.links}</span>}
-        <div className="row gap8 wrapflex">
-          <Btn size="sm" kind="neutral" onClick={() => { setReply(e); setMsg(""); }}>Reply by email</Btn>
-          {e.phone && <TactileAnchor href={`https://wa.me/${e.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" variant="light" size="md">WhatsApp</TactileAnchor>}
-          {e.status !== "closed" && <Btn size="sm" kind="neutral" onClick={() => act(() => api(`/admin/enquiries/${e.id}/close`, { method: "POST" }), "Marked as closed", load)}>Close</Btn>}
-        </div>
+    {shown.length === 0 ? <Empty>Nothing here.</Empty> : (
+      <div className="scrollx"><table className="table">
+        <thead><tr><th>When</th><th>From</th><th>About</th><th>Budget</th><th>Status</th></tr></thead>
+        <tbody>{shown.map((e) => (
+          <tr key={e.id} className="click" onClick={() => { setOpen(e); setMsg(""); setAmount(""); }}>
+            <td className="nowrap">{dateTime(e.created_at)}</td>
+            <td><b>{e.name}</b><div className="caption">{e.email}</div></td>
+            <td>{e.kind === "quote" ? `Quote · ${e.service || "Project"}` : `${e.topic}${e.service ? ` · ${e.service}` : ""}`}</td>
+            <td className="small">{e.budget || "—"}</td>
+            <td><Tag tone={e.kind === "quote" ? "brand" : statusTone(e.status)}>{e.kind === "quote" && e.status === "new" ? "Quote" : e.status}</Tag></td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+    )}
+    {open && <Drawer title={open.kind === "quote" ? `Quote · ${open.service || "Project"}` : open.topic || "Enquiry"} onClose={() => setOpen(null)}>
+      <div className="row gap8 wrapflex"><Tag tone={statusTone(open.status)}>{open.status}</Tag>{open.kind === "quote" && <Tag tone="brand">Quote request</Tag>}<span className="caption">{dateTime(open.created_at)}</span></div>
+      <div className="grid cols-2" style={{ gap: 12 }}>
+        {[["Name", open.name], ["Email", open.email], ["Phone", open.phone || "None"], ["Service", open.service || "—"], ["Budget", open.budget || "—"], ["Timeline", open.timeline || "—"]].map(([k, v]) => (
+          <div key={k}><div className="mono faint">{k}</div><span className="small" style={{ overflowWrap: "anywhere" }}>{v}</span></div>
+        ))}
       </div>
-    ))}
-    {reply && <Modal title={`Reply to ${reply.name}`} onClose={() => setReply(null)}>
-      <Area label="Message" name="msg" rows={7} value={msg} onChange={(e) => setMsg(e.target.value)} />
-      <Btn onClick={() => act(() => api(`/admin/enquiries/${reply.id}/reply`, { body: { message: msg } }), "Reply sent", () => { setReply(null); load(); })}>Send reply</Btn>
-    </Modal>}
+      <div className="panel small"><span className="mono faint">Brief</span><p className="small" style={{ whiteSpace: "pre-wrap", margin: "6px 0 0" }}>{open.message}</p></div>
+      {open.links && <span className="small" style={{ overflowWrap: "anywhere" }}>Links: {open.links}</span>}
+      {open.kind === "quote" && <Field label="Quoted amount (₦)" name="qamt" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} hint="Optional. Added at the top of the email so they see the price." />}
+      <Area label={open.kind === "quote" ? "Quote message" : "Reply"} name="msg" rows={7} value={msg} onChange={(e) => setMsg(e.target.value)} />
+      <div className="row gap8 wrapflex">
+        <Btn onClick={send} disabled={!msg.trim() && !amount}>{open.kind === "quote" ? "Email quote" : "Send reply"}</Btn>
+        {open.phone && <TactileAnchor href={`https://wa.me/${open.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" variant="light" size="md">WhatsApp</TactileAnchor>}
+        {open.status !== "closed" && <Btn kind="neutral" onClick={() => act(() => api(`/admin/enquiries/${open.id}/close`, { method: "POST" }), "Marked as closed", () => { setOpen(null); load(); })}>Close</Btn>}
+      </div>
+    </Drawer>}
   </>;
 }
 

@@ -4,7 +4,9 @@ import { bookingsRepo, paymentsRepo } from "../../repositories/bookings";
 import { catalogRepo } from "../../repositories/catalog";
 import { clientsRepo, enquiriesRepo, reportsRepo } from "../../repositories/misc";
 import { bookingService, depositFor } from "../bookings";
-import { enquiryService, reportService } from "../admin";
+import { catalogService, enquiryService, reportService } from "../admin";
+import { run } from "../../repositories/db";
+import { audit } from "../audit";
 import { emails, payLink, receiptLink } from "../emails";
 import { sendEmail } from "../notifications";
 import { naira } from "../../lib/money";
@@ -278,6 +280,54 @@ const paymentsFormTool: ToolDef = {
   execute: async () => ({ summary: "Open the payment form.", data: { form: "payment" } }),
 };
 
+const catalogPriceFormTool: ToolDef = {
+  name: "catalog_price_form",
+  description: "Open the form to put a naira price on a Request a Quote service, or switch it back to quote.",
+  risk: "read",
+  permission: "edit_packages",
+  schema: z.object({}),
+  execute: async () => ({ summary: "Open the price form.", data: { form: "price" } }),
+};
+
+const catalogSetPriceTool: ToolDef = {
+  name: "catalog_set_price",
+  description: "Set a package or service to a fixed naira price (shows on the website) or switch it back to Request a quote. Past bookings keep their old price.",
+  risk: "write",
+  permission: "edit_packages",
+  schema: z.object({
+    service: z.string().min(1).describe("Service name or slug"),
+    package: z.string().optional().describe("Package name or id. Leave empty to update every package on the service."),
+    amount_ngn: z.number().nonnegative().optional().describe("New price in naira. Required unless quote is true."),
+    quote: z.boolean().optional().describe("If true, switch to Request a quote instead of a fixed price."),
+  }),
+  execute: async (a, ctx) => {
+    const svc = await resolveService(ctx.env.DB, a.service);
+    if (!svc) throw new Error(`No service matches "${a.service}". Call catalog_list.`);
+    const quote = !!a.quote || !(a.amount_ngn && a.amount_ngn > 0);
+    const kobo = Math.round((a.amount_ngn ?? 0) * 100);
+    if (!quote && kobo <= 0) throw new Error("Enter the price in naira, or set quote to true.");
+    const packages = await catalogRepo.packages(ctx.env.DB, true);
+    const mine = packages.filter((p) => p.service_slug ? p.service_slug === svc.slug : p.service_category === svc.category);
+    const targets = a.package
+      ? [await resolvePackage(ctx.env.DB, a.package, svc.slug)].filter(Boolean)
+      : mine;
+    if (a.package && !targets[0]) throw new Error(`No package matches "${a.package}" on ${svc.name}.`);
+    if (targets.length) {
+      await catalogService.setPrices(ctx.env, ctx.user, {
+        packages: targets.map((p) => ({ id: p!.id, pricing: quote ? "quote" as const : "fixed" as const, priceKobo: quote ? p!.price_kobo : kobo })),
+        extras: [],
+      });
+    } else {
+      await run(ctx.env.DB, "UPDATE services SET price_label = ? WHERE id = ?", quote ? "Request a quote" : naira(kobo), svc.id);
+      await audit(ctx.env.DB, ctx.user, "Updated prices", svc.name, quote ? "Request a quote" : naira(kobo));
+    }
+    const fresh = await catalogRepo.serviceBySlug(ctx.env.DB, svc.slug);
+    return { summary: quote
+      ? `${svc.name} now asks for a quote on the website.`
+      : `${svc.name} is now ${fresh?.price_label || naira(kobo)} on the website.${targets.length ? ` Updated ${targets.length} package(s).` : ""}` };
+  },
+};
+
 const bookingsCreateTool: ToolDef = {
   name: "bookings_create",
   description: "Create a booking for a client (phone, WhatsApp, walk-in). Emails them when notify is true. For quote packages pass amount_ngn.",
@@ -427,6 +477,8 @@ export const studioTools: ToolDef[] = [
   findClientTool,
   listEnquiriesTool,
   catalogListTool,
+  catalogPriceFormTool,
+  catalogSetPriceTool,
   bookingsFormTool,
   bookingsCreateTool,
   quotesFormTool,

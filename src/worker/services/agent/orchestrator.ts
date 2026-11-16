@@ -14,6 +14,7 @@ const FORM_TOOLS: Record<AgentFormKind, string> = {
   booking: "bookings_create",
   quote: "quotes_send",
   payment: "payments_record",
+  price: "catalog_set_price",
 };
 
 let cached: ToolRegistry | null = null;

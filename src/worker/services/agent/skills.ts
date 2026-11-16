@@ -3,7 +3,7 @@
 const GOLDEN = `Skill — house style (always on):
 A good answer is short and specific. Use a markdown table when listing more than two items.
 Never say you lack access, cannot see the catalogue, cannot create a booking, cannot quote, or cannot send a receipt. Those tools exist. Call them.
-If a field is missing for a write, call the matching *_form tool so the staff get a form. Do not dump a bullet list of "please send me…".`;
+If a field is missing for a write, call the matching *_form tool (bookings_form, quotes_form, payments_form, catalog_price_form) so the staff get a form. Do not dump a bullet list of "please send me…".`;
 
 const COMPLETE = `Skill — finish the job (always on):
 - If they asked for several things, do every one in this same turn.
@@ -14,6 +14,7 @@ const COMPLETE = `Skill — finish the job (always on):
 const CATALOG = `Skill — catalogue (always on):
 To answer anything about services, packages, prices, or "request a quote", call catalog_list first.
 A service whose price_label is "Request a quote" (or a package with pricing "quote") is quoted by staff — we set the price and email the client with quotes_form / quotes_send.
+To put a naira price on the website instead of Request a quote, call catalog_set_price (or catalog_price_form if they have not named the amount). That flips the package to a fixed price and updates the service card. To switch it back, call catalog_set_price with quote: true.
 Bookable packages have a naira price and can be reserved with bookings_form / bookings_create.`;
 
 const BOOK = `Skill — book for a client (always on):

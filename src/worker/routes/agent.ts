@@ -21,7 +21,7 @@ r.post("/chat", requirePermission("use_agent"), async (c) => {
     message: z.string().optional(),
     conversationId: z.string().optional(),
     form: z.object({
-      kind: z.enum(["booking", "quote", "payment"]),
+      kind: z.enum(["booking", "quote", "payment", "price"]),
       values: z.record(z.unknown()),
     }).optional(),
   }).refine((x) => (x.message && x.message.trim()) || x.form, { message: "What would you like me to do?" }));

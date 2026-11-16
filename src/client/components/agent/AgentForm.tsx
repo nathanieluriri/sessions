@@ -9,6 +9,7 @@ export function AgentForm({ kind, busy, onSubmit }: { kind: AgentFormKind; busy?
   if (!cat) return <p className="muted small">Loading the form…</p>;
   if (kind === "booking") return <BookingFields cat={cat} busy={busy} onSubmit={onSubmit} />;
   if (kind === "quote") return <QuoteFields cat={cat} busy={busy} onSubmit={onSubmit} />;
+  if (kind === "price") return <PriceFields cat={cat} busy={busy} onSubmit={onSubmit} />;
   return <PaymentFields busy={busy} onSubmit={onSubmit} />;
 }
 
@@ -153,6 +154,50 @@ function PaymentFields({ busy, onSubmit }: { busy?: boolean; onSubmit: (values: 
       </div>
       <label>Note<input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Bank reference (optional)" /></label>
       <button type="submit" className="agent-form-go" disabled={busy}>{busy ? "Saving…" : "Record payment"}</button>
+    </form>
+  );
+}
+
+function PriceFields({ cat, busy, onSubmit }: { cat: AgentCatalog; busy?: boolean; onSubmit: (values: Record<string, unknown>, label: string) => void }) {
+  const [service, setService] = useState("");
+  const [pkgId, setPkgId] = useState("");
+  const [mode, setMode] = useState<"fixed" | "quote">("fixed");
+  const [amount, setAmount] = useState("");
+  const pkgs = useMemo(() => {
+    const svc = cat.services.find((s) => s.slug === service);
+    return cat.packages.filter((p) => !svc || (p.service_slug ? p.service_slug === svc.slug : p.service_category === svc.category));
+  }, [cat, service]);
+  return (
+    <form className="agent-form" onSubmit={(e) => {
+      e.preventDefault();
+      if (!service || (mode === "fixed" && !amount)) return;
+      const svc = cat.services.find((s) => s.slug === service);
+      onSubmit({
+        service, package: pkgId || undefined, amount_ngn: mode === "fixed" ? Number(amount) : undefined, quote: mode === "quote",
+      }, mode === "quote" ? `Request a quote for ${svc?.name ?? service}` : `Price ${svc?.name ?? service} at ₦${Number(amount).toLocaleString("en-NG")}`);
+    }}>
+      <b className="small">Set a website price</b>
+      <p className="muted small">Switch a service off Request a quote and onto a naira price. Past bookings keep what they paid.</p>
+      <label>Service
+        <select value={service} onChange={(e) => { setService(e.target.value); setPkgId(""); }} required>
+          <option value="">Choose…</option>
+          {cat.services.map((s) => <option key={s.slug} value={s.slug}>{s.name} · {s.price_label || "no label"}</option>)}
+        </select>
+      </label>
+      <label>Package (optional)
+        <select value={pkgId} onChange={(e) => setPkgId(e.target.value)} disabled={!service}>
+          <option value="">Every package on this service</option>
+          {pkgs.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.price_label}</option>)}
+        </select>
+      </label>
+      <label>What to show
+        <select value={mode} onChange={(e) => setMode(e.target.value as "fixed" | "quote")}>
+          <option value="fixed">Fixed price on the website</option>
+          <option value="quote">Request a quote</option>
+        </select>
+      </label>
+      {mode === "fixed" && <label>Price (₦)<input type="number" min={1} value={amount} onChange={(e) => setAmount(e.target.value)} required /></label>}
+      <button type="submit" className="agent-form-go" disabled={busy}>{busy ? "Saving…" : mode === "quote" ? "Switch to quote" : "Save price"}</button>
     </form>
   );
 }
