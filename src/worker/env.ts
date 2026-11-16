@@ -9,6 +9,9 @@ export interface Env {
   PAYSTACK_SECRET_KEY?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_MODEL?: string;
+  OPENROUTER_FALLBACK_MODEL?: string;
   /** Cloudflare Email Sending. Present in production once the binding is deployed. */
   EMAIL?: {
     send(message: {

@@ -15,6 +15,8 @@ import { ReceiptLookup, WalkIn } from "./walkin";
 import { Deliveries } from "./deliveries";
 import { Catalogue } from "./catalog";
 import { Website } from "./content";
+import { Chat } from "./chat";
+import { AgentPanel } from "../../components/agent/AgentPanel";
 
 type Access = { perm?: string; any?: string[] };
 const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
@@ -34,6 +36,7 @@ const SECTIONS: (NavEntry & Access & { key: string; title: string })[] = [
   { key: "payments", to: "/admin/payments", label: "Payments", title: "Payments and balances", icon: "card", perm: "view_payments" },
   { key: "reports", to: "/admin/reports", label: "Reports", title: "Reports", icon: "chart", perm: "view_reports" },
   { key: "staff", to: "/admin/staff", label: "Staff", title: "Staff and permissions", icon: "shield", perm: "manage_staff" },
+  { key: "chat", to: "/admin/chat", label: "Assistant", title: "Studio assistant", icon: "chat", perm: "use_agent" },
   { key: "audit", to: "/admin/audit", label: "Audit log", title: "Audit log and email outbox", icon: "receipt", perm: "view_audit" },
 ];
 const allowed = (u: User | null, s: Access) => (s.perm ? can(u, s.perm) : true) && (s.any ? s.any.some((p) => can(u, p)) : true);
@@ -47,9 +50,12 @@ export function Admin() {
   const s = SECTIONS.find((x) => x.key === section) ?? SECTIONS[0];
   const Page = PAGES[s.key];
   return (
-    <DashShell dark items={SECTIONS.map((x) => ({ ...x, locked: !allowed(user, x) }))} title={s.title}>
-      {allowed(user, s) ? <Page /> : <Restricted what={s.title.toLowerCase()} />}
-    </DashShell>
+    <>
+      <DashShell dark items={SECTIONS.map((x) => ({ ...x, locked: !allowed(user, x) }))} title={s.title}>
+        {allowed(user, s) ? <Page /> : <Restricted what={s.title.toLowerCase()} />}
+      </DashShell>
+      {can(user, "use_agent") && <AgentPanel />}
+    </>
   );
 }
 
@@ -330,4 +336,5 @@ function Audit() {
 const PAGES: Record<string, () => ReactNode> = {
   "": Overview, "walk-in": WalkIn, calendar: Calendar, bookings: Bookings, deliveries: Deliveries, clients: Clients, availability: Availability, catalogue: Catalogue, enquiries: Enquiries,
   website: Website, receipts: ReceiptLookup, payments: Payments, reports: Reports, staff: Staff, audit: Audit, "online-booking": OnlineBooking, verify: Verify,
+  chat: Chat,
 };

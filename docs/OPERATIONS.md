@@ -20,10 +20,21 @@ Settings live in `wrangler.jsonc` (`vars`) and secrets are added with Wrangler s
 
 ```
 npx wrangler secret put PAYSTACK_SECRET_KEY   # sk_live_... from Paystack, Settings, API Keys
+npx wrangler secret put OPENROUTER_API_KEY    # OpenRouter key for the AI assistant
 ```
 
 - `APP_URL` in `wrangler.jsonc` must be the public address, because email links use it.
 - While `PAYSTACK_SECRET_KEY` is not set, a simulated checkout is used. Setting the key switches to real Paystack and turns the simulator off.
+
+### AI assistant
+
+The staff assistant (Admin, Assistant, or the floating button) answers questions and acts on bookings, payments, reports and enquiries through OpenRouter. Each action is gated by the same staff permissions as the rest of the dashboard:
+
+- Set `OPENROUTER_API_KEY` as above. Optional: `OPENROUTER_MODEL` (default `openai/gpt-4o-mini`) and `OPENROUTER_FALLBACK_MODEL`.
+- Grant the **Use the AI assistant** permission from Staff and permissions. The CEO and COO have it automatically.
+- Without a key the assistant replies that it is not configured; it never acts.
+
+Money is append-only: the assistant can record a payment or cancel a booking (which refunds under policy), but it has no way to delete a payment, refund or booking.
 
 ### Paystack
 

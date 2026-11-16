@@ -13,12 +13,14 @@ import { bookingService } from "./services/bookings";
 import { filesService } from "./services/files";
 import { media, page, robots, sitemap } from "./site";
 import { receiveEmail } from "./mail";
+import agentRoutes from "./routes/agent";
 
 const app = new Hono<AppEnv>().basePath("/api");
 
 app.use("*", secureHeaders());
 app.use("*", loadUser);
 app.route("/auth", authRoutes);
+app.route("/agent", agentRoutes);
 app.route("/", publicRoutes);
 app.route("/", bookingRoutes);
 app.route("/account", accountRoutes);

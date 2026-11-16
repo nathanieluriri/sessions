@@ -15,6 +15,7 @@ export const PERMISSIONS = {
   view_audit: "See the audit log and email outbox",
   manage_staff: "Add staff and change their access",
   deliver_files: "Upload finished work to clients and download the files clients send (releasing files before payment also needs record payments)",
+  use_agent: "Use the AI assistant to look up studio data and act on bookings, payments, reports and enquiries",
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
