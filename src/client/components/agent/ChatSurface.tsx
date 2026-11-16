@@ -1,19 +1,10 @@
 import { useEffect, useRef, useState, type ClipboardEvent } from "react";
-import { chat, formOf, getConversation, pendingOf, toolLabel, type AgentFormKind, type ChatResponse, type Message, type ToolResult } from "../../lib/agent";
+import { chat, formOf, getConversation, pendingOf, type AgentFormKind, type ChatResponse, type Message } from "../../lib/agent";
 import { Icon } from "../brand";
 import { AgentForm } from "./AgentForm";
 import { PreviewCard } from "./PreviewCard";
-import { renderMarkdown } from "./markdown";
-
-function ToolLine({ t }: { t: ToolResult }) {
-  return (
-    <div className={`agent-tool ${t.status === "error" ? "err" : ""}`}>
-      <Icon name={t.status === "error" ? "lock" : "check"} size={13} />
-      <span className="agent-tool-name">{toolLabel(t.tool)}</span>
-      <span className="agent-tool-sum">{t.summary}</span>
-    </div>
-  );
-}
+import { ActivityBlock, ResultTable, tablesOf } from "./ToolRow";
+import { renderMarkdown, stripMdTables } from "./markdown";
 
 async function readImage(file: File): Promise<string> {
   const bmp = await createImageBitmap(file);
@@ -166,24 +157,40 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
           </div>
         )}
         {messages.map((m) => {
-          const showForm = m.role === "assistant" && lastAssistant?.id === m.id && openForm;
-          const showPreview = m.role === "assistant" && lastAssistant?.id === m.id && pending;
+          if (m.role === "user") {
+            return (
+              <div key={m.id} className="agent-msg user">
+                <div className="agent-bubble">
+                  <div className="agent-text">{renderMarkdown(m.text)}</div>
+                </div>
+              </div>
+            );
+          }
+          const showForm = lastAssistant?.id === m.id && openForm;
+          const showPreview = lastAssistant?.id === m.id && pending;
+          const tables = tablesOf(m.tool_results);
+          const body = tables.length ? stripMdTables(m.text) : m.text;
           return (
-            <div key={m.id} className={`agent-msg ${m.role}`}>
-              {m.role === "assistant" && <span className="agent-avatar"><Icon name="chat" size={15} /></span>}
-              <div className="agent-bubble">
-                {m.tool_results?.length > 0 && <div className="agent-tools">{m.tool_results.map((t, i) => <ToolLine key={i} t={t} />)}</div>}
-                <div className="agent-text">{renderMarkdown(m.text)}</div>
-                {showPreview && pending && (
-                  <PreviewCard
-                    pending={pending}
-                    busy={busy}
-                    onAccept={() => post("Accept the preview.", { confirm: { tool: pending.tool, args: pending.args } })}
-                    onDecline={() => post("Decline the preview.", { decline: true })}
-                    onOther={() => send("Find another place this appears.")}
-                  />
+            <div key={m.id} className="agent-msg assistant">
+              <span className="agent-avatar"><Icon name="chat" size={15} /></span>
+              <div className="agent-col">
+                {m.tool_results?.length > 0 && <ActivityBlock tools={m.tool_results} />}
+                {(body || tables.length > 0 || showPreview || showForm) && (
+                  <div className="agent-bubble">
+                    {body ? <div className="agent-text">{renderMarkdown(body)}</div> : null}
+                    {tables.map((t, i) => <ResultTable key={i} table={t} />)}
+                    {showPreview && pending && (
+                      <PreviewCard
+                        pending={pending}
+                        busy={busy}
+                        onAccept={() => post("Accept the preview.", { confirm: { tool: pending.tool, args: pending.args } })}
+                        onDecline={() => post("Decline the preview.", { decline: true })}
+                        onOther={() => send("Find another place this appears.")}
+                      />
+                    )}
+                    {showForm && openForm && <AgentForm kind={openForm} busy={busy} onSubmit={(values, label) => submitForm(openForm, values, label)} />}
+                  </div>
                 )}
-                {showForm && openForm && <AgentForm kind={openForm} busy={busy} onSubmit={(values, label) => submitForm(openForm, values, label)} />}
                 {m.suggestions?.length > 0 && (
                   <div className="agent-suggs">{m.suggestions.map((s, i) => <button key={i} type="button" className="chip" onClick={() => send(s)} disabled={busy}>{s}</button>)}</div>
                 )}
@@ -191,7 +198,14 @@ export function ChatSurface({ conversationId, onConversationId, layout = "page" 
             </div>
           );
         })}
-        {busy && <div className="agent-msg assistant"><span className="agent-avatar"><Icon name="chat" size={15} /></span><div className="agent-bubble"><span className="agent-dots">…</span></div></div>}
+        {busy && (
+          <div className="agent-msg assistant">
+            <span className="agent-avatar"><Icon name="chat" size={15} /></span>
+            <div className="agent-col">
+              <ActivityBlock running />
+            </div>
+          </div>
+        )}
         {error && <div className="agent-msg error"><div className="agent-bubble">{error}</div></div>}
         <div ref={bottom} />
       </div>

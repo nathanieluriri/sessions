@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ToolDef } from "./types";
+import type { ToolDef, ToolExecResult } from "./types";
 import { bookingsRepo, paymentsRepo } from "../../repositories/bookings";
 import { catalogRepo } from "../../repositories/catalog";
 import { clientsRepo, enquiriesRepo, reportsRepo } from "../../repositories/misc";
@@ -34,6 +34,17 @@ function parseTime(t: string): number {
 const describeBooking = (b: { ref: string; date: string; start_min: number; end_min: number; scheduling: string; contact_name: string; package_name: string; service_name: string; status: string; total_kobo: number; amount_paid_kobo: number; refunded_kobo: number }) =>
   `${b.ref} — ${b.contact_name || "no name"} · ${b.service_name} / ${b.package_name}${b.scheduling !== "project" ? ` · ${prettyDate(b.date)} ${timeRange(b.date, b.start_min, b.end_min)}` : ""} · ${b.status} · ${naira(b.total_kobo)}${b.amount_paid_kobo - b.refunded_kobo > 0 ? ` (paid ${naira(b.amount_paid_kobo - b.refunded_kobo)})` : ""}`;
 
+function asTable(lead: string, columns: string[], rows: string[][]): ToolExecResult {
+  const clean = (s: string) => s.replace(/\|/g, "/").replace(/\s+/g, " ").trim();
+  const body = rows.map((r) => r.map(clean));
+  const md = [
+    `| ${columns.join(" | ")} |`,
+    `| ${columns.map(() => "---").join(" | ")} |`,
+    ...body.map((r) => `| ${r.join(" | ")} |`),
+  ].join("\n");
+  return { summary: `${lead}\n\n${md}`, data: { table: { columns, rows: body } } };
+}
+
 const listBookingsTool: ToolDef = {
   name: "bookings_list",
   description: "List bookings by date or status. Leave both empty for the next few weeks from yesterday.",
@@ -46,8 +57,19 @@ const listBookingsTool: ToolDef = {
     const rows = await bookingsRepo.list(ctx.env.DB, { from, to: a.date ?? addDays(from, 30), status: a.status });
     if (rows.length === 0) return { summary: "No bookings match." };
     const shown = rows.slice(0, 25);
-    const extra = rows.length > shown.length ? `\n…and ${rows.length - shown.length} more.` : "";
-    return { summary: shown.map(describeBooking).join("\n") + extra };
+    const extra = rows.length > shown.length ? ` ${rows.length - shown.length} more not shown.` : "";
+    return asTable(
+      `${shown.length} booking${shown.length === 1 ? "" : "s"}.${extra}`,
+      ["Ref", "Client", "Service", "When", "Status", "Total"],
+      shown.map((b) => [
+        b.ref,
+        b.contact_name || "—",
+        `${b.service_name} / ${b.package_name}`,
+        b.scheduling !== "project" ? `${prettyDate(b.date)} ${timeRange(b.date, b.start_min, b.end_min)}` : "project",
+        b.status,
+        naira(b.total_kobo),
+      ]),
+    );
   },
 };
 
@@ -73,8 +95,12 @@ const outstandingTool: ToolDef = {
     const rows = await reportsRepo.outstanding(ctx.env.DB);
     if (rows.length === 0) return { summary: "No outstanding balances." };
     const shown = rows.slice(0, 25);
-    const extra = rows.length > shown.length ? `\n…and ${rows.length - shown.length} more.` : "";
-    return { summary: shown.map((r) => `${r.ref} — ${r.contact_name || "no name"} · ${r.package_name} · balance ${naira(r.balance)}`).join("\n") + extra };
+    const extra = rows.length > shown.length ? ` ${rows.length - shown.length} more not shown.` : "";
+    return asTable(
+      `${shown.length} outstanding.${extra}`,
+      ["Ref", "Client", "Package", "Balance"],
+      shown.map((r) => [r.ref, r.contact_name || "—", r.package_name, naira(r.balance)]),
+    );
   },
 };
 
@@ -118,9 +144,11 @@ const listEnquiriesTool: ToolDef = {
   execute: async (_a, ctx) => {
     const rows = (await enquiriesRepo.list(ctx.env.DB)).filter((e) => e.status === "new");
     if (rows.length === 0) return { summary: "No open enquiries." };
-    return {
-      summary: rows.map((e) => `${e.name} (${e.email}) — ${e.kind === "quote" ? `Quote for ${e.service || "a project"}` : e.topic}`).join("\n"),
-    };
+    return asTable(
+      `${rows.length} open enquir${rows.length === 1 ? "y" : "ies"}.`,
+      ["Name", "Email", "About"],
+      rows.map((e) => [e.name, e.email, e.kind === "quote" ? `Quote for ${e.service || "a project"}` : e.topic]),
+    );
   },
 };
 
@@ -242,29 +270,43 @@ async function resolvePackage(db: D1Database, idOrName: string, serviceSlug?: st
 
 const catalogListTool: ToolDef = {
   name: "catalog_list",
-  description: "List every studio service and package, including Request a Quote items. Use this before answering anything about the catalogue.",
+  description: "List studio services and packages, including Request a Quote items. Use this before answering anything about the catalogue. Pass quote_only when they only want services that still need a staff quote.",
   risk: "read",
   permission: "view_calendar",
-  schema: z.object({}),
-  execute: async (_a, ctx) => {
+  schema: z.object({
+    quote_only: z.boolean().optional().describe("If true, only services whose website price is Request a quote"),
+  }),
+  execute: async (a, ctx) => {
     const [services, packages, categories] = await Promise.all([
       catalogRepo.services(ctx.env.DB, true),
       catalogRepo.packages(ctx.env.DB, true),
       catalogRepo.categories(ctx.env.DB),
     ]);
-    const quoteServices = services.filter((s) => /quote/i.test(s.price_label) || packages.filter((p) => (p.service_slug ? p.service_slug === s.slug : p.service_category === s.category) && p.active).every((p) => p.pricing === "quote" || p.price_kobo === 0));
-    const lines = services.filter((s) => s.active).map((s) => {
+    const isQuote = (s: (typeof services)[number]) => {
+      if (/quote/i.test(s.price_label)) return true;
       const pkgs = packages.filter((p) => p.active && (p.service_slug ? p.service_slug === s.slug : p.service_category === s.category));
-      const cat = categories.find((c) => c.slug === s.category);
-      const bookable = cat?.bookable ? "online booking open" : "quote only (not booked online)";
-      const pkgBit = pkgs.length
-        ? pkgs.map((p) => `${p.name} (${p.pricing === "quote" ? "staff quote" : naira(p.price_kobo)})`).join("; ")
-        : "no packages";
-      return `${s.name} [${s.slug}] — ${s.price_label || "no price"} · ${bookable} · ${pkgBit}`;
-    });
-    return {
-      summary: `${services.filter((s) => s.active).length} services. ${quoteServices.filter((s) => s.active).length} are Request a Quote (staff set the price).\n${lines.join("\n")}`,
+      return pkgs.length > 0 && pkgs.every((p) => p.pricing === "quote" || p.price_kobo === 0);
     };
+    const active = services.filter((s) => s.active);
+    const list = a.quote_only ? active.filter(isQuote) : active;
+    const quoteCount = active.filter(isQuote).length;
+    const lead = a.quote_only
+      ? `${list.length} service${list.length === 1 ? "" : "s"} still on Request a quote.`
+      : `${list.length} services. ${quoteCount} are Request a quote (staff set the price).`;
+    return asTable(
+      lead,
+      ["Service", "Price", "Booking", "Packages"],
+      list.map((s) => {
+        const pkgs = packages.filter((p) => p.active && (p.service_slug ? p.service_slug === s.slug : p.service_category === s.category));
+        const cat = categories.find((c) => c.slug === s.category);
+        return [
+          s.name,
+          s.price_label || "—",
+          cat?.bookable ? "online" : "quote only",
+          pkgs.length ? pkgs.map((p) => `${p.name} (${p.pricing === "quote" ? "staff quote" : naira(p.price_kobo)})`).join("; ") : "—",
+        ];
+      }),
+    );
   },
 };
 

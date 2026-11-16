@@ -17,11 +17,16 @@ export interface PendingChange {
   preview: PreviewPayload;
 }
 
+export interface AgentTable {
+  columns: string[];
+  rows: string[][];
+}
+
 export interface ToolResult {
   tool: string;
   status: "ok" | "error";
   summary: string;
-  data?: { form?: AgentFormKind; pending?: PendingChange };
+  data?: { form?: AgentFormKind; pending?: PendingChange; table?: AgentTable; args?: Record<string, unknown> };
   kind?: "create" | "update" | "delete";
 }
 

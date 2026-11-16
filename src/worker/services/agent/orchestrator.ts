@@ -5,11 +5,12 @@ import { uuid } from "../../lib/crypto";
 import { agentRepo } from "../../repositories/agent";
 import { callLLM, friendlyLlmError } from "./llm";
 import { ToolRegistry } from "./registry";
+import { nextSteps } from "./next-steps";
 import { selectSkills } from "./skills";
 import { studioTools } from "./tools";
 import type { AgentFormKind, ChatTurnInput, ChatTurnOutput, PendingChange, PreviewPayload, Step, ToolContext, ToolDef, ToolResultSummary } from "./types";
 
-const STARTERS = ["Create a booking", "Send a quote", "Change site copy", "What's on today?"];
+const ONCE = new Set(["catalog_list", "enquiries_list", "payments_outstanding", "reports_overview"]);
 const FORM_TOOLS: Record<AgentFormKind, string> = {
   booking: "bookings_create",
   quote: "quotes_send",
@@ -49,10 +50,19 @@ function pendingOf(results: ToolResultSummary[]): PendingChange | undefined {
 
 function slim(results: ToolResultSummary[]): ToolResultSummary[] {
   return results.map((r) => {
-    const form = (r.data as { form?: AgentFormKind } | undefined)?.form;
-    const pending = (r.data as { pending?: PendingChange } | undefined)?.pending;
-    return { tool: r.tool, status: r.status, summary: r.summary, ...((form || pending) ? { data: { ...(form ? { form } : {}), ...(pending ? { pending } : {}) } } : {}) };
+    const d = (r.data ?? {}) as { form?: AgentFormKind; pending?: PendingChange; table?: { columns: string[]; rows: string[][] }; args?: Record<string, unknown> };
+    const data: Record<string, unknown> = {};
+    if (d.form) data.form = d.form;
+    if (d.pending) data.pending = d.pending;
+    if (d.table?.columns?.length) data.table = d.table;
+    if (d.args && Object.keys(d.args).length) data.args = d.args;
+    return { tool: r.tool, status: r.status, summary: r.summary, ...(Object.keys(data).length ? { data } : {}) };
   });
+}
+
+function withMeta(data: unknown, args: Record<string, unknown>) {
+  const base = data && typeof data === "object" && !Array.isArray(data) ? { ...(data as Record<string, unknown>) } : {};
+  return { ...base, args };
 }
 
 async function executeCall(reg: ToolRegistry, call: { name: string; args: Record<string, unknown> }, ctx: ToolContext, apply: boolean): Promise<ToolResultSummary> {
@@ -75,7 +85,7 @@ async function executeCall(reg: ToolRegistry, call: { name: string; args: Record
         tool: tool.name,
         status: "ok",
         summary: preview.available ? `Preview ready: ${preview.title}` : MISSING_PREVIEW,
-        data: { pending },
+        data: withMeta({ pending }, parsed.data as Record<string, unknown>),
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : MISSING_PREVIEW;
@@ -84,7 +94,7 @@ async function executeCall(reg: ToolRegistry, call: { name: string; args: Record
   }
   try {
     const exec = await tool.execute(parsed.data, ctx);
-    return { tool: call.name, status: "ok", summary: exec.summary, data: exec.data };
+    return { tool: call.name, status: "ok", summary: exec.summary, data: withMeta(exec.data, parsed.data as Record<string, unknown>) };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "It didn't work.";
     return { tool: call.name, status: "error", summary: msg };
@@ -147,6 +157,7 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
       while (turn.toolCalls.length > 0 && rounds < 4) {
         rounds++;
         for (const call of turn.toolCalls) {
+          if (ONCE.has(call.name) && toolResults.some((r) => r.tool === call.name && r.status === "ok")) continue;
           const r = await executeCall(reg, call, ctx, false);
           toolResults.push(r);
           steps.push({ label: r.tool, status: r.status === "ok" ? "done" : "active" });
@@ -154,7 +165,7 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
         const facts = toolResults.map((r) => `${r.tool}: ${r.summary}`).join("\n");
         const pending = pendingOf(toolResults);
         turn = await callLLM(env, reg, {
-          message: `Tool results:\n${facts}\n\nAnswer the user's original request ("${userText}") in plain language.${pending ? " A preview is on screen. Tell them to Accept to save, Decline to cancel, or say if they meant a different field." : ""} Do not claim a change is saved until they Accept.`,
+          message: `Tool results:\n${facts}\n\nAnswer the user's original request ("${userText}") in plain language.${pending ? " A preview is on screen. Tell them to Accept to save, Decline to cancel, or say if they meant a different field." : ""} Do not claim a change is saved until they Accept. Do not reprint a catalogue or booking list as markdown — the app already shows it as a table. One or two sentences is enough.`,
           history: prior,
           allowTools: rounds < 3 && !pending,
           extraSystem: skills,
@@ -173,7 +184,7 @@ export async function runTurn(env: Env, user: SessionUser, input: ChatTurnInput)
 
   const form = formOf(toolResults);
   const pending = pendingOf(toolResults);
-  const suggestions = pending ? ["Find another place this appears"] : prior.length === 0 && !form ? STARTERS : [];
+  const suggestions = nextSteps(userText, toolResults.map((r) => r.tool), pending, form);
   const stored = slim(toolResults);
   try {
     await agentRepo.addMessage(env.DB, {
